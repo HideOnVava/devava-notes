@@ -40,6 +40,24 @@ final class Note {
         return header.isEmpty() ? body : "---\n" + String.join("\n", header) + "\n---\n" + body;
     }
 
+    /**
+     * A #tag written in the text, as Obsidian reads them: after a space or a line start (not in
+     * C#, a URL's /#part or &#38;), with at least one letter (#1 is not a tag), and "/" for nesting.
+     */
+    static final Pattern TAG = Pattern.compile("(?<![\\p{L}\\p{N}_/#&])#([\\p{L}\\p{N}_][\\p{L}\\p{N}_/-]*)");
+    private static final Pattern CODE = Pattern.compile("(?ms)^[ \\t]*(```|~~~).*?^[ \\t]*\\1[^\\n]*$|`+[^`\\n]*`+");
+
+    /** The #tags written in the body, outside code, each once. */
+    List<String> inlineTags() {
+        Matcher m = TAG.matcher(CODE.matcher(body.replace("\r\n", "\n")).replaceAll(" "));
+        List<String> tags = new ArrayList<>();
+        while (m.find()) {
+            String tag = m.group(1);
+            if (tag.codePoints().anyMatch(Character::isLetter) && tags.stream().noneMatch(tag::equalsIgnoreCase)) tags.add(tag);
+        }
+        return tags;
+    }
+
     /** A fenced block of code: its language ("cpp", or "") and its lines. */
     record Code(String language, String text) {
     }

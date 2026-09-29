@@ -1,14 +1,17 @@
-/* The editor and the reading view (editor.html), with the palette of styles.css. */
+/* The editor and the reading view (editor.html), with the palette of styles.css, light and dark. */
 
 :root {
     --bg: #FFFFFF;
-    --text: #1C1C21;
-    --muted: #6E6E78;
-    --faint: #9A9AA5;
-    --border: #E4E4E9;
+    --text: #1B1B1F;
+    --muted: #6B6B76;
+    --faint: #9A9AA6;
+    --border: #E4E4EA;
     --accent: #4F46E5;
+    --accent-soft: #EEF0FF;
+    --missing: #C2410C;
     --selection: #DDE0FF;
-    --code-bg: #F6F6F9;
+    --code-bg: #F5F5F8;
+    --code-head: #ECECF2;
     --font: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
     --mono: "Cascadia Mono", Consolas, "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
     /* Code colors, the same in the editor and in the reading view */
@@ -18,6 +21,28 @@
     --type: #0E7490;
     --comment: #8A8A96;
     --meta: #9A3412;
+    color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+    --bg: #19191F;
+    --text: #E8E8EE;
+    --muted: #A2A2AE;
+    --faint: #6F6F7B;
+    --border: #2A2A33;
+    --accent: #948DFF;
+    --accent-soft: #272450;
+    --missing: #FB923C;
+    --selection: #34307A;
+    --code-bg: #141419;
+    --code-head: #202028;
+    --keyword: #A79FFF;
+    --string: #6EE7A0;
+    --number: #FDBA74;
+    --type: #67E8F9;
+    --comment: #7C7C88;
+    --meta: #FCA5A5;
+    color-scheme: dark;
 }
 
 html, body {
@@ -25,7 +50,7 @@ html, body {
     height: 100%;
     background: var(--bg);
     color: var(--text);
-    font: 15px/1.65 var(--font);
+    font: 15px/1.7 var(--font);
 }
 
 [hidden] {
@@ -41,6 +66,8 @@ html, body {
 
 #editor .cm-editor {
     height: 100%;
+    background: var(--bg);
+    color: var(--text);
 }
 
 #editor .cm-editor.cm-focused {
@@ -49,14 +76,14 @@ html, body {
 
 #editor .cm-scroller {
     font-family: var(--font);
-    line-height: 1.65;
+    line-height: 1.7;
 }
 
 /* A readable line length, centered, with room to scroll the last line up */
 #editor .cm-content {
     max-width: 760px;
     margin: 0 auto;
-    padding: 32px 28px 40vh;
+    padding: 28px 30px 40vh;
     caret-color: var(--accent);
 }
 
@@ -68,6 +95,10 @@ html, body {
     background: var(--selection) !important;
 }
 
+#editor .cm-selectionMatch {
+    background: var(--accent-soft);
+}
+
 #editor .cm-placeholder {
     color: var(--faint);
 }
@@ -75,8 +106,43 @@ html, body {
 #editor .cm-code {
     font-family: var(--mono);
     font-size: 13.5px;
-    line-height: 1.5;
+    line-height: 1.55;
     background: var(--code-bg);
+}
+
+#editor .cm-wikilink {
+    color: var(--accent);
+}
+
+#editor .cm-tag, #reading .tag {
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-radius: 5px;
+    padding: 0 4px;
+}
+
+#editor .cm-panels {
+    background: var(--code-head);
+    color: var(--text);
+    border-color: var(--border);
+}
+
+#editor .cm-tooltip {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+    overflow: hidden;
+}
+
+#editor .cm-tooltip-autocomplete > ul > li {
+    padding: 4px 10px;
+}
+
+#editor .cm-tooltip-autocomplete > ul > li[aria-selected] {
+    background: var(--accent-soft);
+    color: var(--text);
 }
 
 /* Markdown's own marks (# ** ` >) stay quiet; they also carry tok-meta, hence the id */
@@ -162,12 +228,12 @@ html, body {
 
 #reading {
     overflow: auto;
-    padding: 32px max(28px, calc((100% - 760px) / 2)) 80px;
+    padding: 28px max(30px, calc((100% - 760px) / 2)) 80px;
 }
 
 #reading h1, #reading h2, #reading h3, #reading h4 {
     line-height: 1.25;
-    margin: 1.2em 0 0.5em;
+    margin: 1.3em 0 0.5em;
 }
 
 #reading h1 {
@@ -175,11 +241,13 @@ html, body {
 }
 
 #reading h2 {
-    font-size: 1.45em;
+    font-size: 1.4em;
+    padding-bottom: 0.2em;
+    border-bottom: 1px solid var(--border);
 }
 
 #reading h3 {
-    font-size: 1.2em;
+    font-size: 1.15em;
 }
 
 #reading > :first-child {
@@ -197,6 +265,26 @@ html, body {
 
 #reading a:hover {
     text-decoration: underline;
+}
+
+#reading a.wikilink {
+    border-bottom: 1px dashed var(--accent);
+}
+
+#reading a.wikilink:hover {
+    text-decoration: none;
+    border-bottom-style: solid;
+}
+
+#reading a.wikilink.missing {
+    color: var(--missing);
+    border-bottom-color: var(--missing);
+    opacity: 0.85;
+}
+
+#reading .tag {
+    cursor: pointer;
+    font-size: 0.92em;
 }
 
 #reading code {
@@ -241,7 +329,7 @@ html, body {
     justify-content: space-between;
     align-items: center;
     padding: 4px 8px 4px 14px;
-    background: #EEEEF3;
+    background: var(--code-head);
     color: var(--muted);
     font-size: 12px;
 }
@@ -260,6 +348,10 @@ html, body {
     border-color: var(--accent);
 }
 
+#reading pre code {
+    counter-reset: line;
+}
+
 #reading pre code .line::before {
     counter-increment: line;
     content: counter(line);
@@ -270,13 +362,9 @@ html, body {
     color: var(--faint);
 }
 
-#reading pre code {
-    counter-reset: line;
-}
-
 #reading blockquote {
     padding: 0 1em;
-    border-left: 3px solid var(--border);
+    border-left: 3px solid var(--accent-soft);
     color: var(--muted);
 }
 
@@ -302,6 +390,7 @@ html, body {
 
 #reading img {
     max-width: 100%;
+    border-radius: 6px;
 }
 
 #reading .math.display {
@@ -317,4 +406,5 @@ html, body {
 
 #reading li > input[type=checkbox] {
     margin: 0 0.5em 0 -1.4em;
+    accent-color: var(--accent);
 }

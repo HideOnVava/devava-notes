@@ -50,6 +50,20 @@ class NoteTest {
     }
 
     @Test
+    void findsTheTagsWrittenInTheTextButNotInCode() {
+        Note note = Note.parse("""
+                # A heading, not a tag
+                Reading #books and #to-read/next, not C# or https://x.com/#part or #1.
+
+                ```cpp
+                #include <bits/stdc++.h>
+                ```
+                Also `#define` in code, and #Books again.
+                """);
+        assertEquals(List.of("books", "to-read/next"), note.inlineTags());
+    }
+
+    @Test
     void aSnippetGivesItsFirstBlockOfCode() {
         Note snippet = Note.parse("---\nkind: snippet\n---\n## When to use\nUnion by size.\n\n"
                 + "```cpp\nint find(int x) {\n    return p[x] == x ? x : p[x] = find(p[x]);\n}\n```\n\n```py\nprint(1)\n```\n");

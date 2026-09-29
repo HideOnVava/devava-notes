@@ -2,10 +2,12 @@
 // renders with commonmark-java. `npm run build` bundles it into
 // src/main/resources/com/devavaxp/notes/editor.js, which is committed.
 import {EditorState, RangeSetBuilder} from "@codemirror/state";
-import {Decoration, EditorView, ViewPlugin, drawSelection, dropCursor, highlightSpecialChars, keymap, placeholder} from "@codemirror/view";
+import {
+    Decoration, EditorView, MatchDecorator, ViewPlugin, drawSelection, dropCursor, highlightSpecialChars, keymap, placeholder
+} from "@codemirror/view";
 import {defaultKeymap, history, historyKeymap, indentWithTab} from "@codemirror/commands";
 import {highlightSelectionMatches, searchKeymap} from "@codemirror/search";
-import {closeBrackets, closeBracketsKeymap} from "@codemirror/autocomplete";
+import {autocompletion, closeBrackets, closeBracketsKeymap} from "@codemirror/autocomplete";
 import {LanguageDescription, bracketMatching, indentOnInput, syntaxHighlighting, syntaxTree} from "@codemirror/language";
 import {markdown, markdownLanguage} from "@codemirror/lang-markdown";
 import {languages} from "@codemirror/language-data";
@@ -27,6 +29,14 @@ const highlighters = [classHighlighter, tagHighlighter([
     {tag: tags.strikethrough, class: "tok-strike"},
     {tag: tags.quote, class: "tok-quote"},
 ])];
+
+/** Whether a position is inside code (a fenced block or `inline code`), where [[links]] and #tags are just text. */
+function inCode(state, pos) {
+    for (let node = syntaxTree(state).resolveInner(pos, 1); node; node = node.parent) {
+        if (node.name === "FencedCode" || node.name === "InlineCode" || node.name === "CodeBlock") return true;
+    }
+    return false;
+}
 
 // The lines of a fenced code block get the code font, as in the reading view.
 const codeLine = Decoration.line({class: "cm-code"});
@@ -59,12 +69,74 @@ const fencedCode = ViewPlugin.fromClass(class {
     }
 }, {decorations: plugin => plugin.decorations});
 
+// [[links]] and #tags stand out while writing; a #tag needs a letter, as in Obsidian (#1 is not one).
+const TAG = /(?<![\p{L}\p{N}_\/#&])#[\p{L}\p{N}_][\p{L}\p{N}_\/-]*/gu;
+const LINK = /\[\[([^\]\n|]+)(?:\|[^\]\n]*)?\]\]/g;
+
+function marking(regexp, className, keep = () => true) {
+    const mark = Decoration.mark({class: className});
+    const matcher = new MatchDecorator({
+        regexp,
+        decorate: (add, from, to, match, view) => {
+            if (keep(match[0]) && !inCode(view.state, from)) add(from, to, mark);
+        }
+    });
+    return ViewPlugin.fromClass(class {
+        constructor(view) {
+            this.decorations = matcher.createDeco(view);
+        }
+
+        update(u) {
+            this.decorations = matcher.updateDeco(u, this.decorations);
+        }
+    }, {decorations: plugin => plugin.decorations});
+}
+
+// Typing [[ offers the titles of the notes (Java sends them); Ctrl+click on a [[link]] opens it.
+let titles = [];
+
+function linkCompletions(context) {
+    const typed = context.matchBefore(/\[\[[^\]\n]*$/);
+    if (!typed || inCode(context.state, typed.from)) return null;
+    return {
+        from: typed.from + 2,
+        validFor: /^[^\]\n]*$/,
+        options: titles.map(title => ({
+            label: title,
+            apply: (view, completion, from, to) => {
+                const closing = view.state.sliceDoc(to, to + 2) === "]]" ? "" : "]]";
+                view.dispatch({changes: {from, to, insert: title + closing}, selection: {anchor: from + title.length + 2}});
+            }
+        }))
+    };
+}
+
+const followLinks = EditorView.domEventHandlers({
+    mousedown(e, view) {
+        if (!e.ctrlKey && !e.metaKey) return false;
+        const pos = view.posAtCoords({x: e.clientX, y: e.clientY});
+        if (pos == null) return false;
+        const line = view.state.doc.lineAt(pos);
+        for (const m of line.text.matchAll(LINK)) {
+            const from = line.from + m.index;
+            if (pos >= from && pos <= from + m[0].length) {
+                e.preventDefault();
+                tell("open:" + m[1].trim());
+                return true;
+            }
+        }
+        return false;
+    }
+});
+
 const extensions = [
     highlightSpecialChars(), history(), drawSelection(), dropCursor(), indentOnInput(), bracketMatching(),
     closeBrackets(), highlightSelectionMatches(), placeholder("Start writing…"),
     markdown({base: markdownLanguage, codeLanguages: languages}),
     highlighters.map(h => syntaxHighlighting(h)),
-    fencedCode, EditorView.lineWrapping,
+    fencedCode, marking(LINK, "cm-wikilink"), marking(TAG, "cm-tag", text => /\p{L}/u.test(text)), followLinks,
+    autocompletion({override: [linkCompletions], icons: false}),
+    EditorView.lineWrapping,
     keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, indentWithTab]),
     EditorView.updateListener.of(u => {
         if (u.docChanged) tell("changed");
@@ -74,16 +146,31 @@ const extensions = [
 const editor = document.getElementById("editor"), reading = document.getElementById("reading");
 const view = new EditorView({parent: editor, state: EditorState.create({extensions})});
 
+/** Accents and case do not matter when searching, and a folded text keeps the positions of the original. */
+function fold(text) {
+    let out = "";
+    for (let i = 0; i < text.length; i++) out += text[i].normalize("NFD").replace(/\p{M}/gu, "").toLowerCase()[0] ?? text[i];
+    return out;
+}
+
 // Called by Java.
 window.setText = text => view.setState(EditorState.create({doc: text, extensions}));
 window.getText = () => view.state.doc.toString();
+window.setTitles = lines => titles = lines ? lines.split("\n") : [];
+window.setTheme = theme => document.documentElement.dataset.theme = theme;
 window.insertText = text => view.dispatch(view.state.replaceSelection(text), {scrollIntoView: true});
 window.insertCode = (code, language) => {
-    let inCode = false;
+    let inBlock = false;
     for (let node = syntaxTree(view.state).resolveInner(view.state.selection.main.head, -1); node; node = node.parent) {
-        if (node.name === "FencedCode") inCode = true;
+        if (node.name === "FencedCode") inBlock = true;
     }
-    view.dispatch(view.state.replaceSelection(inCode ? code : "\n```" + language + "\n" + code + "\n```\n"), {scrollIntoView: true});
+    view.dispatch(view.state.replaceSelection(inBlock ? code : "\n```" + language + "\n" + code + "\n```\n"), {scrollIntoView: true});
+    view.focus();
+};
+window.selectMatch = text => {
+    const at = fold(view.state.doc.toString()).indexOf(fold(text));
+    if (at < 0) return;
+    view.dispatch({selection: {anchor: at, head: at + text.length}, scrollIntoView: true});
     view.focus();
 };
 window.focusEditor = () => view.focus();
@@ -102,12 +189,14 @@ window.showReading = html => {
     reading.scrollTop = 0;
 };
 
-// A link in the reading view opens in the system browser, never inside this page.
+// In the reading view a [[link]] opens its note, a #tag shows its notes, and any other link opens
+// in the system browser, never inside this page.
 reading.addEventListener("click", e => {
-    const link = e.target.closest("a[href]");
-    if (!link) return;
-    e.preventDefault();
-    tell("link:" + link.href);
+    const note = e.target.closest(".wikilink"), tag = e.target.closest(".tag"), link = e.target.closest("a[href]");
+    if (note) tell("open:" + note.dataset.note);
+    else if (tag) tell("tag:" + tag.dataset.tag);
+    else if (link) tell("link:" + link.href);
+    if (note || link) e.preventDefault();
 });
 
 tell("ready");

@@ -16,6 +16,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.FileTime;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -33,7 +35,7 @@ import java.util.stream.Stream;
 final class Vault {
 
     static final String EXT = ".md";
-    private static final String META = ".notebook.json";
+    private static final String META = ".notebook.json", SETTINGS = "settings.json";
 
     /** A notebook as the home screen lists it. */
     record Notebook(Path dir, NotebookType type, int notes, FileTime edited) {
@@ -86,23 +88,65 @@ final class Vault {
 
     /** A text kept in the notebook's .notebook.json ("type", "cpp": its C++ template); "" when not there. */
     static String meta(Path notebook, String key) {
-        JsonElement value = metaJson(notebook).get(key);
-        return value == null || !value.isJsonPrimitive() ? "" : value.getAsString();
+        return jsonText(notebook.resolve(META), key);
     }
 
     /** Writes one text into .notebook.json, keeping everything else already there. */
     static void setMeta(Path notebook, String key, String value) throws IOException {
-        JsonObject json = metaJson(notebook);
-        json.addProperty(key, value);
-        write(notebook.resolve(META), new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create().toJson(json) + "\n");
+        setJsonText(notebook.resolve(META), key, value);
     }
 
-    private static JsonObject metaJson(Path notebook) {
+    /** An app setting ("theme"), kept in settings.json next to the notebooks. */
+    String setting(String key) {
+        return jsonText(root.resolve(SETTINGS), key);
+    }
+
+    void setSetting(String key, String value) throws IOException {
+        Files.createDirectories(root);
+        setJsonText(root.resolve(SETTINGS), key, value);
+    }
+
+    private static String jsonText(Path file, String key) {
+        JsonElement value = json(file).get(key);
+        return value == null || !value.isJsonPrimitive() ? "" : value.getAsString();
+    }
+
+    private static void setJsonText(Path file, String key, String value) throws IOException {
+        JsonObject json = json(file);
+        json.addProperty(key, value);
+        write(file, new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create().toJson(json) + "\n");
+    }
+
+    private static JsonObject json(Path file) {
         try {
-            return JsonParser.parseString(Files.readString(notebook.resolve(META))).getAsJsonObject();
+            return JsonParser.parseString(Files.readString(file)).getAsJsonObject();
         } catch (IOException | RuntimeException e) {
             return new JsonObject();   // missing, or not what this app wrote
         }
+    }
+
+    /** A note and the notebook it is in. */
+    record Place(Path notebook, Path note) {
+        String title() {
+            return Vault.title(note);
+        }
+    }
+
+    /** Every note of every notebook: for Quick open, Search and the titles [[ offers. */
+    List<Place> everyNote() {
+        List<Place> all = new ArrayList<>();
+        try (Stream<Path> s = Files.list(root)) {
+            for (Path dir : s.filter(d -> Files.isDirectory(d) && !hidden(d)).sorted(BY_NAME).toList()) {
+                try {
+                    for (Path note : notes(dir)) all.add(new Place(dir, note));
+                } catch (IOException ignored) {
+                    // A notebook that cannot be read right now has nothing to find.
+                }
+            }
+        } catch (IOException ignored) {
+            // No notes folder yet: nothing to find.
+        }
+        return all;
     }
 
     static List<Path> notes(Path notebook) throws IOException {
@@ -135,6 +179,25 @@ final class Vault {
         // Only the letter case changes; Windows and macOS see one file, so go through another name.
         Path temp = Files.move(path, path.resolveSibling(".rename-" + System.nanoTime()));
         return Files.move(temp, target);
+    }
+
+    /** Copies an image into the notebook's attachments folder (under a new name if taken) and returns the copy. */
+    static Path attach(Path notebook, Path file) throws IOException {
+        String name = file.getFileName().toString();
+        int dot = name.lastIndexOf('.');
+        Path dir = Files.createDirectories(notebook.resolve("attachments"));
+        return Files.copy(file, unique(dir, fileName(dot > 0 ? name.substring(0, dot) : name), dot > 0 ? name.substring(dot) : ""));
+    }
+
+    /** Saves a pasted image into the notebook's attachments folder as "Pasted image 2026-09-28 15.30.12.png". */
+    static Path attach(Path notebook, byte[] png) throws IOException {
+        Path dir = Files.createDirectories(notebook.resolve("attachments"));
+        String name = "Pasted image " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH.mm.ss"));
+        return Files.write(unique(dir, name, ".png"), png);
+    }
+
+    static boolean isImage(Path file) {
+        return file.getFileName().toString().toLowerCase(Locale.ROOT).matches(".*\\.(png|jpe?g|gif|bmp|svg)");
     }
 
     /** Moves a note or a notebook to the system trash; nothing is ever deleted for good. */

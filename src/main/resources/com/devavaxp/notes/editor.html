@@ -2,9 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<!-- Only the app's own files may run here: nothing written in a note can bring in a script. -->
+<!-- Only the app's own files may run here: nothing written in a note can bring in a script.
+     The page is always a file (WebKit matches no jar: URL against a policy). -->
 <meta http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src jar: file:; style-src jar: file: 'unsafe-inline'; img-src jar: file: data: http: https:; font-src jar: file: data:">
+      content="default-src 'none'; script-src file:; style-src file: 'unsafe-inline'; img-src file: data: http: https:; font-src file: data:">
 <link rel="stylesheet" href="katex/katex.min.css">
 <link rel="stylesheet" href="editor.css">
 </head>

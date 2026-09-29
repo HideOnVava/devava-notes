@@ -3,13 +3,16 @@ package com.devavaxp.notes;
 import com.devavaxp.notes.NotebookType.Kind;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
+import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.DatePicker;
+import javafx.scene.control.DialogPane;
 import javafx.scene.control.TextField;
 import javafx.scene.image.PixelFormat;
 import javafx.scene.image.WritableImage;
 import javafx.scene.web.WebEngine;
 import javafx.stage.Stage;
+import javafx.stage.Window;
 import netscape.javascript.JSObject;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -104,6 +107,47 @@ class AppSmokeTest {
         });
         waitFor("the editor to load", () -> fx(() -> app.editor.ready));
         return app;
+    }
+
+    @Test
+    void usesAGeneralNotebookWithLinksTagsAndPictures(@TempDir Path home, @TempDir Path pictures) throws Exception {
+        Stage[] window = new Stage[1];
+        NotesApp app = open(home, window);
+        Stage stage = window[0];
+        WebEngine engine = fx(() -> app.editor.view.getEngine());
+        shot(stage, "g0-welcome");
+        NotebookType general = NotebookType.GENERAL;
+        Path notebook = fx(() -> app.createNotebook("Ideas", general));
+        fx(() -> run(() -> app.openNotebook(notebook)));
+        Path readingList = fx(() -> app.createNote(general.kinds().get(0), "Reading list", ""));
+        Path plans = fx(() -> app.createNote(general.kinds().get(0), "Plans", ""));
+
+        // A picture dropped on the note, as its file is: a 2 × 2 PNG.
+        Path picture = pictures.resolve("board photo.png");
+        ImageIO.write(new BufferedImage(2, 2, BufferedImage.TYPE_INT_ARGB), "png", picture.toFile());
+        fx(() -> run(() -> {
+            ((JSObject) engine.executeScript("window")).call("insertText", "See [[Reading list]] and #books #to-read.\n\n");
+            try {
+                app.attachImages(List.of(picture.toFile()));
+            } catch (java.io.IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
+        }));
+        waitFor("the note to save itself", () -> Files.readString(plans).contains("![](<attachments/board photo.png>)"));
+        assertTrue(Files.exists(notebook.resolve("attachments").resolve("board photo.png")));
+
+        fx(() -> run(app::toggleMode));
+        waitFor("the picture shown", () -> fx(() -> ((Number) engine.executeScript(
+                "(document.querySelector('#reading img') || {}).naturalWidth || 0")).intValue() == 2));
+        assertEquals(2, fx(() -> ((Number) engine.executeScript("document.querySelectorAll('#reading .tag').length")).intValue()));
+        assertEquals(0, fx(() -> ((Number) engine.executeScript("document.querySelectorAll('#reading .wikilink.missing').length")).intValue()));
+        shot(stage, "g1-plans");
+        fx(() -> engine.executeScript("document.querySelector('#reading .tag').click()"));   // → By tag › books
+        shot(stage, "g2-tag");
+        fx(() -> engine.executeScript("document.querySelector('#reading .wikilink').click()"));
+        waitFor("the [[link]] to open its note", () -> fx(() -> readingList.equals(app.openPath())));
+        assertEquals(List.of(), fx(() -> List.copyOf(app.editor.errors)));
+        fx(() -> run(stage::close));
     }
 
     @Test
@@ -220,9 +264,53 @@ class AppSmokeTest {
         shot(stage, "5-read");
         fx(() -> run(app::showHome));
         shot(stage, "6-home");
+        dialogShot(stage, "d1-new-notebook", app::newNotebook, "");
+
+        // The dark theme, remembered for the next start, and the editor's page follows it.
+        fx(() -> run(() -> app.setDark(true)));
+        assertTrue(Files.readString(home.resolve("settings.json")).contains("\"dark\""));
+        shot(stage, "7-dark-home");
+        dialogShot(stage, "d2-dark-quick-open", app::quickOpen, "");
+        dialogShot(stage, "d3-dark-search", app::search, "find");
+        fx(() -> run(() -> {
+            app.openNotebook(notebook);
+            app.openNote(cf);
+        }));
+        waitFor("the editor's page in dark", () -> fx(() -> "dark".equals(engine.executeScript("document.documentElement.dataset.theme"))));
+        waitFor("C++ colored in the reading view", () -> fx(() ->
+                ((Number) engine.executeScript("document.querySelectorAll('#reading .tok-keyword').length")).intValue() > 0));
+        shot(stage, "8-dark-read");
+        fx(() -> run(app::toggleMode));
+        shot(stage, "9-dark-edit");
+        fx(() -> run(() -> app.browser.showTable(true)));
+        shot(stage, "10-dark-table");
 
         assertEquals(WATERMELON, Files.readString(notebook.resolve("CF 4A - Watermelon.md")));   // only read, never rewritten
         assertEquals(List.of(), fx(() -> List.copyOf(app.editor.errors)));
+        fx(() -> run(stage::close));
+    }
+
+    /** Home with a notebook of each type, light and dark: the screenshots of the README. */
+    @Test
+    void showsANotebookOfEachTypeOnHome(@TempDir Path home) throws Exception {
+        Stage[] window = new Stage[1];
+        NotesApp app = open(home, window);
+        Stage stage = window[0];
+        LocalDate today = LocalDate.now();
+        Path ideas = fx(() -> app.createNotebook("Ideas", NotebookType.GENERAL));
+        Path calculus = fx(() -> app.createNotebook("Calculus II", NotebookType.CLASS_NOTES));
+        Path algorithms = fx(() -> app.createNotebook("Algorithms", NotebookType.COMPETITIVE_PROGRAMMING));
+        Files.writeString(ideas.resolve("Reading list.md"), "---\ntags: [books]\n---\n");
+        Files.writeString(ideas.resolve("Side projects.md"), "");
+        Files.writeString(calculus.resolve("Limits.md"), "---\nkind: lecture\ndate: " + today + "\nunit: 1. Limits\n---\n" + LECTURE);
+        Files.writeString(calculus.resolve("Homework 3.md"), "---\nkind: assignment\ndue: " + today.plusDays(1) + "\nstatus: Pending\n---\n");
+        Files.writeString(calculus.resolve("Midterm.md"), "---\nkind: exam\ndate: " + today.plusDays(5) + "\n---\n");
+        Files.writeString(algorithms.resolve("CF 4A - Watermelon.md"), WATERMELON);
+        Files.writeString(algorithms.resolve("DSU.md"), DSU);
+        fx(() -> run(app::showHome));
+        shot(stage, "h1-home");
+        fx(() -> run(() -> app.setDark(true)));
+        shot(stage, "h2-home-dark");
         fx(() -> run(stage::close));
     }
 
@@ -262,9 +350,29 @@ class AppSmokeTest {
         }
     }
 
-    private static void shot(Stage stage, String name) throws Exception {
+    /** Opens a dialog as its button would, types {@code text} in its field, saves a screenshot of it and cancels it. */
+    private static void dialogShot(Stage stage, String name, Runnable open, String text) throws Exception {
+        Platform.runLater(open);   // it stays in showAndWait() until the dialog closes
+        waitFor("the dialog of " + name, () -> fx(() -> dialog(stage) != null));
+        Stage dialog = fx(() -> dialog(stage));
+        if (!text.isEmpty()) fx(() -> run(() -> ((TextField) dialog.getScene().lookup(".text-field")).setText(text)));
+        shot(dialog, name);
+        fx(() -> run(() -> {
+            DialogPane pane = (DialogPane) dialog.getScene().getRoot().lookup(".dialog-pane");
+            pane.getButtonTypes().stream().filter(b -> b.getButtonData().isCancelButton())
+                    .forEach(b -> ((Button) pane.lookupButton(b)).fire());
+        }));
+        waitFor("the dialog to close", () -> fx(() -> dialog(stage) == null));
+    }
+
+    private static Stage dialog(Stage owner) {
+        return Window.getWindows().stream().filter(w -> w instanceof Stage s && s.getOwner() == owner && s.isShowing())
+                .map(Stage.class::cast).findFirst().orElse(null);
+    }
+
+    private static void shot(Window window, String name) throws Exception {
         Thread.sleep(500);   // let the WebView paint
-        WritableImage image = fx(() -> stage.getScene().snapshot(null));
+        WritableImage image = fx(() -> window.getScene().snapshot(null));
         int w = (int) image.getWidth(), h = (int) image.getHeight();
         int[] argb = new int[w * h];
         image.getPixelReader().getPixels(0, 0, w, h, PixelFormat.getIntArgbInstance(), argb, 0, w);

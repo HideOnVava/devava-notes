@@ -1,0 +1,11 @@
+# JDK modules linked into the bundled runtime (one per line; "#" starts a comment).
+# The JavaFX modules are added by build-windows.ps1 and pull in their own dependencies.
+java.base
+java.desktop
+java.logging
+java.xml
+jdk.jsobject
+jdk.xml.dom
+jdk.unsupported
+jdk.charsets
+jdk.crypto.ec

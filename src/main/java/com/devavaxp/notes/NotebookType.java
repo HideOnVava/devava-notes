@@ -1,6 +1,7 @@
 package com.devavaxp.notes;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -173,6 +174,11 @@ record NotebookType(String id, String name, String description, List<Kind> kinds
         }
         if (this == CLASS_NOTES && key.equals("upcoming")) {
             return Agenda.upcoming(note, LocalDate.now()) ? List.of("true") : List.of();
+        }
+        if (key.equals("tags")) {   // the tags property and the #tags written in the text
+            List<String> tags = new ArrayList<>(note.list(key));
+            note.inlineTags().stream().filter(t -> tags.stream().noneMatch(t::equalsIgnoreCase)).forEach(tags::add);
+            return tags;
         }
         return note.list(key);
     }

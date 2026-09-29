@@ -70,6 +70,16 @@ class NotebookViewTest {
     }
 
     @Test
+    void tagsWrittenInTheTextJoinTheTagsProperty() {
+        NotebookType general = NotebookType.GENERAL;
+        List<Entry> notes = List.of(
+                new Entry(Path.of("Plans.md"), Note.parse("---\ntags: [ideas]\n---\nReading #books"), FileTime.fromMillis(0)),
+                new Entry(Path.of("Novel.md"), Note.parse("About #Books"), FileTime.fromMillis(0)));
+        assertEquals(List.of("Books", "ideas"), NotebookView.rows(general, view(general, "By tag"), null, "", notes).stream().map(Group::value).toList());
+        assertEquals(2, NotebookView.rows(general, view(general, "By tag"), "books", "", notes).get(0).notes().size());
+    }
+
+    @Test
     void everyTemplateMakesANoteOfItsOwnKind() {
         for (NotebookType type : NotebookType.ALL) {
             for (NotebookType.Kind kind : type.kinds()) {

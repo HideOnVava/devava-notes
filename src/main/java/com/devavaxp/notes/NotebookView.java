@@ -26,6 +26,7 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
 
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
@@ -197,6 +198,18 @@ final class NotebookView {
         }
     }
 
+    /** The notes with a #tag: its value in the view of tags when the notebook has one, else the list filtered by it. */
+    void showTag(String tag) {
+        for (View v : type.views()) {
+            if ("tags".equals(v.groupBy())) {
+                filter.clear();
+                choose(v.name(), tag);
+                return;
+            }
+        }
+        filter.setText(tag);
+    }
+
     /** Marks the note as the open one and selects its line. */
     void select(Path p) {
         open = p;
@@ -299,6 +312,9 @@ final class NotebookView {
             this.table.setColumnResizePolicy(table ? TreeTableView.UNCONSTRAINED_RESIZE_POLICY
                     : TreeTableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
             this.table.getColumns().setAll(columns);
+            // JavaFX keeps the widest disclosure arrow per tree column (null when unset, shared by every
+            // table): a new one per view keeps a flat list from being indented once a grouped one showed.
+            this.table.setTreeColumn(columns.get(0));
             this.table.getStyleClass().remove("as-list");
             if (!table) this.table.getStyleClass().add("as-list");
             this.table.getRoot().getChildren().setAll(items);
@@ -377,9 +393,19 @@ final class NotebookView {
         return c;
     }
 
-    /** Paints a label's text in a color ("#RRGGBB"), in bold; "" leaves it as it is. */
-    private static <T extends Labeled> T colored(T label, String color) {
-        label.setStyle(color.isEmpty() ? "" : "-fx-text-fill: " + color + "; -fx-font-weight: bold;");
+    /**
+     * Paints a label's text in a color ("#RRGGBB"), in bold; "" leaves it as it is. On a dark
+     * background (the dark theme) CSS picks a lighter tint of it, which still reads there.
+     */
+    static <T extends Labeled> T colored(T label, String color) {
+        if (color.isEmpty()) {
+            label.setStyle("");
+            return label;
+        }
+        Color light = Color.web(color).interpolate(Color.WHITE, 0.45);
+        String tint = String.format("#%02X%02X%02X", Math.round(light.getRed() * 255), Math.round(light.getGreen() * 255),
+                Math.round(light.getBlue() * 255));
+        label.setStyle("-fx-font-weight: bold; -fx-text-fill: ladder(-bg, " + tint + " 49%, " + color + " 50%);");
         return label;
     }
 
@@ -408,7 +434,7 @@ final class NotebookView {
             if (view.only() != null && !type.matches(e.note(), view.only())) continue;
             if (value != null && !has(type.values(e.note(), view.groupBy()), value)) continue;
             if (!wanted.isEmpty() && !fold(e.title() + " " + fields.stream().map(f -> String.join(" ", type.values(e.note(), f.key())))
-                    .collect(Collectors.joining(" "))).contains(wanted)) continue;
+                    .collect(Collectors.joining(" ")) + " " + String.join(" ", type.values(e.note(), "tags"))).contains(wanted)) continue;
             notes.add(e);
         }
         notes.sort(order(type, view.sortBy()));

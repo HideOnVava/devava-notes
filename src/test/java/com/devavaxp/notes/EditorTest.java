@@ -1,6 +1,9 @@
 package com.devavaxp.notes;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -30,6 +33,17 @@ class EditorTest {
         assertTrue(html.contains("<code class=\"language-cpp\">"));
         assertTrue(html.contains("type=\"checkbox\""));
         assertTrue(html.contains("<table>"));
+    }
+
+    @Test
+    void linksTagsAndImagesInTheReadingView(@TempDir Path folder) {
+        String html = Editor.html("See [[Reading list]], [[Nowhere|a missing one]] and #books.\n\n"
+                + "![](<attachments/a b.png>) `[[not a link]]`", folder, title -> title.equals("Reading list"));
+        assertTrue(html.contains("<a href=\"#\" class=\"wikilink\" data-note=\"Reading list\">Reading list</a>"), html);
+        assertTrue(html.contains("<a href=\"#\" class=\"wikilink missing\" data-note=\"Nowhere\">a missing one</a>"), html);
+        assertTrue(html.contains("<span class=\"tag\" data-tag=\"books\">#books</span>"), html);
+        assertTrue(html.contains("<img src=\"" + folder.toUri() + "attachments/a%20b.png\""), html);
+        assertTrue(html.contains("<code>[[not a link]]</code>"), html);
     }
 
     @Test

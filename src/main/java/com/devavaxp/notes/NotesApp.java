@@ -8,13 +8,16 @@ import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
+import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Group;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
+import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
@@ -31,20 +34,32 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.image.PixelFormat;
+import javafx.scene.input.Clipboard;
+import javafx.scene.input.DragEvent;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
 import javafx.scene.input.KeyEvent;
+import javafx.scene.input.TransferMode;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
+import javafx.scene.shape.FillRule;
+import javafx.scene.shape.SVGPath;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 
+import javax.imageio.ImageIO;
 import java.awt.Desktop;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.nio.charset.CharacterCodingException;
 import java.nio.file.AccessDeniedException;
@@ -53,14 +68,20 @@ import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * Devava Notes. Home shows the notebooks; a notebook shows the views of its type, the notes of the
@@ -72,6 +93,9 @@ public final class NotesApp extends Application {
     static final String NAME = "Devava Notes";
     private static final KeyCombination NEW = new KeyCodeCombination(KeyCode.N, KeyCombination.SHORTCUT_DOWN);
     private static final KeyCombination READ = new KeyCodeCombination(KeyCode.E, KeyCombination.SHORTCUT_DOWN);
+    private static final KeyCombination QUICK_OPEN = new KeyCodeCombination(KeyCode.O, KeyCombination.SHORTCUT_DOWN);
+    private static final KeyCombination SEARCH = new KeyCodeCombination(KeyCode.F, KeyCombination.SHORTCUT_DOWN, KeyCombination.SHIFT_DOWN);
+    private static final KeyCombination PASTE = new KeyCodeCombination(KeyCode.V, KeyCombination.SHORTCUT_DOWN);
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ENGLISH)
             .withZone(ZoneId.systemDefault());
 
@@ -84,6 +108,8 @@ public final class NotesApp extends Application {
     private final HBox bar = new HBox(8);
     private final BorderPane notePane = new BorderPane();
     private final HBox noteHeader = new HBox(10);
+    /** The note's buttons: at the end of its header, or on a row of their own when the pane is narrow. */
+    private final HBox actions = new HBox(10), actionsRow = new HBox();
     private final Label noteTitle = new Label(), kindName = new Label(), badge = new Label(), status = new Label();
     private final HBox tools = new HBox(4);
     private final Button mode = new Button("Read");
@@ -101,6 +127,9 @@ public final class NotesApp extends Application {
     /** The note's modification time as this app last read or wrote it, to notice edits made elsewhere. */
     private FileTime seen;
     private String saveError = "";
+    /** The dark theme, remembered in settings.json; the icon, of the window and of Home. */
+    private boolean dark;
+    private Image icon;
 
     public static void main(String[] args) {
         launch(args);
@@ -112,12 +141,29 @@ public final class NotesApp extends Application {
     }
 
     void show(Stage stage, Vault vault) {
+        Locale.setDefault(Locale.ENGLISH);   // the app speaks English, the stock dialogs' "Cancel" and the calendars too
         this.stage = stage;
         this.vault = vault;
-        editor = new Editor(this::edited, this::openLink);
+        editor = new Editor(this::edited, this::openLink, this::openTitle, tag -> browser.showTag(tag));
         browser = new NotebookView(this);
         properties = new PropertiesPanel(this::propertiesChanged, this::openLink, this::usedValues);
         autosave.setOnFinished(e -> save());
+        // Images dropped on the note go to attachments/ (the WebView would otherwise open the file).
+        editor.view.addEventFilter(DragEvent.DRAG_OVER, e -> {
+            if (note == null || reading || !e.getDragboard().hasFiles()) return;
+            e.acceptTransferModes(TransferMode.COPY);
+            e.consume();
+        });
+        editor.view.addEventFilter(DragEvent.DRAG_DROPPED, e -> {
+            if (note == null || reading || !e.getDragboard().hasFiles()) return;
+            try {
+                attachImages(e.getDragboard().getFiles());
+            } catch (IOException ex) {
+                error("Couldn't add the image", reason(ex));
+            }
+            e.setDropCompleted(true);
+            e.consume();
+        });
 
         bar.getStyleClass().add("bar");
         bar.setAlignment(Pos.CENTER_LEFT);
@@ -131,9 +177,16 @@ public final class NotesApp extends Application {
         status.getStyleClass().add("status-error");
         mode.setTooltip(new Tooltip("Read or edit (Ctrl+E)"));
         mode.setOnAction(e -> toggleMode());
-        noteHeader.getChildren().setAll(noteTitle, kindName, badge, grow(), status, tools, mode);
+        actions.getChildren().setAll(status, tools, mode);
+        actions.setAlignment(Pos.CENTER_RIGHT);
+        noteHeader.getChildren().setAll(noteTitle, kindName, badge, grow(), actions);
         noteHeader.getStyleClass().add("note-header");
         noteHeader.setAlignment(Pos.CENTER_LEFT);
+        noteHeader.widthProperty().addListener((o, was, width) -> fitHeader());
+        actionsRow.getStyleClass().add("note-actions");
+        actionsRow.setAlignment(Pos.CENTER_RIGHT);
+        actionsRow.setManaged(false);
+        actionsRow.setVisible(false);
         notebookView = new SplitPane(browser.sidebar, browser.notes, notePane);
         notebookView.setDividerPositions(0.16, 0.42);
         browser.tableMode().addListener((o, was, table) -> notebookView.setDividerPositions(0.16, table ? 0.68 : 0.42));
@@ -150,8 +203,20 @@ public final class NotesApp extends Application {
             } else if (READ.match(e) && note != null) {
                 toggleMode();
                 e.consume();
+            } else if (QUICK_OPEN.match(e)) {
+                quickOpen();
+                e.consume();
+            } else if (SEARCH.match(e)) {
+                search();
+                e.consume();
+            } else if (PASTE.match(e) && note != null && !reading && editor.view.isFocused() && pasteImages()) {
+                e.consume();
             }
         });
+        icon = new Image(Objects.requireNonNull(NotesApp.class.getResourceAsStream("icon.png"), "icon.png"));
+        stage.getIcons().add(icon);
+        dark = vault.setting("theme").equals("dark");
+        applyTheme();
         stage.setScene(scene);
         stage.setMinWidth(900);
         stage.setMinHeight(560);
@@ -173,13 +238,71 @@ public final class NotesApp extends Application {
         if (!leaveNote()) return;
         notebook = null;
         note = null;
-        Label name = new Label(NAME);
-        name.getStyleClass().add("app-name");
         Button add = button("+ New notebook", "primary", e -> newNotebook());
         add.setTooltip(new Tooltip("Ctrl+N"));
-        bar.getChildren().setAll(name, grow(), add, more(item("Open data folder", () -> showInFolder(vault.root))));
+        bar.getChildren().setAll(brand(), grow(), finder(), add, more(item("Search in all notes…", this::search),
+                item("Open data folder", () -> showInFolder(vault.root)), new SeparatorMenuItem(), themeItem()));
         root.setCenter(homeContent(true));
         stage.setTitle(NAME);
+        refreshTitles();
+    }
+
+    /** The icon and the name, at the left of Home's bar. */
+    private Node brand() {
+        ImageView logo = new ImageView(icon);
+        logo.setFitWidth(22);
+        logo.setFitHeight(22);
+        logo.setSmooth(true);
+        Label name = new Label(NAME);
+        name.getStyleClass().add("app-name");
+        HBox brand = new HBox(9, logo, name);
+        brand.setAlignment(Pos.CENTER_LEFT);
+        return brand;
+    }
+
+    /** The field-like button of the bar that opens Quick open. */
+    private Button finder() {
+        SVGPath glass = new SVGPath();   // a magnifying glass, on 24 units
+        glass.setContent("M10.5 3a7.5 7.5 0 0 1 5.96 12.06l4.24 4.24-1.41 1.41-4.24-4.24A7.5 7.5 0 1 1 10.5 3zm0 2a5.5 5.5 0 1 0 0 11a5.5 5.5 0 0 0 0-11z");
+        glass.setFillRule(FillRule.EVEN_ODD);
+        glass.getStyleClass().add("icon");
+        glass.setScaleX(0.62);
+        glass.setScaleY(0.62);
+        Label text = new Label("Quick open…"), keys = new Label("Ctrl+O");
+        text.getStyleClass().add("finder-text");
+        keys.getStyleClass().add("finder-keys");
+        HBox content = new HBox(8, new Group(glass), text, grow(), keys);
+        content.setAlignment(Pos.CENTER_LEFT);
+        content.setPrefWidth(236);
+        Button find = new Button(null, content);
+        find.getStyleClass().add("finder");
+        find.setOnAction(e -> quickOpen());
+        find.setFocusTraversable(false);   // focused, it would look like a field being typed in; Ctrl+O reaches it
+        find.setTooltip(new Tooltip("Open any note by its title (Ctrl+O); search all their text with Ctrl+Shift+F"));
+        return find;
+    }
+
+    private CheckMenuItem themeItem() {
+        CheckMenuItem item = new CheckMenuItem("Dark theme");
+        item.setSelected(dark);
+        item.setOnAction(e -> setDark(item.isSelected()));
+        return item;
+    }
+
+    void setDark(boolean dark) {
+        this.dark = dark;
+        applyTheme();
+        try {
+            vault.setSetting("theme", dark ? "dark" : "light");
+        } catch (IOException ignored) {
+            // The theme still changes; it just is not remembered for next time.
+        }
+    }
+
+    private void applyTheme() {
+        root.getStyleClass().remove("dark");
+        if (dark) root.getStyleClass().add("dark");
+        editor.setDark(dark);
     }
 
     private Node homeContent(boolean showErrors) {
@@ -191,26 +314,58 @@ public final class NotesApp extends Application {
             if (showErrors) error("Couldn't open your notes", vault.root + "\n\n" + reason(e));
         }
         if (notebooks.isEmpty()) {
-            VBox empty = placeholder("No notebooks yet", "A notebook keeps the notes of one subject, course or project.");
+            ImageView logo = new ImageView(icon);
+            logo.setFitWidth(72);
+            logo.setFitHeight(72);
+            logo.setSmooth(true);
+            VBox empty = placeholder("Welcome to Devava Notes", "A notebook keeps the notes of one subject, course or project.");
+            empty.getChildren().add(0, logo);
             empty.getChildren().add(button("+ New notebook", "primary", e -> newNotebook()));
             return empty;
         }
+        // On the left the notebooks; on the right what is coming and what was written last.
         FlowPane cards = new FlowPane(16, 16);
         cards.getChildren().setAll(notebooks.stream().map(this::card).toList());
-        VBox home = new VBox(14);
+        Label title = new Label("Notebooks");
+        title.getStyleClass().add("page-title");
+        VBox main = new VBox(18, title, cards);
+        HBox.setHgrow(main, Priority.ALWAYS);
+        VBox side = new VBox(10);
+        side.setMinWidth(320);
+        side.setPrefWidth(370);
         List<Upcoming> upcoming = upcoming(notebooks);
         if (!upcoming.isEmpty()) {
-            VBox rows = new VBox(2);
-            upcoming.stream().limit(8).forEach(u -> rows.getChildren().add(upcomingRow(u)));
-            rows.getStyleClass().add("upcoming");
-            home.getChildren().addAll(sectionTitle("UPCOMING"), rows);
+            side.getChildren().addAll(sectionTitle("UPCOMING"), panel(upcoming.stream().limit(8).map(this::upcomingRow).toList()));
         }
-        home.getChildren().addAll(sectionTitle("NOTEBOOKS"), cards);
+        List<Vault.Place> recent = recent(vault.everyNote(), 6);
+        if (!recent.isEmpty()) {
+            Label recentTitle = sectionTitle("RECENT");
+            if (!side.getChildren().isEmpty()) VBox.setMargin(recentTitle, new Insets(16, 0, 0, 0));
+            side.getChildren().addAll(recentTitle, panel(recent.stream().map(this::recentRow).toList()));
+        }
+        HBox home = new HBox(main);
+        if (!side.getChildren().isEmpty()) home.getChildren().add(side);
         home.getStyleClass().add("home");
         ScrollPane scroll = new ScrollPane(home);
         scroll.setFitToWidth(true);
         scroll.getStyleClass().add("home-scroll");
         return scroll;
+    }
+
+    private static VBox panel(List<? extends Node> rows) {
+        VBox panel = new VBox(2);
+        panel.getChildren().setAll(rows);
+        panel.getStyleClass().add("panel");
+        return panel;
+    }
+
+    /** Each type's color on Home: the mark and the name on its notebooks' cards. */
+    private static String color(NotebookType type) {
+        return switch (type.id()) {
+            case "class-notes" -> "#0D9488";
+            case "competitive-programming" -> "#EA580C";
+            default -> "#6366F1";
+        };
     }
 
     /** A pending assignment or a coming exam, in one of the Class Notes notebooks. */
@@ -239,8 +394,9 @@ public final class NotesApp extends Application {
     private Button upcomingRow(Upcoming u) {
         Badge b = Agenda.badge(u.note(), LocalDate.now());
         Label when = new Label(b == null ? "" : b.text()), title = new Label(Vault.title(u.path())), course = new Label(u.notebook().name());
-        when.setStyle(b == null ? "" : "-fx-text-fill: " + b.color() + "; -fx-font-weight: bold;");
-        when.setMinWidth(120);
+        NotebookView.colored(when, b == null ? "" : b.color());
+        when.setMinWidth(110);
+        title.getStyleClass().add("row-title");
         course.getStyleClass().add("card-meta");
         HBox line = new HBox(12, when, title, course);
         line.setAlignment(Pos.CENTER_LEFT);
@@ -255,6 +411,44 @@ public final class NotesApp extends Application {
         return row;
     }
 
+    /** The notes changed last, in any notebook. */
+    private static List<Vault.Place> recent(List<Vault.Place> all, int count) {
+        return all.stream().sorted(Comparator.comparing((Vault.Place p) -> modified(p.note())).reversed()).limit(count).toList();
+    }
+
+    private Button recentRow(Vault.Place p) {
+        Label when = new Label(ago(modified(p.note()))), title = new Label(p.title()), where = new Label(p.notebook().getFileName().toString());
+        when.getStyleClass().add("card-meta");
+        when.setMinWidth(110);
+        title.getStyleClass().add("row-title");
+        where.getStyleClass().add("card-meta");
+        HBox line = new HBox(12, when, title, where);
+        line.setAlignment(Pos.CENTER_LEFT);
+        Button row = new Button(null, line);
+        row.getStyleClass().add("recent-row");
+        row.setMaxWidth(Double.MAX_VALUE);
+        row.setOnAction(e -> go(p));
+        return row;
+    }
+
+    private static FileTime modified(Path p) {
+        try {
+            return Files.getLastModifiedTime(p);
+        } catch (IOException e) {
+            return FileTime.fromMillis(0);
+        }
+    }
+
+    /** "Just now", "12 minutes ago", "3 hours ago", "Yesterday", or the day. */
+    private static String ago(FileTime time) {
+        long minutes = ChronoUnit.MINUTES.between(time.toInstant(), Instant.now());
+        if (minutes < 1) return "Just now";
+        if (minutes < 60) return minutes == 1 ? "1 minute ago" : minutes + " minutes ago";
+        if (minutes < 60 * 24) return minutes < 120 ? "1 hour ago" : minutes / 60 + " hours ago";
+        LocalDate day = LocalDate.ofInstant(time.toInstant(), ZoneId.systemDefault());
+        return day.equals(LocalDate.now().minusDays(1)) ? "Yesterday" : DAY.format(time.toInstant());
+    }
+
     private static Label sectionTitle(String text) {
         Label title = new Label(text);
         title.getStyleClass().add("section-title");
@@ -262,13 +456,19 @@ public final class NotesApp extends Application {
     }
 
     private Button card(Vault.Notebook nb) {
+        Region mark = new Region();
+        mark.getStyleClass().add("type-mark");
+        mark.setStyle("-fx-background-color: " + color(nb.type()) + ";");
         Label name = new Label(nb.name());
         name.getStyleClass().add("card-title");
         Label kind = new Label(nb.type().name());
         kind.getStyleClass().add("card-type");
+        NotebookView.colored(kind, color(nb.type()));
         Label meta = new Label(count(nb.notes()) + " · edited " + DAY.format(nb.edited().toInstant()));
         meta.getStyleClass().add("card-meta");
-        Button card = new Button(null, new VBox(4, name, kind, meta));
+        VBox body = new VBox(4, mark, name, kind, meta);
+        VBox.setMargin(name, new Insets(8, 0, 0, 0));
+        Button card = new Button(null, body);
         card.getStyleClass().add("card");
         card.setOnAction(e -> openNotebook(nb.dir()));
         card.setContextMenu(new ContextMenu(notebookItems(nb.dir())));
@@ -395,8 +595,10 @@ public final class NotesApp extends Application {
         name.getStyleClass().add("crumb");
         Label typeName = new Label(type.name());
         typeName.getStyleClass().add("kind");
-        bar.getChildren().setAll(button("‹ Home", "flat", e -> showHome()), name, typeName, grow(), newButton(),
-                more(notebookItems(dir)));
+        List<MenuItem> menu = new ArrayList<>(List.of(notebookItems(dir)));
+        menu.addAll(List.of(new SeparatorMenuItem(), themeItem()));
+        bar.getChildren().setAll(button("‹ Home", "flat", e -> showHome()), name, typeName, grow(), finder(), newButton(),
+                more(menu.toArray(MenuItem[]::new)));
         loadEntries(true);
         browser.open(type, entries);
         root.setCenter(notebookView);
@@ -441,6 +643,7 @@ public final class NotesApp extends Application {
         }
         entries.clear();
         entries.addAll(loaded);
+        refreshTitles();
     }
 
     void openNote(Path p) {
@@ -475,10 +678,22 @@ public final class NotesApp extends Application {
             tools.getChildren().add(button("Insert snippet…", "flat", e -> insertSnippet()));
         }
         properties.show(kind, n);
-        editor.open(n.body);
-        notePane.setTop(new VBox(noteHeader, properties.node));
+        editor.open(n.body, p.getParent());
+        notePane.setTop(new VBox(noteHeader, actionsRow, properties.node));
         notePane.setCenter(editor.view);
         browser.select(p);
+        fitHeader();
+    }
+
+    /** Buttons cut short to "…" say nothing: when the title leaves them no room, they go below it. */
+    private void fitHeader() {
+        double width = noteHeader.getWidth(), needed = noteTitle.prefWidth(-1) + kindName.prefWidth(-1) + badge.prefWidth(-1)
+                + actions.prefWidth(-1) + 4 * noteHeader.getSpacing() + noteHeader.getInsets().getLeft() + noteHeader.getInsets().getRight();
+        boolean narrow = width > 0 && needed > width;
+        if (narrow == (actions.getParent() == actionsRow)) return;
+        (narrow ? actionsRow : noteHeader).getChildren().add(actions);   // leaving the other row
+        actionsRow.setManaged(narrow);
+        actionsRow.setVisible(narrow);
     }
 
     /** A problem's difficulty in its judge's color, and its level when that says more ("800 · Easy"). */
@@ -486,7 +701,8 @@ public final class NotesApp extends Application {
         Badge b = current == null ? null : type.badge(current);
         String level = current == null ? "" : Judges.level(current);
         badge.setText(b == null ? "" : b.text().equalsIgnoreCase(level) || level.isEmpty() ? b.text() : b.text() + " · " + level);
-        badge.setStyle(b == null || b.color().isEmpty() ? "" : "-fx-text-fill: " + b.color() + "; -fx-font-weight: bold;");
+        NotebookView.colored(badge, b == null ? "" : b.color());
+        fitHeader();
     }
 
     private void closeNote() {
@@ -533,6 +749,7 @@ public final class NotesApp extends Application {
         FileTime modified = Files.getLastModifiedTime(p);
         Note n = Note.parse(Vault.read(p));
         entries.add(new Entry(p, n, modified));
+        refreshTitles();
         setReading(false);
         display(p, n, modified);
         browser.update();
@@ -553,6 +770,7 @@ public final class NotesApp extends Application {
                 if (open) {
                     note = renamed;
                     noteTitle.setText(Vault.title(renamed));
+                    fitHeader();
                 }
                 loadEntries(true);
                 browser.update();
@@ -603,31 +821,224 @@ public final class NotesApp extends Application {
                 setText(empty || e == null ? null : topics.isEmpty() ? e.title() : e.title() + "  ·  " + topics);
             }
         });
-        list.getItems().setAll(snippets);
-        list.getSelectionModel().selectFirst();
-        filter.textProperty().addListener((o, was, now) -> {
-            String wanted = NotebookView.fold(now.strip());
+        Runnable narrow = () -> {
+            String wanted = NotebookView.fold(filter.getText().strip());
             list.getItems().setAll(snippets.stream().filter(e -> NotebookView.fold(e.title() + " "
                     + String.join(" ", e.note().list("algorithms")) + " " + String.join(" ", e.note().list("techniques"))).contains(wanted)).toList());
             list.getSelectionModel().selectFirst();
-        });
-        list.setPrefSize(420, 260);
-        Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.setTitle("Insert snippet");
-        dialog.setHeaderText("Insert snippet");
-        style(dialog);
-        ButtonType insert = new ButtonType("Insert", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().setAll(insert, ButtonType.CANCEL);
-        dialog.getDialogPane().setContent(new VBox(8, filter, list));
-        dialog.getDialogPane().lookupButton(insert).disableProperty().bind(list.getSelectionModel().selectedItemProperty().isNull());
-        list.setOnMouseClicked(e -> {
-            if (e.getClickCount() == 2 && list.getSelectionModel().getSelectedItem() != null) {
-                ((Button) dialog.getDialogPane().lookupButton(insert)).fire();
+        };
+        filter.textProperty().addListener((o, was, now) -> narrow.run());
+        narrow.run();
+        pick("Insert snippet", "Insert", filter, list).ifPresent(e -> insertSnippet(e.path()));
+    }
+
+    /** Ctrl+O: any note of any notebook by a part of its title; with nothing typed, the latest first. */
+    void quickOpen() {
+        List<Vault.Place> all = vault.everyNote();
+        Map<Path, FileTime> times = new HashMap<>();
+        all.forEach(p -> times.put(p.note(), modified(p.note())));
+        TextField title = new TextField();
+        title.setPromptText("Title");
+        ListView<Vault.Place> list = new ListView<>();
+        list.setCellFactory(v -> placeCell(p -> p.notebook().getFileName().toString()));
+        Runnable narrow = () -> {
+            String wanted = NotebookView.fold(title.getText().strip());
+            list.getItems().setAll(all.stream().filter(p -> NotebookView.fold(p.title()).contains(wanted))
+                    .sorted(Comparator.comparing((Vault.Place p) -> !NotebookView.fold(p.title()).startsWith(wanted))
+                            .thenComparing((Vault.Place p) -> times.get(p.note()), Comparator.reverseOrder()))
+                    .limit(200).toList());
+            list.getSelectionModel().selectFirst();
+        };
+        title.textProperty().addListener((o, was, now) -> narrow.run());
+        narrow.run();
+        pick("Quick open", "Open", title, list).ifPresent(this::go);
+    }
+
+    /** A line found by Search: the note and the line where the words are. */
+    private record Hit(Vault.Place place, String line) {
+    }
+
+    /** Ctrl+Shift+F: every note with the words in its text or properties, accents and case aside. */
+    void search() {
+        record Text(Vault.Place place, String text, String folded) {
+        }
+        List<Text> texts = new ArrayList<>();
+        for (Vault.Place p : vault.everyNote()) {
+            try {
+                String text = Vault.read(p.note()).replace("\r\n", "\n");
+                texts.add(new Text(p, text, foldEachChar(text)));
+            } catch (IOException ignored) {
+                // Unreadable right now: not searched.
+            }
+        }
+        TextField words = new TextField();
+        words.setPromptText("Words to find");
+        ListView<Hit> list = new ListView<>();
+        list.setCellFactory(v -> new ListCell<>() {
+            @Override
+            protected void updateItem(Hit hit, boolean empty) {
+                super.updateItem(hit, empty);
+                setText(null);
+                if (empty || hit == null) {
+                    setGraphic(null);
+                    return;
+                }
+                Label title = new Label(hit.place().title() + "  ·  " + hit.place().notebook().getFileName()), line = new Label(hit.line());
+                line.getStyleClass().add("note-subtitle");
+                setGraphic(new VBox(1, title, line));
             }
         });
-        Platform.runLater(filter::requestFocus);
-        if (dialog.showAndWait().orElse(ButtonType.CANCEL) != insert) return;
-        insertSnippet(list.getSelectionModel().getSelectedItem().path());
+        PauseTransition typing = new PauseTransition(Duration.millis(150));
+        typing.setOnFinished(e -> {
+            String wanted = foldEachChar(words.getText().strip());
+            List<Hit> hits = new ArrayList<>();
+            if (wanted.length() >= 2) {
+                for (Text t : texts) {
+                    int at = t.folded().indexOf(wanted);
+                    if (at >= 0) hits.add(new Hit(t.place(), around(t.text(), at, wanted.length())));
+                    if (hits.size() == 200) break;
+                }
+            }
+            list.getItems().setAll(hits);
+            list.getSelectionModel().selectFirst();
+        });
+        words.textProperty().addListener((o, was, now) -> typing.playFromStart());
+        pick("Search in all notes", "Open", words, list).ifPresent(hit -> {
+            go(hit.place());
+            if (!hit.place().note().equals(note)) return;
+            setReading(false);
+            editor.selectMatch(words.getText().strip());
+        });
+    }
+
+    /** The line of the text with the match, cut around it when long. */
+    private static String around(String text, int at, int length) {
+        int start = text.lastIndexOf('\n', at) + 1, end = text.indexOf('\n', at);
+        String line = text.substring(start, end < 0 ? text.length() : end).strip();
+        int in = line.indexOf(text.substring(at, at + length));
+        return line.length() <= 110 || in < 0 ? line : (in > 40 ? "…" : "") + line.substring(Math.max(0, in - 40), Math.min(line.length(), in + 70)) + "…";
+    }
+
+    /** Accents and case aside, keeping every position (so a match found here is at the same place in the text). */
+    private static String foldEachChar(String text) {
+        StringBuilder out = new StringBuilder(text.length());
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            String f = c < 128 ? String.valueOf(Character.toLowerCase(c)) : NotebookView.fold(String.valueOf(c));
+            out.append(f.isEmpty() ? c : f.charAt(0));
+        }
+        return out.toString();
+    }
+
+    /** Opens a note wherever it is, going to its notebook first. */
+    private void go(Vault.Place place) {
+        if (!place.notebook().equals(notebook)) openNotebook(place.notebook());
+        if (!place.notebook().equals(notebook)) return;   // its current note could not be left
+        openNote(place.note());
+        browser.reveal(place.note());
+    }
+
+    /** A [[link]]: the note with that title (in this notebook first), or else a new one here. */
+    private void openTitle(String title) {
+        Optional<Vault.Place> found = vault.everyNote().stream().filter(p -> p.title().equalsIgnoreCase(title))
+                .min(Comparator.comparing((Vault.Place p) -> !p.notebook().equals(notebook)));
+        if (found.isPresent()) {
+            go(found.get());
+        } else if (notebook != null) {
+            try {
+                createNote(type.kinds().get(0), title, "");
+            } catch (IOException e) {
+                error("Couldn't create “" + title + "”", reason(e));
+            }
+        }
+    }
+
+    /** The titles [[ offers while writing, from every notebook. */
+    private void refreshTitles() {
+        editor.setTitles(vault.everyNote().stream().map(Vault.Place::title).distinct().sorted(Vault::compareNatural).toList());
+    }
+
+    /** Ctrl+V with an image (a screenshot, "Copy image") or image files: into attachments/ and the note. */
+    private boolean pasteImages() {
+        Clipboard clip = Clipboard.getSystemClipboard();
+        try {
+            if (clip.hasFiles() && clip.getFiles().stream().anyMatch(f -> Vault.isImage(f.toPath()))) {
+                attachImages(clip.getFiles());
+                return true;
+            }
+            if (clip.hasImage() && !clip.hasString()) {   // text copied with a picture of it (a spreadsheet) pastes as text
+                editor.insert(imageLink(Vault.attach(notebook, png(clip.getImage()))));
+                return true;
+            }
+        } catch (IOException e) {
+            error("Couldn't paste the image", reason(e));
+            return true;
+        }
+        return false;
+    }
+
+    /** The open note, for the tests. */
+    Path openPath() {
+        return note;
+    }
+
+    void attachImages(List<File> files) throws IOException {
+        StringBuilder links = new StringBuilder();
+        for (File f : files) {
+            if (Vault.isImage(f.toPath())) links.append(imageLink(Vault.attach(notebook, f.toPath())));
+        }
+        editor.insert(links.toString());
+    }
+
+    private static String imageLink(Path image) {
+        return "![](<attachments/" + image.getFileName() + ">)\n";
+    }
+
+    private static byte[] png(Image image) throws IOException {
+        int w = (int) image.getWidth(), h = (int) image.getHeight();
+        int[] argb = new int[w * h];
+        image.getPixelReader().getPixels(0, 0, w, h, PixelFormat.getIntArgbInstance(), argb, 0, w);
+        BufferedImage picture = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+        picture.setRGB(0, 0, w, h, argb, 0, w);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ImageIO.write(picture, "png", out);
+        return out.toByteArray();
+    }
+
+    private static ListCell<Vault.Place> placeCell(Function<Vault.Place, String> where) {
+        return new ListCell<>() {
+            @Override
+            protected void updateItem(Vault.Place p, boolean empty) {
+                super.updateItem(p, empty);
+                setText(empty || p == null ? null : p.title() + "  ·  " + where.apply(p));
+            }
+        };
+    }
+
+    /** A dialog to pick one line of a list narrowed by typing; ↑ ↓ move, Enter or a double click picks. */
+    private <T> Optional<T> pick(String title, String action, TextField field, ListView<T> list) {
+        list.setPrefSize(600, 380);
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle(title);
+        dialog.setHeaderText(title);
+        style(dialog);
+        ButtonType ok = new ButtonType(action, ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().setAll(ok, ButtonType.CANCEL);
+        dialog.getDialogPane().setContent(new VBox(8, field, list));
+        Button okButton = (Button) dialog.getDialogPane().lookupButton(ok);
+        okButton.disableProperty().bind(list.getSelectionModel().selectedItemProperty().isNull());
+        field.setOnKeyPressed(e -> {
+            if (e.getCode() == KeyCode.DOWN) list.getSelectionModel().selectNext();
+            else if (e.getCode() == KeyCode.UP) list.getSelectionModel().selectPrevious();
+            else return;
+            list.scrollTo(list.getSelectionModel().getSelectedIndex());
+            e.consume();
+        });
+        list.setOnMouseClicked(e -> {
+            if (e.getClickCount() == 2 && list.getSelectionModel().getSelectedItem() != null) okButton.fire();
+        });
+        Platform.runLater(field::requestFocus);
+        return dialog.showAndWait().filter(b -> b == ok).map(b -> list.getSelectionModel().getSelectedItem());
     }
 
     /** Puts the first code block of a snippet at the cursor. */
@@ -818,7 +1229,11 @@ public final class NotesApp extends Application {
     }
 
     private static MenuButton more(MenuItem... items) {
-        MenuButton more = new MenuButton("⋯", null, items);
+        SVGPath dots = new SVGPath();   // three dots, on 24 units
+        dots.setContent("M5 10a2 2 0 1 0 0 4a2 2 0 1 0 0-4zm7 0a2 2 0 1 0 0 4a2 2 0 1 0 0-4zm7 0a2 2 0 1 0 0 4a2 2 0 1 0 0-4z");
+        dots.getStyleClass().add("icon");
+        MenuButton more = new MenuButton(null, dots, items);
+        more.setTooltip(new Tooltip("More"));
         more.getStyleClass().addAll("flat", "more-menu");
         return more;
     }
@@ -843,6 +1258,7 @@ public final class NotesApp extends Application {
         dialog.initOwner(stage);
         dialog.getDialogPane().getStylesheets().addAll(stage.getScene().getStylesheets());
         dialog.getDialogPane().getStyleClass().add("dialog");
+        if (dark) dialog.getDialogPane().getStyleClass().add("dark");
         dialog.setGraphic(null);
     }
 
