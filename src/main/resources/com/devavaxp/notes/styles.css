@@ -70,6 +70,51 @@
     -fx-border-color: -accent-hover;
 }
 
+.menu-button.primary {
+    -fx-background-color: -accent;
+    -fx-border-color: transparent;
+    -fx-font-weight: bold;
+}
+
+.menu-button.primary > .label {
+    -fx-text-fill: white;
+}
+
+.menu-button.primary:hover, .menu-button.primary:showing {
+    -fx-background-color: -accent-hover;
+}
+
+.segmented .toggle-button {
+    -fx-background-color: -surface;
+    -fx-border-color: -border;
+    -fx-border-width: 1;
+    -fx-text-fill: -text;
+    -fx-padding: 6 12;
+    -fx-cursor: hand;
+    -fx-background-radius: 0;
+    -fx-border-radius: 0;
+}
+
+.segmented .toggle-button.first {
+    -fx-background-radius: 8 0 0 8;
+    -fx-border-radius: 8 0 0 8;
+}
+
+.segmented .toggle-button.last {
+    -fx-background-radius: 0 8 8 0;
+    -fx-border-radius: 0 8 8 0;
+}
+
+.segmented .toggle-button:hover {
+    -fx-background-color: -surface-hover;
+}
+
+.segmented .toggle-button:selected {
+    -fx-background-color: -accent;
+    -fx-border-color: -accent;
+    -fx-text-fill: white;
+}
+
 .button.danger {
     -fx-background-color: -danger;
     -fx-border-color: transparent;
@@ -248,9 +293,24 @@
     -fx-font-weight: bold;
 }
 
+.card-type {
+    -fx-font-size: 12px;
+    -fx-text-fill: -accent;
+}
+
 .card-meta {
     -fx-font-size: 12px;
     -fx-text-fill: -text-muted;
+}
+
+.type-description {
+    -fx-font-size: 12px;
+    -fx-text-fill: -text-muted;
+    -fx-padding: 0 0 0 26;
+}
+
+.kind {
+    -fx-text-fill: -text-faint;
 }
 
 .placeholder {
@@ -279,38 +339,77 @@
     -fx-padding: 0 0.5 0 0.5;
 }
 
-.list-view.notes, .list-view.notes:focused {
+/* The views, on the left */
+.tree-view.views, .tree-view.views:focused {
     -fx-background-color: -bg;
     -fx-background-insets: 0;
     -fx-padding: 8 6;
 }
 
-.notes .list-cell {
+.views .tree-cell {
     -fx-background-color: transparent;
-    -fx-background-radius: 8;
+    -fx-background-radius: 6;
     -fx-text-fill: -text;
-    -fx-padding: 8 12;
-    -fx-font-size: 13.5px;
+    -fx-padding: 5 8;
 }
 
-.notes .list-cell:filled:hover {
+.views .tree-cell:filled:hover {
     -fx-background-color: -surface-hover;
 }
 
-.notes .list-cell:filled:selected {
+.views .tree-cell:filled:selected {
     -fx-background-color: -accent-soft;
-    -fx-text-fill: -text;
     -fx-font-weight: bold;
 }
 
-.notes:focused .list-cell:filled:selected {
-    -fx-background-color: -accent-soft;
-    -fx-border-color: -accent;
-    -fx-border-radius: 8;
+.views .count {
+    -fx-text-fill: -text-faint;
+    -fx-font-size: 11.5px;
+    -fx-font-weight: normal;
 }
 
-.notes .placeholder .label {
-    -fx-text-fill: -text-faint;
+/* The notes of a view: a list or a table */
+.notes-tools {
+    -fx-background-color: -surface;
+    -fx-border-color: transparent transparent -border transparent;
+    -fx-padding: 8;
+}
+
+.tree-table-view {
+    -fx-background-color: -surface;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+.tree-table-view.as-list .column-header-background {
+    -fx-max-height: 0;
+    -fx-pref-height: 0;
+    -fx-min-height: 0;
+}
+
+.tree-table-row-cell:group .tree-table-cell {
+    -fx-font-weight: bold;
+}
+
+.note-subtitle {
+    -fx-font-size: 11.5px;
+    -fx-text-fill: -text-muted;
+}
+
+.tree-table-row-cell:selected .note-subtitle {
+    -fx-text-fill: white;
+}
+
+/* The open note's properties */
+.properties {
+    -fx-background-color: -surface;
+    -fx-border-color: transparent transparent -border transparent;
+    -fx-padding: 4 24 12 24;
+}
+
+.property-name {
+    -fx-font-size: 12px;
+    -fx-text-fill: -text-muted;
 }
 
 .note-header {

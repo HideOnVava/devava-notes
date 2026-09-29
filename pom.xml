@@ -35,6 +35,13 @@
             <version>${javafx.version}</version>
         </dependency>
 
+        <!-- .notebook.json: the notebook's type -->
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.10.1</version>
+        </dependency>
+
         <!-- Markdown to HTML for the reading view -->
         <dependency>
             <groupId>org.commonmark</groupId>

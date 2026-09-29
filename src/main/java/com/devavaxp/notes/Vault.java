@@ -1,5 +1,10 @@
 package com.devavaxp.notes;
 
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
 import javax.swing.filechooser.FileSystemView;
 import java.awt.Desktop;
 import java.io.File;
@@ -21,15 +26,17 @@ import java.util.stream.Stream;
 
 /**
  * The notes on disk: under Documents/Devava Notes, one folder per notebook and one Markdown
- * file per note, whose file name is its title. {@code -Dnotes.home=path} moves it all elsewhere.
- * A note is written to a temporary file that then replaces it, so a crash never leaves it cut.
+ * file per note, whose file name is its title; the notebook's type is in its .notebook.json.
+ * {@code -Dnotes.home=path} moves it all elsewhere. A note is written to a temporary file that
+ * then replaces it, so a crash never leaves it cut.
  */
 final class Vault {
 
     static final String EXT = ".md";
+    private static final String META = ".notebook.json";
 
     /** A notebook as the home screen lists it. */
-    record Notebook(Path dir, int notes, FileTime edited) {
+    record Notebook(Path dir, NotebookType type, int notes, FileTime edited) {
         String name() {
             return dir.getFileName().toString();
         }
@@ -63,9 +70,32 @@ final class Vault {
                 FileTime t = Files.getLastModifiedTime(n);
                 if (t.compareTo(edited) > 0) edited = t;
             }
-            notebooks.add(new Notebook(dir, notes.size(), edited));
+            notebooks.add(new Notebook(dir, type(dir), notes.size(), edited));
         }
         return notebooks;
+    }
+
+    /** A folder without a readable .notebook.json (made by hand, or by version 0.1) is a General one. */
+    static NotebookType type(Path notebook) {
+        try {
+            JsonElement type = JsonParser.parseString(Files.readString(notebook.resolve(META))).getAsJsonObject().get("type");
+            return NotebookType.byId(type == null ? "" : type.getAsString());
+        } catch (IOException | RuntimeException e) {
+            return NotebookType.GENERAL;
+        }
+    }
+
+    /** Writes the type into .notebook.json, keeping anything else already there. */
+    static void setType(Path notebook, NotebookType type) throws IOException {
+        Path meta = notebook.resolve(META);
+        JsonObject json;
+        try {
+            json = JsonParser.parseString(Files.readString(meta)).getAsJsonObject();
+        } catch (IOException | RuntimeException e) {
+            json = new JsonObject();
+        }
+        json.addProperty("type", type.id());
+        write(meta, new GsonBuilder().setPrettyPrinting().create().toJson(json) + "\n");
     }
 
     static List<Path> notes(Path notebook) throws IOException {
@@ -76,13 +106,17 @@ final class Vault {
         }
     }
 
-    Path createNotebook(String name) throws IOException {
+    Path createNotebook(String name, NotebookType type) throws IOException {
         Files.createDirectories(root);
-        return Files.createDirectory(unique(root, fileName(name), ""));
+        Path dir = Files.createDirectory(unique(root, fileName(name), ""));
+        setType(dir, type);
+        return dir;
     }
 
-    static Path createNote(Path notebook, String title) throws IOException {
-        return Files.createFile(unique(notebook, fileName(title), EXT));
+    static Path createNote(Path notebook, String title, String text) throws IOException {
+        Path note = Files.createFile(unique(notebook, fileName(title), EXT));
+        if (!text.isEmpty()) write(note, text);
+        return note;
     }
 
     /** Renames a notebook or a note (keeping its .md). Fails if another one already has that name. */
@@ -106,7 +140,7 @@ final class Vault {
 
     static String read(Path note) throws IOException {
         String text = Files.readString(note, StandardCharsets.UTF_8);
-        return text.startsWith("﻿") ? text.substring(1) : text;  // BOM left by some Windows editors
+        return !text.isEmpty() && text.charAt(0) == 0xFEFF ? text.substring(1) : text;  // BOM left by some Windows editors
     }
 
     /** Writes atomically, retrying for a moment: OneDrive can hold a file while it syncs it. */

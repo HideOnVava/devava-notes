@@ -12,6 +12,7 @@ import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class VaultTest {
 
@@ -31,12 +32,12 @@ class VaultTest {
     @Test
     void listsNotebooksAndNotesInNaturalOrder(@TempDir Path home) throws Exception {
         Vault vault = new Vault(home);
-        Path algorithms = vault.createNotebook("Algorithms");
-        vault.createNotebook("Calculus II");
+        Path algorithms = vault.createNotebook("Algorithms", NotebookType.GENERAL);
+        vault.createNotebook("Calculus II", NotebookType.CLASS_NOTES);
         Files.createDirectory(home.resolve(".obsidian"));   // hidden: not a notebook
-        Vault.createNote(algorithms, "Lecture 10");
-        Vault.createNote(algorithms, "Lecture 2");
-        Path again = Vault.createNote(algorithms, "Lecture 2");
+        Vault.createNote(algorithms, "Lecture 10", "");
+        Vault.createNote(algorithms, "Lecture 2", "");
+        Path again = Vault.createNote(algorithms, "Lecture 2", "");
         Files.writeString(algorithms.resolve("picture.png"), "not a note");
 
         assertEquals("Lecture 2 2.md", again.getFileName().toString());
@@ -46,22 +47,37 @@ class VaultTest {
     }
 
     @Test
+    void aNotebookKeepsItsTypeAndAnythingElseInItsJson(@TempDir Path home) throws Exception {
+        Vault vault = new Vault(home);
+        Path cp = vault.createNotebook("Competitive", NotebookType.COMPETITIVE_PROGRAMMING);
+        assertEquals(NotebookType.COMPETITIVE_PROGRAMMING, Vault.type(cp));
+
+        Path old = Files.createDirectory(home.resolve("Made by hand"));   // no .notebook.json
+        assertEquals(NotebookType.GENERAL, Vault.type(old));
+
+        Files.writeString(cp.resolve(".notebook.json"), "{\"type\": \"competitive-programming\", \"color\": \"#4F46E5\"}");
+        Vault.setType(cp, NotebookType.CLASS_NOTES);
+        assertEquals(NotebookType.CLASS_NOTES, Vault.type(cp));
+        assertTrue(Files.readString(cp.resolve(".notebook.json")).contains("\"color\": \"#4F46E5\""));
+    }
+
+    @Test
     void writesWholeNotesAndReadsThemBack(@TempDir Path home) throws Exception {
-        Path note = Vault.createNote(home, "Árboles AVL");
+        Path note = Vault.createNote(home, "Árboles AVL", "");
         Vault.write(note, "# Árboles\n\nRotación simple ✓\n");
         assertEquals("# Árboles\n\nRotación simple ✓\n", Vault.read(note));
         try (Stream<Path> files = Files.list(home)) {
             assertEquals(List.of(note), files.toList());   // no temporary file left behind
         }
-        Files.write(note, "﻿con BOM".getBytes(StandardCharsets.UTF_8));
+        Files.write(note, ((char) 0xFEFF + "con BOM").getBytes(StandardCharsets.UTF_8));
         assertEquals("con BOM", Vault.read(note));
     }
 
     @Test
     void renamesKeepingTheTextAndNeverOverwrite(@TempDir Path home) throws Exception {
-        Path note = Vault.createNote(home, "draft");
+        Path note = Vault.createNote(home, "draft", "");
         Vault.write(note, "text");
-        Path other = Vault.createNote(home, "Other");
+        Path other = Vault.createNote(home, "Other", "");
 
         Path renamed = Vault.rename(note, "Draft");   // only the letter case changes
         assertEquals("text", Vault.read(renamed));

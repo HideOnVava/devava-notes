@@ -1,5 +1,7 @@
 package com.devavaxp.notes;
 
+import com.devavaxp.notes.NotebookType.Kind;
+import com.devavaxp.notes.NotebookView.Entry;
 import javafx.animation.PauseTransition;
 import javafx.application.Application;
 import javafx.application.Platform;
@@ -15,14 +17,15 @@ import javafx.scene.control.ButtonType;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
-import javafx.scene.control.ListCell;
-import javafx.scene.control.ListView;
 import javafx.scene.control.MenuButton;
 import javafx.scene.control.MenuItem;
+import javafx.scene.control.RadioButton;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.SplitPane;
+import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputDialog;
+import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
@@ -46,16 +49,18 @@ import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
 /**
- * Devava Notes. Home shows the notebooks; a notebook shows its notes on the left and the open
- * note on the right, to write it or to read it (Ctrl+E). A note saves itself a moment after
- * typing stops, and again whenever it is left.
+ * Devava Notes. Home shows the notebooks; a notebook shows the views of its type, the notes of the
+ * chosen view, and the open note: its properties above, and below it the text, to write it or to
+ * read it (Ctrl+E). A note saves itself a moment after it changes, and again whenever it is left.
  */
 public final class NotesApp extends Application {
 
@@ -66,20 +71,26 @@ public final class NotesApp extends Application {
             .withZone(ZoneId.systemDefault());
 
     Editor editor;
+    NotebookView browser;
+    private PropertiesPanel properties;
     private Stage stage;
     private Vault vault;
     private final BorderPane root = new BorderPane();
     private final HBox bar = new HBox(8);
-    private final ListView<Path> list = new ListView<>();
     private final BorderPane notePane = new BorderPane();
-    private final HBox noteHeader = new HBox(12);
-    private final Label noteTitle = new Label(), status = new Label();
+    private final HBox noteHeader = new HBox(10);
+    private final Label noteTitle = new Label(), kindName = new Label(), status = new Label();
     private final Button mode = new Button("Read");
     private final PauseTransition autosave = new PauseTransition(Duration.millis(600));
     private SplitPane notebookView;
 
-    /** The open notebook folder and note file; null on the home screen, or with no note open. */
-    private Path notebook, note;
+    /** The open notebook, its type and its notes; notebook is null on the home screen. */
+    private Path notebook;
+    private NotebookType type = NotebookType.GENERAL;
+    private final List<Entry> entries = new ArrayList<>();
+    /** The open note: its file and its Note (properties as edited, body as last saved); null when none is open. */
+    private Path note;
+    private Note current;
     private boolean dirty, reading;
     /** The note's modification time as this app last read or wrote it, to notice edits made elsewhere. */
     private FileTime seen;
@@ -98,54 +109,34 @@ public final class NotesApp extends Application {
         this.stage = stage;
         this.vault = vault;
         editor = new Editor(this::edited, this::openLink);
+        browser = new NotebookView(this);
+        properties = new PropertiesPanel(this::propertiesChanged);
         autosave.setOnFinished(e -> save());
 
         bar.getStyleClass().add("bar");
         bar.setAlignment(Pos.CENTER_LEFT);
         root.setTop(bar);
 
-        list.getStyleClass().add("notes");
-        list.setPlaceholder(new Label("No notes yet"));
-        list.setMinWidth(180);
-        list.setCellFactory(v -> new ListCell<>() {
-            @Override
-            protected void updateItem(Path p, boolean empty) {
-                super.updateItem(p, empty);
-                setText(empty || p == null ? null : Vault.title(p));
-                setContextMenu(empty || p == null ? null : new ContextMenu(
-                        item("Rename…", () -> renameNote(p)),
-                        new SeparatorMenuItem(),
-                        danger(item("Move to trash…", () -> trashNote(p)))));
-            }
-        });
-        list.getSelectionModel().selectedItemProperty().addListener((o, old, p) -> {
-            if (p != null && !p.equals(note)) openNote(p);
-        });
-        list.setOnKeyPressed(e -> {
-            Path p = list.getSelectionModel().getSelectedItem();
-            if (p == null) return;
-            if (e.getCode() == KeyCode.ENTER) editor.focus();
-            else if (e.getCode() == KeyCode.F2) renameNote(p);
-            else if (e.getCode() == KeyCode.DELETE) trashNote(p);
-        });
-
         noteTitle.getStyleClass().add("note-title");
+        kindName.getStyleClass().add("kind");
         status.getStyleClass().add("status-error");
         mode.setTooltip(new Tooltip("Read or edit (Ctrl+E)"));
         mode.setOnAction(e -> toggleMode());
-        noteHeader.getChildren().setAll(noteTitle, grow(), status, mode);
+        noteHeader.getChildren().setAll(noteTitle, kindName, grow(), status, mode);
         noteHeader.getStyleClass().add("note-header");
         noteHeader.setAlignment(Pos.CENTER_LEFT);
-        notebookView = new SplitPane(list, notePane);
-        notebookView.setDividerPositions(0.24);
-        SplitPane.setResizableWithParent(list, false);
+        notebookView = new SplitPane(browser.sidebar, browser.notes, notePane);
+        notebookView.setDividerPositions(0.16, 0.42);
+        browser.tableMode().addListener((o, was, table) -> notebookView.setDividerPositions(0.16, table ? 0.68 : 0.42));
+        SplitPane.setResizableWithParent(browser.sidebar, false);
+        SplitPane.setResizableWithParent(browser.notes, false);
 
-        Scene scene = new Scene(root, 1200, 780);
+        Scene scene = new Scene(root, 1280, 800);
         scene.getStylesheets().add(NotesApp.class.getResource("styles.css").toExternalForm());
         scene.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
             if (NEW.match(e)) {
                 if (notebook == null) newNotebook();
-                else newNote();
+                else newNote(type.kinds().get(0));
                 e.consume();
             } else if (READ.match(e) && note != null) {
                 toggleMode();
@@ -153,8 +144,8 @@ public final class NotesApp extends Application {
             }
         });
         stage.setScene(scene);
-        stage.setMinWidth(820);
-        stage.setMinHeight(540);
+        stage.setMinWidth(900);
+        stage.setMinHeight(560);
         stage.setOnCloseRequest(e -> {
             if (!leaveNote()) e.consume();
         });
@@ -210,9 +201,11 @@ public final class NotesApp extends Application {
     private Button card(Vault.Notebook nb) {
         Label name = new Label(nb.name());
         name.getStyleClass().add("card-title");
+        Label kind = new Label(nb.type().name());
+        kind.getStyleClass().add("card-type");
         Label meta = new Label(count(nb.notes()) + " · edited " + DAY.format(nb.edited().toInstant()));
         meta.getStyleClass().add("card-meta");
-        Button card = new Button(null, new VBox(6, name, meta));
+        Button card = new Button(null, new VBox(4, name, kind, meta));
         card.getStyleClass().add("card");
         card.setOnAction(e -> openNotebook(nb.dir()));
         card.setContextMenu(new ContextMenu(notebookItems(nb.dir())));
@@ -222,23 +215,24 @@ public final class NotesApp extends Application {
     private MenuItem[] notebookItems(Path dir) {
         return new MenuItem[]{
                 item("Rename…", () -> renameNotebook(dir)),
+                item("Change type…", () -> changeType(dir)),
                 item("Show in folder", () -> showInFolder(dir)),
                 new SeparatorMenuItem(),
                 danger(item("Move to trash…", () -> trashNotebook(dir)))};
     }
 
     void newNotebook() {
-        ask("New notebook", "Name", "").ifPresent(name -> {
+        askNotebook("New notebook", NotebookType.GENERAL, true).ifPresent(choice -> {
             try {
-                openNotebook(createNotebook(name));
+                openNotebook(createNotebook(choice.name(), choice.type()));
             } catch (IOException e) {
                 error("Couldn't create the notebook", reason(e));
             }
         });
     }
 
-    Path createNotebook(String name) throws IOException {
-        return vault.createNotebook(name);
+    Path createNotebook(String name, NotebookType type) throws IOException {
+        return vault.createNotebook(name, type);
     }
 
     private void renameNotebook(Path dir) {
@@ -253,9 +247,23 @@ public final class NotesApp extends Application {
                     return;
                 }
                 openNotebook(renamed);
-                if (openNote != null) list.getSelectionModel().select(renamed.resolve(openNote.getFileName()));
+                if (openNote != null) openNote(renamed.resolve(openNote.getFileName()));
             } catch (IOException e) {
                 error("Couldn't rename the notebook", reason(e));
+            }
+        });
+    }
+
+    private void changeType(Path dir) {
+        askNotebook("Change “" + dir.getFileName() + "” to", Vault.type(dir), false).ifPresent(choice -> {
+            boolean open = dir.equals(notebook);
+            if (open && !leaveNote()) return;
+            try {
+                Vault.setType(dir, choice.type());
+                if (open) openNotebook(dir);
+                else showHome();
+            } catch (IOException e) {
+                error("Couldn't change the type", reason(e));
             }
         });
     }
@@ -281,91 +289,133 @@ public final class NotesApp extends Application {
     }
 
     // ------------------------------------------------------------------
-    // A notebook: its notes and the open note
+    // A notebook: its views, its notes and the open note
     // ------------------------------------------------------------------
 
     void openNotebook(Path dir) {
         if (!leaveNote()) return;
         notebook = dir;
+        type = Vault.type(dir);
         closeNote();
         Label name = new Label(dir.getFileName().toString());
         name.getStyleClass().add("crumb");
-        Button add = button("+ New note", "primary", e -> newNote());
-        add.setTooltip(new Tooltip("Ctrl+N"));
-        bar.getChildren().setAll(button("‹ Home", "flat", e -> showHome()), name, grow(), add, more(notebookItems(dir)));
-        refreshNotes(null);
+        Label typeName = new Label(type.name());
+        typeName.getStyleClass().add("kind");
+        bar.getChildren().setAll(button("‹ Home", "flat", e -> showHome()), name, typeName, grow(), newButton(),
+                more(notebookItems(dir)));
+        loadEntries(true);
+        browser.open(type, entries);
         root.setCenter(notebookView);
-        list.requestFocus();
         stage.setTitle(dir.getFileName() + " — " + NAME);
     }
 
-    private void refreshNotes(Path select) {
-        try {
-            listNotes(select);
-        } catch (IOException e) {
-            list.getItems().clear();
-            error("Couldn't list the notes", reason(e));
+    /** "+ New note" for one kind of note; with several, a menu of them (Ctrl+N makes the first). */
+    private Node newButton() {
+        Kind first = type.kinds().get(0);
+        if (type.kinds().size() == 1) {
+            Button add = button("+ New " + first.name().toLowerCase(Locale.ROOT), "primary", e -> newNote(first));
+            add.setTooltip(new Tooltip("Ctrl+N"));
+            return add;
         }
+        MenuButton add = new MenuButton("+ New  ▾");
+        type.kinds().forEach(k -> add.getItems().add(item(k.name(), () -> newNote(k))));
+        add.getStyleClass().add("primary");
+        add.setTooltip(new Tooltip("Ctrl+N: " + first.name().toLowerCase(Locale.ROOT)));
+        return add;
     }
 
-    /** Lists the notes again, selecting {@code select} or else the open note. */
-    private void listNotes(Path select) throws IOException {
-        list.getItems().setAll(Vault.notes(notebook));
-        Path p = select != null ? select : note;
-        if (p != null) list.getSelectionModel().select(p);
+    /** Reads the properties of every note in the notebook; the open note keeps its own (maybe unsaved) ones. */
+    private void loadEntries(boolean showErrors) {
+        List<Path> paths;
+        try {
+            paths = Vault.notes(notebook);
+        } catch (IOException e) {
+            if (showErrors) error("Couldn't list the notes", reason(e));
+            return;
+        }
+        List<Entry> loaded = new ArrayList<>();
+        for (Path p : paths) {
+            if (p.equals(note)) {
+                loaded.add(new Entry(p, current, seen));
+                continue;
+            }
+            try {
+                loaded.add(new Entry(p, Note.parse(Vault.read(p)), Files.getLastModifiedTime(p)));
+            } catch (IOException e) {
+                loaded.add(new Entry(p, Note.parse(""), FileTime.fromMillis(0)));   // listed anyway; opening it says why
+            }
+        }
+        entries.clear();
+        entries.addAll(loaded);
     }
 
     void openNote(Path p) {
         if (!leaveNote()) {
-            Platform.runLater(() -> list.getSelectionModel().select(note));
+            browser.select(note);
             return;
         }
         try {
             String text = Vault.read(p);
-            seen = Files.getLastModifiedTime(p);
-            note = p;
-            dirty = false;
-            noteTitle.setText(Vault.title(p));
-            status.setText("");
-            editor.open(text);
-            notePane.setTop(noteHeader);
-            notePane.setCenter(editor.view);
+            display(p, Note.parse(text), Files.getLastModifiedTime(p));
         } catch (IOException e) {
             error("Couldn't open “" + Vault.title(p) + "”", reason(e));
-            Platform.runLater(() -> list.getSelectionModel().select(note));
+            browser.select(note);
         }
+    }
+
+    /** Shows a note as just read: its properties above, its body in the editor. */
+    private void display(Path p, Note n, FileTime modified) {
+        note = p;
+        current = n;
+        seen = modified;
+        dirty = false;
+        entries.replaceAll(e -> e.path().equals(p) ? new Entry(p, n, modified) : e);
+        noteTitle.setText(Vault.title(p));
+        kindName.setText(type.kinds().size() > 1 ? type.kindOf(n).name() : "");
+        status.setText("");
+        properties.show(type.kindOf(n), n);
+        editor.open(n.body);
+        notePane.setTop(new VBox(noteHeader, properties.node));
+        notePane.setCenter(editor.view);
+        browser.select(p);
     }
 
     private void closeNote() {
         autosave.stop();
         note = null;
+        current = null;
         dirty = false;
         notePane.setTop(null);
-        notePane.setCenter(placeholder("No note open", "Pick a note on the left, or press Ctrl+N to write a new one."));
+        notePane.setCenter(placeholder("No note open", "Pick a note, or press Ctrl+N to write a new one."));
     }
 
-    void newNote() {
+    void newNote(Kind kind) {
         if (notebook == null) return;
-        ask("New note", "Title", "").ifPresent(title -> {
+        ask("New " + kind.name().toLowerCase(Locale.ROOT), "Title", "").ifPresent(title -> {
             try {
-                createNote(title);
+                createNote(kind, title);
             } catch (IOException e) {
                 error("Couldn't create the note", reason(e));
             }
         });
     }
 
-    /** Creates a note in the open notebook and opens it, ready to write. */
-    Path createNote(String title) throws IOException {
+    /** Creates a note of that kind from its template and opens it, ready to write. */
+    Path createNote(Kind kind, String title) throws IOException {
         if (!leaveNote()) return null;
-        Path p = Vault.createNote(notebook, title);
+        Path p = Vault.createNote(notebook, title, kind.template().replace("{today}", LocalDate.now().toString()));
+        FileTime modified = Files.getLastModifiedTime(p);
+        Note n = Note.parse(Vault.read(p));
+        entries.add(new Entry(p, n, modified));
         setReading(false);
-        refreshNotes(p);
+        display(p, n, modified);
+        browser.update();
+        browser.reveal(p);
         editor.focus();
         return p;
     }
 
-    private void renameNote(Path p) {
+    void renameNote(Path p) {
         ask("Rename note", "Title", Vault.title(p)).ifPresent(title -> {
             boolean open = p.equals(note);
             if (open && !save()) {
@@ -378,24 +428,31 @@ public final class NotesApp extends Application {
                     note = renamed;
                     noteTitle.setText(Vault.title(renamed));
                 }
-                refreshNotes(renamed);
+                loadEntries(true);
+                browser.update();
             } catch (IOException e) {
                 error("Couldn't rename the note", reason(e));
             }
         });
     }
 
-    private void trashNote(Path p) {
+    void trashNote(Path p) {
         if (!confirm("Move “" + Vault.title(p) + "” to the trash?", "You can restore it from the trash.", "Move to trash")) return;
         boolean open = p.equals(note);
         if (open) save();   // its latest text goes to the trash with it
         try {
             Vault.trash(p);
             if (open) closeNote();
-            refreshNotes(null);
+            loadEntries(true);
+            browser.update();
         } catch (IOException e) {
             error("Couldn't move “" + Vault.title(p) + "” to the trash", reason(e));
         }
+    }
+
+    ContextMenu noteMenu(Path p) {
+        return new ContextMenu(item("Rename…", () -> renameNote(p)), new SeparatorMenuItem(),
+                danger(item("Move to trash…", () -> trashNote(p))));
     }
 
     void toggleMode() {
@@ -417,13 +474,21 @@ public final class NotesApp extends Application {
         autosave.playFromStart();
     }
 
+    /** A property changed: save soon, and the note may now belong in other groups. */
+    private void propertiesChanged() {
+        edited();
+        browser.update();
+    }
+
     /** Writes the open note if it changed. False when that failed: the text stays in the editor. */
     boolean save() {
         autosave.stop();
         if (note == null || !dirty) return true;
         try {
-            Vault.write(note, editor.text());
+            current.body = editor.text();
+            Vault.write(note, current.text());
             seen = Files.getLastModifiedTime(note);
+            entries.replaceAll(e -> e.path().equals(note) ? new Entry(note, current, seen) : e);
             dirty = false;
             status.setText("");
             return true;
@@ -444,7 +509,7 @@ public final class NotesApp extends Application {
      * Picks up what other programs (or OneDrive) changed while the window was in the background.
      * Quietly: an error dialog here would come back every time the window is focused again.
      */
-    private void refreshFromDisk() {
+    void refreshFromDisk() {
         if (notebook == null) {
             root.setCenter(homeContent(false));
             return;
@@ -457,19 +522,17 @@ public final class NotesApp extends Application {
         try {
             if (note != null && !dirty && !Files.getLastModifiedTime(note).equals(seen)) {
                 String text = Vault.read(note);
-                seen = Files.getLastModifiedTime(note);
-                if (!text.equals(editor.text())) editor.open(text);
+                FileTime modified = Files.getLastModifiedTime(note);
+                if (text.replace("\r\n", "\n").equals(current.text())) seen = modified;
+                else display(note, Note.parse(text), modified);
             }
         } catch (NoSuchFileException e) {
             closeNote();
         } catch (IOException ignored) {
             // Unreadable for a moment (a sync in progress): keep what is shown.
         }
-        try {
-            listNotes(null);
-        } catch (IOException ignored) {
-            // Same: the list stays as it was.
-        }
+        loadEntries(false);
+        browser.update();
     }
 
     // ------------------------------------------------------------------
@@ -557,6 +620,41 @@ public final class NotesApp extends Application {
         style(dialog);
         dialog.getEditor().setPrefColumnCount(28);
         return dialog.showAndWait().map(String::strip).filter(s -> !s.isEmpty());
+    }
+
+    private record NotebookChoice(String name, NotebookType type) {
+    }
+
+    /** Asks for a notebook's type, and for its name when {@code withName}. */
+    private Optional<NotebookChoice> askNotebook(String title, NotebookType selected, boolean withName) {
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle(title);
+        dialog.setHeaderText(title);
+        style(dialog);
+        TextField name = new TextField();
+        name.setPromptText("Name");
+        name.setPrefColumnCount(28);
+        VBox content = new VBox(12);
+        if (withName) content.getChildren().add(name);
+        ToggleGroup types = new ToggleGroup();
+        for (NotebookType t : NotebookType.ALL) {
+            RadioButton option = new RadioButton(t.name());
+            option.setUserData(t);
+            option.setToggleGroup(types);
+            option.setSelected(t.equals(selected));
+            Label about = new Label(t.description());
+            about.getStyleClass().add("type-description");
+            content.getChildren().add(new VBox(2, option, about));
+        }
+        ButtonType ok = new ButtonType(withName ? "Create" : "Change", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().setAll(ok, ButtonType.CANCEL);
+        dialog.getDialogPane().setContent(content);
+        if (withName) {
+            dialog.getDialogPane().lookupButton(ok).disableProperty().bind(name.textProperty().map(String::isBlank));
+            Platform.runLater(name::requestFocus);
+        }
+        return dialog.showAndWait().filter(b -> b == ok)
+                .map(b -> new NotebookChoice(name.getText().strip(), (NotebookType) types.getSelectedToggle().getUserData()));
     }
 
     /** A yes/no question whose "yes" loses or moves something, so it shows in red. */
