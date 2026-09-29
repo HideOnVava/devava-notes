@@ -35,6 +35,24 @@ class NotebookViewTest {
     }
 
     @Test
+    void subtopicsLiveUnderTheirTopicAndLevelsJoinEveryJudge() {
+        List<Entry> notes = List.of(
+                entry("Dijkstra", "algorithms: [graphs/dijkstra]\njudge: Codeforces\ndifficulty: 1700"),
+                entry("BFS", "algorithms: [graphs/bfs, greedy]\njudge: LeetCode\ndifficulty: Medium"),
+                entry("Plain graph", "algorithms: [graphs]\njudge: AtCoder\nid: abc300_b\nstatus: Solved with help"));
+
+        assertEquals(List.of("graphs", "greedy"), NotebookView.rows(CP, view("By algorithm"), null, "", notes).stream().map(Group::value).toList());
+        assertEquals(List.of("graphs", "graphs/bfs", "graphs/dijkstra", "greedy"),
+                List.copyOf(NotebookView.counts(CP, view("By algorithm"), notes).keySet()));
+        assertEquals(3, NotebookView.counts(CP, view("By algorithm"), notes).get("graphs"));
+        assertEquals(List.of("Dijkstra"), titles(NotebookView.rows(CP, view("By algorithm"), "graphs/dijkstra", "", notes).get(0)));
+        assertEquals(3, NotebookView.rows(CP, view("By algorithm"), "Graphs", "", notes).get(0).notes().size());
+        assertEquals(List.of("Easy", "Medium", "Hard"),   // AtCoder's B, LeetCode's word, Codeforces' 1700
+                NotebookView.rows(CP, view("By difficulty"), null, "", notes).stream().map(Group::value).toList());
+        assertEquals(List.of("Plain graph"), titles(NotebookView.rows(CP, view("To review"), null, "", notes).get(0)));
+    }
+
+    @Test
     void everyTemplateMakesANoteOfItsOwnKind() {
         for (NotebookType type : NotebookType.ALL) {
             for (NotebookType.Kind kind : type.kinds()) {

@@ -1,5 +1,6 @@
 package com.devavaxp.notes;
 
+import com.devavaxp.notes.NotebookType.Badge;
 import com.devavaxp.notes.NotebookType.Kind;
 import com.devavaxp.notes.NotebookView.Entry;
 import javafx.animation.PauseTransition;
@@ -17,12 +18,15 @@ import javafx.scene.control.ButtonType;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
+import javafx.scene.control.ListView;
 import javafx.scene.control.MenuButton;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.RadioButton;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.SplitPane;
+import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.ToggleGroup;
@@ -79,7 +83,8 @@ public final class NotesApp extends Application {
     private final HBox bar = new HBox(8);
     private final BorderPane notePane = new BorderPane();
     private final HBox noteHeader = new HBox(10);
-    private final Label noteTitle = new Label(), kindName = new Label(), status = new Label();
+    private final Label noteTitle = new Label(), kindName = new Label(), badge = new Label(), status = new Label();
+    private final HBox tools = new HBox(4);
     private final Button mode = new Button("Read");
     private final PauseTransition autosave = new PauseTransition(Duration.millis(600));
     private SplitPane notebookView;
@@ -110,7 +115,7 @@ public final class NotesApp extends Application {
         this.vault = vault;
         editor = new Editor(this::edited, this::openLink);
         browser = new NotebookView(this);
-        properties = new PropertiesPanel(this::propertiesChanged);
+        properties = new PropertiesPanel(this::propertiesChanged, this::openLink, this::usedValues);
         autosave.setOnFinished(e -> save());
 
         bar.getStyleClass().add("bar");
@@ -118,11 +123,14 @@ public final class NotesApp extends Application {
         root.setTop(bar);
 
         noteTitle.getStyleClass().add("note-title");
+        noteTitle.setMinWidth(Region.USE_PREF_SIZE);   // a narrow pane squeezes the buttons, not the title
+        badge.setMinWidth(Region.USE_PREF_SIZE);
+        mode.setMinWidth(Region.USE_PREF_SIZE);
         kindName.getStyleClass().add("kind");
         status.getStyleClass().add("status-error");
         mode.setTooltip(new Tooltip("Read or edit (Ctrl+E)"));
         mode.setOnAction(e -> toggleMode());
-        noteHeader.getChildren().setAll(noteTitle, kindName, grow(), status, mode);
+        noteHeader.getChildren().setAll(noteTitle, kindName, badge, grow(), status, tools, mode);
         noteHeader.getStyleClass().add("note-header");
         noteHeader.setAlignment(Pos.CENTER_LEFT);
         notebookView = new SplitPane(browser.sidebar, browser.notes, notePane);
@@ -213,12 +221,43 @@ public final class NotesApp extends Application {
     }
 
     private MenuItem[] notebookItems(Path dir) {
-        return new MenuItem[]{
+        List<MenuItem> items = new ArrayList<>(List.of(
                 item("Rename…", () -> renameNotebook(dir)),
-                item("Change type…", () -> changeType(dir)),
+                item("Change type…", () -> changeType(dir))));
+        if (Vault.type(dir).equals(NotebookType.COMPETITIVE_PROGRAMMING)) items.add(item("C++ template…", () -> editTemplate(dir)));
+        items.addAll(List.of(
                 item("Show in folder", () -> showInFolder(dir)),
                 new SeparatorMenuItem(),
-                danger(item("Move to trash…", () -> trashNotebook(dir)))};
+                danger(item("Move to trash…", () -> trashNotebook(dir)))));
+        return items.toArray(MenuItem[]::new);
+    }
+
+    /** The C++ that new problems and "+ Solution" start with, kept in the notebook's .notebook.json. */
+    private void editTemplate(Path dir) {
+        TextArea code = new TextArea(template(dir));
+        code.getStyleClass().add("code-area");
+        code.setPrefColumnCount(64);
+        code.setPrefRowCount(18);
+        Label about = new Label("New problems and + Solution start with it (LeetCode problems start empty).");
+        about.getStyleClass().add("type-description");
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("C++ template");
+        dialog.setHeaderText("C++ template");
+        style(dialog);
+        ButtonType save = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().setAll(save, ButtonType.CANCEL);
+        dialog.getDialogPane().setContent(new VBox(8, about, code));
+        if (dialog.showAndWait().orElse(ButtonType.CANCEL) != save) return;
+        try {
+            Vault.setMeta(dir, "cpp", code.getText());
+        } catch (IOException e) {
+            error("Couldn't save the template", reason(e));
+        }
+    }
+
+    private static String template(Path dir) {
+        String own = Vault.meta(dir, "cpp");
+        return own.isBlank() ? Judges.CPP : own.stripTrailing();
     }
 
     void newNotebook() {
@@ -370,14 +409,29 @@ public final class NotesApp extends Application {
         seen = modified;
         dirty = false;
         entries.replaceAll(e -> e.path().equals(p) ? new Entry(p, n, modified) : e);
+        Kind kind = type.kindOf(n);
         noteTitle.setText(Vault.title(p));
-        kindName.setText(type.kinds().size() > 1 ? type.kindOf(n).name() : "");
+        kindName.setText(type.kinds().size() > 1 ? kind.name() : "");
         status.setText("");
-        properties.show(type.kindOf(n), n);
+        showBadge();
+        tools.getChildren().clear();
+        if (type.equals(NotebookType.COMPETITIVE_PROGRAMMING)) {
+            if (kind.id().equals("problem")) tools.getChildren().add(button("+ Solution", "flat", e -> newSolution()));
+            tools.getChildren().add(button("Insert snippet…", "flat", e -> insertSnippet()));
+        }
+        properties.show(kind, n);
         editor.open(n.body);
         notePane.setTop(new VBox(noteHeader, properties.node));
         notePane.setCenter(editor.view);
         browser.select(p);
+    }
+
+    /** A problem's difficulty in its judge's color, and its level when that says more ("800 · Easy"). */
+    private void showBadge() {
+        Badge b = current == null ? null : type.badge(current);
+        String level = current == null ? "" : Judges.level(current);
+        badge.setText(b == null ? "" : b.text().equalsIgnoreCase(level) || level.isEmpty() ? b.text() : b.text() + " · " + level);
+        badge.setStyle(b == null || b.color().isEmpty() ? "" : "-fx-text-fill: " + b.color() + "; -fx-font-weight: bold;");
     }
 
     private void closeNote() {
@@ -391,19 +445,36 @@ public final class NotesApp extends Application {
 
     void newNote(Kind kind) {
         if (notebook == null) return;
-        ask("New " + kind.name().toLowerCase(Locale.ROOT), "Title", "").ifPresent(title -> {
+        boolean hasLink = kind.fields().stream().anyMatch(f -> f.key().equals("url"));
+        Optional<String[]> answer = hasLink ? askProblem()
+                : ask("New " + kind.name().toLowerCase(Locale.ROOT), "Title", "").map(title -> new String[]{title, ""});
+        answer.ifPresent(a -> {
             try {
-                createNote(kind, title);
+                createNote(kind, a[0], a[1]);
             } catch (IOException e) {
                 error("Couldn't create the note", reason(e));
             }
         });
     }
 
-    /** Creates a note of that kind from its template and opens it, ready to write. */
-    Path createNote(Kind kind, String title) throws IOException {
+    /**
+     * Creates a note of that kind from its template and opens it, ready to write. A problem's link
+     * fills in its judge and id, and its solution starts with the notebook's C++ template.
+     */
+    Path createNote(Kind kind, String title, String link) throws IOException {
         if (!leaveNote()) return null;
-        Path p = Vault.createNote(notebook, title, kind.template().replace("{today}", LocalDate.now().toString()));
+        Note start = Note.parse(kind.template().replace("{today}", LocalDate.now().toString()));
+        if (!link.isBlank()) {
+            start.set("url", link);
+            Judges.fromLink(link).ifPresent(problem -> {
+                start.set("judge", problem.judge());
+                start.set("id", problem.id());
+            });
+        }
+        if (kind.id().equals("problem") && !start.get("judge").equals("LeetCode")) {
+            start.body = start.body.replace("```cpp\n\n```", "```cpp\n" + template(notebook) + "\n```");
+        }
+        Path p = Vault.createNote(notebook, title, start.text());
         FileTime modified = Files.getLastModifiedTime(p);
         Note n = Note.parse(Vault.read(p));
         entries.add(new Entry(p, n, modified));
@@ -450,6 +521,77 @@ public final class NotesApp extends Application {
         }
     }
 
+    /** Another solution at the cursor, starting with the C++ template: "Brute force", "Optimal"… */
+    private void newSolution() {
+        setReading(false);
+        String code = current.get("judge").equals("LeetCode") ? "" : template(notebook);
+        editor.insert("\n### Solution · O( )\n\n```cpp\n" + code + "\n```\n");
+        editor.focus();
+    }
+
+    /** Picks a snippet of the Code Library and puts its code at the cursor. */
+    private void insertSnippet() {
+        List<Entry> snippets = entries.stream()
+                .filter(e -> type.kindOf(e.note()).id().equals("snippet") && !e.path().equals(note)).toList();
+        if (snippets.isEmpty()) {
+            error("The Code Library is empty", "Add a snippet with + New ▾ → Snippet, with its code in a ```cpp block.");
+            return;
+        }
+        TextField filter = new TextField();
+        filter.setPromptText("Filter");
+        ListView<Entry> list = new ListView<>();
+        list.setCellFactory(v -> new ListCell<>() {
+            @Override
+            protected void updateItem(Entry e, boolean empty) {
+                super.updateItem(e, empty);
+                String topics = e == null ? "" : String.join(", ", e.note().list("algorithms"));
+                setText(empty || e == null ? null : topics.isEmpty() ? e.title() : e.title() + "  ·  " + topics);
+            }
+        });
+        list.getItems().setAll(snippets);
+        list.getSelectionModel().selectFirst();
+        filter.textProperty().addListener((o, was, now) -> {
+            String wanted = NotebookView.fold(now.strip());
+            list.getItems().setAll(snippets.stream().filter(e -> NotebookView.fold(e.title() + " "
+                    + String.join(" ", e.note().list("algorithms")) + " " + String.join(" ", e.note().list("techniques"))).contains(wanted)).toList());
+            list.getSelectionModel().selectFirst();
+        });
+        list.setPrefSize(420, 260);
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Insert snippet");
+        dialog.setHeaderText("Insert snippet");
+        style(dialog);
+        ButtonType insert = new ButtonType("Insert", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().setAll(insert, ButtonType.CANCEL);
+        dialog.getDialogPane().setContent(new VBox(8, filter, list));
+        dialog.getDialogPane().lookupButton(insert).disableProperty().bind(list.getSelectionModel().selectedItemProperty().isNull());
+        list.setOnMouseClicked(e -> {
+            if (e.getClickCount() == 2 && list.getSelectionModel().getSelectedItem() != null) {
+                ((Button) dialog.getDialogPane().lookupButton(insert)).fire();
+            }
+        });
+        Platform.runLater(filter::requestFocus);
+        if (dialog.showAndWait().orElse(ButtonType.CANCEL) != insert) return;
+        insertSnippet(list.getSelectionModel().getSelectedItem().path());
+    }
+
+    /** Puts the first code block of a snippet at the cursor. */
+    void insertSnippet(Path snippet) {
+        Entry entry = entries.stream().filter(e -> e.path().equals(snippet)).findFirst().orElse(null);
+        Optional<Note.Code> code = entry == null ? Optional.empty() : entry.note().firstCode();
+        if (code.isEmpty()) {
+            error("Nothing to insert", "“" + Vault.title(snippet) + "” has no block of code yet.");
+            return;
+        }
+        setReading(false);
+        editor.insertCode(code.get().text(), code.get().language());
+    }
+
+    /** The values a list property already has in this notebook, for its ▾ menu. */
+    private List<String> usedValues(String key) {
+        return entries.stream().flatMap(e -> e.note().list(key).stream()).distinct().toList();
+    }
+
     ContextMenu noteMenu(Path p) {
         return new ContextMenu(item("Rename…", () -> renameNote(p)), new SeparatorMenuItem(),
                 danger(item("Move to trash…", () -> trashNote(p))));
@@ -474,9 +616,20 @@ public final class NotesApp extends Application {
         autosave.playFromStart();
     }
 
-    /** A property changed: save soon, and the note may now belong in other groups. */
-    private void propertiesChanged() {
+    /**
+     * A property changed: save soon, and the note may now belong in other groups. A problem's new
+     * link fills in its judge and id.
+     */
+    private void propertiesChanged(String key) {
+        if (key.equals("url")) {
+            Judges.fromLink(current.get("url")).ifPresent(problem -> {
+                current.set("judge", problem.judge());
+                current.set("id", problem.id());
+                properties.show(type.kindOf(current), current);   // shows what it filled in
+            });
+        }
         edited();
+        showBadge();
         browser.update();
     }
 
@@ -620,6 +773,33 @@ public final class NotesApp extends Application {
         style(dialog);
         dialog.getEditor().setPrefColumnCount(28);
         return dialog.showAndWait().map(String::strip).filter(s -> !s.isEmpty());
+    }
+
+    /** Asks for a new problem's link and title: a known link suggests the title ("CF 4A", "Two Sum"). */
+    private Optional<String[]> askProblem() {
+        TextField link = new TextField(), title = new TextField();
+        link.setPromptText("https://codeforces.com/…, atcoder.jp/…, leetcode.com/… (optional)");
+        link.setPrefColumnCount(36);
+        title.setPromptText("Title");
+        String[] suggested = {""};
+        link.textProperty().addListener((o, was, now) -> {
+            if (!title.getText().isBlank() && !title.getText().equals(suggested[0])) return;   // typed by hand: keep it
+            suggested[0] = Judges.fromLink(now).map(Judges.Problem::title).orElse("");
+            title.setText(suggested[0]);
+        });
+        Label linkName = new Label("Link"), titleName = new Label("Title");
+        linkName.getStyleClass().add("property-name");
+        titleName.getStyleClass().add("property-name");
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("New problem");
+        dialog.setHeaderText("New problem");
+        style(dialog);
+        ButtonType create = new ButtonType("Create", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().setAll(create, ButtonType.CANCEL);
+        dialog.getDialogPane().setContent(new VBox(6, linkName, link, titleName, title));
+        dialog.getDialogPane().lookupButton(create).disableProperty().bind(title.textProperty().map(String::isBlank));
+        Platform.runLater(link::requestFocus);
+        return dialog.showAndWait().filter(b -> b == create).map(b -> new String[]{title.getText().strip(), link.getText().strip()});
     }
 
     private record NotebookChoice(String name, NotebookType type) {

@@ -77,6 +77,14 @@ const view = new EditorView({parent: editor, state: EditorState.create({extensio
 window.setText = text => view.setState(EditorState.create({doc: text, extensions}));
 window.getText = () => view.state.doc.toString();
 window.insertText = text => view.dispatch(view.state.replaceSelection(text), {scrollIntoView: true});
+window.insertCode = (code, language) => {
+    let inCode = false;
+    for (let node = syntaxTree(view.state).resolveInner(view.state.selection.main.head, -1); node; node = node.parent) {
+        if (node.name === "FencedCode") inCode = true;
+    }
+    view.dispatch(view.state.replaceSelection(inCode ? code : "\n```" + language + "\n" + code + "\n```\n"), {scrollIntoView: true});
+    view.focus();
+};
 window.focusEditor = () => view.focus();
 window.showEditor = () => {
     reading.hidden = true;
@@ -85,7 +93,7 @@ window.showEditor = () => {
 };
 window.showReading = html => {
     reading.innerHTML = html;   // commonmark-java already turned any HTML written in the note into text
-    reading.querySelectorAll("pre > code[class^='language-']").forEach(highlight);
+    reading.querySelectorAll("pre > code").forEach(card);
     editor.hidden = true;
     reading.hidden = false;
     reading.scrollTop = 0;
@@ -101,16 +109,56 @@ reading.addEventListener("click", e => {
 
 tell("ready");
 
-// Code blocks of the reading view get the same colors as in the editor.
-function highlight(code) {
-    const language = LanguageDescription.matchLanguageName(languages, code.className.slice("language-".length), true);
-    language?.load().then(support => {
-        const text = code.textContent, out = document.createDocumentFragment();
-        highlightCode(text, support.language.parser.parse(text), highlighters,
-            (piece, classes) => out.append(classes
-                ? Object.assign(document.createElement("span"), {className: classes, textContent: piece})
-                : piece),
-            () => out.append("\n"));
-        code.replaceChildren(out);
+// A code block of the reading view becomes a card: its language, a Copy button, numbered lines,
+// and the same colors as in the editor.
+function card(code) {
+    const name = code.className.startsWith("language-") ? code.className.slice("language-".length) : "";
+    const text = code.textContent.replace(/\n$/, "");
+    const head = document.createElement("div"), label = document.createElement("span"), copy = document.createElement("button");
+    head.className = "code-head";
+    label.textContent = name || "code";
+    copy.className = "copy";
+    copy.textContent = "Copy";
+    copy.addEventListener("click", () => {
+        tell("copy:" + text);
+        copy.textContent = "Copied";
+        setTimeout(() => copy.textContent = "Copy", 1500);
     });
+    head.append(label, copy);
+    const box = document.createElement("div"), pre = code.parentElement;
+    box.className = "code-card";
+    pre.replaceWith(box);
+    box.append(head, pre);
+    lines(code, text, null);
+    (name ? LanguageDescription.matchLanguageName(languages, name, true) : null)?.load()
+        .then(support => lines(code, text, support.language.parser.parse(text)));
+}
+
+function lines(code, text, tree) {
+    const out = document.createDocumentFragment();
+    let line;
+    const next = () => {
+        line = document.createElement("span");
+        line.className = "line";
+        out.append(line);
+    };
+    next();
+    const put = (piece, classes) => line.append(classes
+        ? Object.assign(document.createElement("span"), {className: classes, textContent: piece})
+        : piece);
+    if (tree) {
+        highlightCode(text, tree, highlighters, put, () => {
+            out.append("\n");
+            next();
+        });
+    } else {
+        text.split("\n").forEach((piece, i) => {
+            if (i > 0) {
+                out.append("\n");
+                next();
+            }
+            put(piece, "");
+        });
+    }
+    code.replaceChildren(out);
 }

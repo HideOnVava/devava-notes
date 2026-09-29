@@ -77,25 +77,32 @@ final class Vault {
 
     /** A folder without a readable .notebook.json (made by hand, or by version 0.1) is a General one. */
     static NotebookType type(Path notebook) {
-        try {
-            JsonElement type = JsonParser.parseString(Files.readString(notebook.resolve(META))).getAsJsonObject().get("type");
-            return NotebookType.byId(type == null ? "" : type.getAsString());
-        } catch (IOException | RuntimeException e) {
-            return NotebookType.GENERAL;
-        }
+        return NotebookType.byId(meta(notebook, "type"));
     }
 
-    /** Writes the type into .notebook.json, keeping anything else already there. */
     static void setType(Path notebook, NotebookType type) throws IOException {
-        Path meta = notebook.resolve(META);
-        JsonObject json;
+        setMeta(notebook, "type", type.id());
+    }
+
+    /** A text kept in the notebook's .notebook.json ("type", "cpp": its C++ template); "" when not there. */
+    static String meta(Path notebook, String key) {
+        JsonElement value = metaJson(notebook).get(key);
+        return value == null || !value.isJsonPrimitive() ? "" : value.getAsString();
+    }
+
+    /** Writes one text into .notebook.json, keeping everything else already there. */
+    static void setMeta(Path notebook, String key, String value) throws IOException {
+        JsonObject json = metaJson(notebook);
+        json.addProperty(key, value);
+        write(notebook.resolve(META), new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create().toJson(json) + "\n");
+    }
+
+    private static JsonObject metaJson(Path notebook) {
         try {
-            json = JsonParser.parseString(Files.readString(meta)).getAsJsonObject();
+            return JsonParser.parseString(Files.readString(notebook.resolve(META))).getAsJsonObject();
         } catch (IOException | RuntimeException e) {
-            json = new JsonObject();
+            return new JsonObject();   // missing, or not what this app wrote
         }
-        json.addProperty("type", type.id());
-        write(meta, new GsonBuilder().setPrettyPrinting().create().toJson(json) + "\n");
     }
 
     static List<Path> notes(Path notebook) throws IOException {

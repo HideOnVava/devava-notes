@@ -23,11 +23,16 @@ record NotebookType(String id, String name, String description, List<Kind> kinds
     }
 
     /**
-     * A way to browse a notebook: its notes of one kind (null: all), only those whose {@code only}
-     * property is true (null: all), sorted by a property ("-" in front: highest first; "title",
-     * "modified"), and grouped by another (null: not grouped).
+     * A way to browse a notebook: its notes of one kind (null: all), only those that match
+     * {@code only} ("pinned": true, "status=Solved with help": that value; null: all), sorted by a
+     * property ("-" in front: highest first; "title", "modified"), and grouped by another (null: not
+     * grouped).
      */
     record View(String name, String kind, String only, String sortBy, String groupBy) {
+    }
+
+    /** A short colored mark for a note in the lists and its header: a problem's difficulty. */
+    record Badge(String text, String color) {
     }
 
     private static final Field TAGS = new Field("tags", "Tags", Input.LIST);
@@ -43,8 +48,10 @@ record NotebookType(String id, String name, String description, List<Kind> kinds
     private static final Field ID = new Field("id", "ID", Input.TEXT);
     private static final Field URL = new Field("url", "Link", Input.TEXT);
     private static final Field DIFFICULTY = new Field("difficulty", "Difficulty", Input.TEXT);
-    private static final Field ALGORITHMS = new Field("algorithms", "Algorithms", Input.LIST);
-    private static final Field TECHNIQUES = new Field("techniques", "Techniques", Input.LIST);
+    /** Empty: worked out from the difficulty (Judges.level); set: the note's own word. */
+    private static final Field LEVEL = new Field("level", "Level", Input.CHOICE, Judges.LEVELS);
+    private static final Field ALGORITHMS = new Field("algorithms", "Algorithms", Input.LIST, Judges.ALGORITHMS);
+    private static final Field TECHNIQUES = new Field("techniques", "Techniques", Input.LIST, Judges.TECHNIQUES);
     private static final Field PROBLEM = new Field("status", "Status", Input.CHOICE,
             List.of("To do", "Attempted", "Solved with help", "Solved"));
 
@@ -94,7 +101,7 @@ record NotebookType(String id, String name, String description, List<Kind> kinds
 
     static final NotebookType COMPETITIVE_PROGRAMMING = new NotebookType("competitive-programming", "Competitive Programming",
             "Problems you solve, by topic and difficulty, and the code you reuse.",
-            List.of(new Kind("problem", "Problem", List.of(JUDGE, ID, URL, DIFFICULTY, ALGORITHMS, TECHNIQUES, PROBLEM, DATE), """
+            List.of(new Kind("problem", "Problem", List.of(URL, JUDGE, ID, DIFFICULTY, LEVEL, PROBLEM, ALGORITHMS, TECHNIQUES, DATE), """
                             ---
                             status: To do
                             date: {today}
@@ -126,9 +133,10 @@ record NotebookType(String id, String name, String description, List<Kind> kinds
                             ```
                             """)),
             List.of(new View("All problems", "problem", null, "-date", null),
+                    new View("To review", "problem", "status=Solved with help", "date", null),
                     new View("By algorithm", "problem", null, "title", "algorithms"),
                     new View("By technique", "problem", null, "title", "techniques"),
-                    new View("By difficulty", "problem", null, "title", "difficulty"),
+                    new View("By difficulty", "problem", null, "title", "level"),
                     new View("By judge", "problem", null, "title", "judge"),
                     new View("By status", "problem", null, "title", "status"),
                     new View("Code Library", "snippet", null, "title", null)));
@@ -145,6 +153,28 @@ record NotebookType(String id, String name, String description, List<Kind> kinds
         String id = note.get("kind");
         for (Kind k : kinds) if (k.id().equals(id)) return k;
         return kinds.get(0);
+    }
+
+    /** A note's values for a property; a problem's level, when the note does not set it, comes from its difficulty. */
+    List<String> values(Note note, String key) {
+        if (this == COMPETITIVE_PROGRAMMING && key.equals("level")) {
+            String level = Judges.level(note);
+            return level.isEmpty() ? List.of() : List.of(level);
+        }
+        return note.list(key);
+    }
+
+    /** Whether the note is one a view's {@code only} asks for: "pinned" (true) or "status=Solved with help". */
+    boolean matches(Note note, String only) {
+        int eq = only.indexOf('=');
+        return eq < 0 ? note.get(only).equals("true") : note.get(only.substring(0, eq)).equalsIgnoreCase(only.substring(eq + 1));
+    }
+
+    /** A problem's difficulty as its judge writes and colors it (or its level); null for other notes. */
+    Badge badge(Note note) {
+        if (this != COMPETITIVE_PROGRAMMING || !kindOf(note).id().equals("problem")) return null;
+        String text = note.get("difficulty").isEmpty() ? Judges.level(note) : note.get("difficulty");
+        return text.isEmpty() ? null : new Badge(text, Judges.color(note));
     }
 
     /** The properties of a view's notes: those of its kind, or of every kind once. */

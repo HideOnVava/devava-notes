@@ -222,6 +222,58 @@ html, body {
     padding: 0;
 }
 
+/* A code block: its language and a Copy button above numbered lines */
+#reading .code-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin: 0 0 0.9em;
+    overflow: hidden;
+}
+
+#reading .code-card pre {
+    margin: 0;
+    border: none;
+    border-radius: 0;
+}
+
+#reading .code-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 8px 4px 14px;
+    background: #EEEEF3;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+#reading .copy {
+    font: 12px var(--font);
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px 10px;
+    cursor: pointer;
+}
+
+#reading .copy:hover {
+    border-color: var(--accent);
+}
+
+#reading pre code .line::before {
+    counter-increment: line;
+    content: counter(line);
+    display: inline-block;
+    width: 2em;
+    margin-right: 1em;
+    text-align: right;
+    color: var(--faint);
+}
+
+#reading pre code {
+    counter-reset: line;
+}
+
 #reading blockquote {
     padding: 0 1em;
     border-left: 3px solid var(--border);

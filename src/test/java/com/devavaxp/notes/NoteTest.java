@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NoteTest {
 
@@ -46,6 +47,15 @@ class NoteTest {
         Note again = Note.parse(note.text());
         assertEquals(List.of("two pointers", "a, b"), again.list("techniques"));
         assertEquals("Solved: with help", again.get("status"));
+    }
+
+    @Test
+    void aSnippetGivesItsFirstBlockOfCode() {
+        Note snippet = Note.parse("---\nkind: snippet\n---\n## When to use\nUnion by size.\n\n"
+                + "```cpp\nint find(int x) {\n    return p[x] == x ? x : p[x] = find(p[x]);\n}\n```\n\n```py\nprint(1)\n```\n");
+        assertEquals(new Note.Code("cpp", "int find(int x) {\n    return p[x] == x ? x : p[x] = find(p[x]);\n}"), snippet.firstCode().orElseThrow());
+        assertEquals(new Note.Code("", ""), Note.parse("```\n```").firstCode().orElseThrow());
+        assertTrue(Note.parse("no code here").firstCode().isEmpty());
     }
 
     @Test

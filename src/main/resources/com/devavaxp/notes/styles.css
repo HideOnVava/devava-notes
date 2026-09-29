@@ -412,6 +412,15 @@
     -fx-text-fill: -text-muted;
 }
 
+.menu-button.picker {
+    -fx-padding: 5 10;
+}
+
+.text-area.code-area {
+    -fx-font-family: "Cascadia Mono", "Consolas", monospace;
+    -fx-font-size: 13px;
+}
+
 .note-header {
     -fx-background-color: -surface;
     -fx-border-color: transparent transparent -border transparent;

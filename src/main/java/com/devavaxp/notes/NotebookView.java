@@ -1,5 +1,6 @@
 package com.devavaxp.notes;
 
+import com.devavaxp.notes.NotebookType.Badge;
 import com.devavaxp.notes.NotebookType.Field;
 import com.devavaxp.notes.NotebookType.Input;
 import com.devavaxp.notes.NotebookType.View;
@@ -10,6 +11,7 @@ import javafx.css.PseudoClass;
 import javafx.scene.Node;
 import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Label;
+import javafx.scene.control.Labeled;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
@@ -30,7 +32,9 @@ import java.nio.file.attribute.FileTime;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -233,26 +237,39 @@ final class NotebookView {
             List<Group> groups = rows(type, v, null, "", entries);
             long count = groups.stream().flatMap(g -> g.notes().stream()).distinct().count();
             TreeItem<Choice> item = new TreeItem<>(new Choice(v, null, v.name(), (int) count));
+            remember(item, v.name());
             if (v.groupBy() != null) {
-                for (Group g : groups) {
-                    TreeItem<Choice> child = new TreeItem<>(new Choice(v, g.value(), label(v, g.value()), g.notes().size()));
-                    item.getChildren().add(child);
-                    if (v.equals(view) && value != null && g.value().equalsIgnoreCase(value)) chosen = child;
+                // Each value under its view, and "graphs/dijkstra" under "graphs".
+                Map<String, TreeItem<Choice>> made = new HashMap<>();
+                for (Map.Entry<String, Integer> c : counts(type, v, entries).entrySet()) {
+                    String path = c.getKey();
+                    int slash = path.lastIndexOf('/');
+                    TreeItem<Choice> child = new TreeItem<>(new Choice(v, path, slash < 0 ? label(v, path) : path.substring(slash + 1), c.getValue()));
+                    TreeItem<Choice> parent = slash < 0 ? item : made.getOrDefault(path.substring(0, slash).toLowerCase(Locale.ROOT), item);
+                    parent.getChildren().add(child);
+                    made.put(path.toLowerCase(Locale.ROOT), child);
+                    remember(child, v.name() + "/" + path);
+                    if (v.equals(view) && value != null && path.equalsIgnoreCase(value)) chosen = child;
                 }
-                item.setExpanded(expanded.contains(v.name()) || v.equals(view) && value != null);
-                item.expandedProperty().addListener((o, was, now) -> {
-                    if (now) expanded.add(v.name());
-                    else expanded.remove(v.name());
-                });
             }
             if (v.equals(view) && (value == null || chosen == null)) chosen = item;   // a value no note has any more: its view
             items.add(item);
         }
         views.getRoot().getChildren().setAll(items);
         if (chosen == null) chosen = items.get(0);
+        for (TreeItem<Choice> up = chosen.getParent(); up != null; up = up.getParent()) up.setExpanded(true);
         view = chosen.getValue().view();
         value = chosen.getValue().value();
         views.getSelectionModel().select(chosen);
+    }
+
+    /** Keeps a branch open or closed as the user left it, across rebuilds. */
+    private void remember(TreeItem<Choice> item, String key) {
+        item.setExpanded(expanded.contains(key));
+        item.expandedProperty().addListener((o, was, now) -> {
+            if (now) expanded.add(key);
+            else expanded.remove(key);
+        });
     }
 
     private void showNotes() {
@@ -296,8 +313,8 @@ final class NotebookView {
         return "No " + type.fields(v).stream().filter(f -> f.key().equals(key)).findFirst().map(Field::label).orElse(key).toLowerCase(Locale.ROOT);
     }
 
-    /** The title, with (in the list) a second line of the note's dates and choices. */
-    private static TreeTableColumn<Row, Row> titleColumn(List<Field> subtitle) {
+    /** The title, with (in the list) a second line: the note's badge, dates and choices. */
+    private TreeTableColumn<Row, Row> titleColumn(List<Field> subtitle) {
         TreeTableColumn<Row, Row> c = new TreeTableColumn<>("Title");
         c.setCellValueFactory(cell -> new ReadOnlyObjectWrapper<>(cell.getValue().getValue()));
         c.setComparator(Comparator.comparing((Row r) -> r.entry() != null ? r.entry().title() : r.label(), Vault::compareNatural));
@@ -309,29 +326,47 @@ final class NotebookView {
                 setGraphic(null);
                 if (empty || row == null) {
                     setText(null);
-                } else if (row.entry() == null) {
-                    setText(row.label() + "  " + row.group().notes().size());
-                } else {
-                    String line = subtitle.stream().filter(f -> f.input() == Input.CHOICE || f.input() == Input.DATE)
-                            .map(f -> row.entry().note().get(f.key())).filter(s -> !s.isEmpty()).collect(Collectors.joining(" · "));
-                    setText(line.isEmpty() ? row.entry().title() : null);
-                    if (!line.isEmpty()) {
-                        Label second = new Label(line);
-                        second.getStyleClass().add("note-subtitle");
-                        setGraphic(new VBox(1, new Label(row.entry().title()), second));
-                    }
+                    return;
                 }
+                if (row.entry() == null) {
+                    setText(row.label() + "  " + row.group().notes().size());
+                    return;
+                }
+                Note note = row.entry().note();
+                String line = subtitle.stream().filter(f -> f.input() == Input.CHOICE && !f.key().equals("level") || f.input() == Input.DATE)
+                        .map(f -> note.get(f.key())).filter(s -> !s.isEmpty()).collect(Collectors.joining(" · "));
+                Badge badge = subtitle.isEmpty() ? null : type.badge(note);
+                HBox second = new HBox(6);
+                if (badge != null) second.getChildren().add(colored(new Label(badge.text()), badge.color()));
+                if (!line.isEmpty()) second.getChildren().add(new Label(line));
+                second.getChildren().forEach(n -> n.getStyleClass().add("note-subtitle"));
+                setText(second.getChildren().isEmpty() ? row.entry().title() : null);
+                if (!second.getChildren().isEmpty()) setGraphic(new VBox(1, new Label(row.entry().title()), second));
             }
         });
         return c;
     }
 
-    private static TreeTableColumn<Row, String> column(Field f) {
+    private TreeTableColumn<Row, String> column(Field f) {
         TreeTableColumn<Row, String> c = new TreeTableColumn<>(f.label());
         c.setCellValueFactory(cell -> {
             Entry e = cell.getValue().getValue().entry();
-            return new ReadOnlyStringWrapper(e == null ? "" : e.note().get(f.key()));
+            return new ReadOnlyStringWrapper(e == null ? "" : String.join(", ", type.values(e.note(), f.key())));
         });
+        if (f.key().equals("difficulty") || f.key().equals("level")) {
+            // In the judge's colors (the difficulty) or the level's.
+            c.setCellFactory(col -> new TreeTableCell<>() {
+                @Override
+                protected void updateItem(String text, boolean empty) {
+                    super.updateItem(text, empty);
+                    setText(empty ? null : text);
+                    Row row = getTableRow() == null ? null : getTableRow().getItem();
+                    Badge badge = empty || row == null || row.entry() == null ? null : type.badge(row.entry().note());
+                    String color = badge == null ? "" : f.key().equals("level") ? Judges.levelColor(text) : badge.color();
+                    colored(this, color);
+                }
+            });
+        }
         c.setComparator(Vault::compareNatural);
         c.setPrefWidth(switch (f.input()) {
             case LIST -> 160;
@@ -339,6 +374,12 @@ final class NotebookView {
             default -> 110;
         });
         return c;
+    }
+
+    /** Paints a label's text in a color ("#RRGGBB"), in bold; "" leaves it as it is. */
+    private static <T extends Labeled> T colored(T label, String color) {
+        label.setStyle(color.isEmpty() ? "" : "-fx-text-fill: " + color + "; -fx-font-weight: bold;");
+        return label;
     }
 
     private static TreeItem<Row> find(TreeItem<Row> parent, Path p) {
@@ -352,9 +393,10 @@ final class NotebookView {
     }
 
     /**
-     * What a view shows: its notes (of its kind, true on its "only" property, having the picked
-     * value, containing the filter text) in its order, grouped by its property unless a value was
-     * picked. A note with several values (algorithms: [dp, greedy]) is under each of them.
+     * What a view shows: its notes (of its kind, matching its "only", having the picked value,
+     * containing the filter text) in its order, grouped by its property unless a value was picked.
+     * A note with several values (algorithms: [dp, greedy]) is under each of them, and a value
+     * with a "/" under its first part: "graphs/dijkstra" is in "graphs".
      */
     static List<Group> rows(NotebookType type, View view, String value, String filter, List<Entry> entries) {
         String wanted = fold(filter.strip());
@@ -362,9 +404,9 @@ final class NotebookView {
         List<Entry> notes = new ArrayList<>();
         for (Entry e : entries) {
             if (view.kind() != null && !type.kindOf(e.note()).id().equals(view.kind())) continue;
-            if (view.only() != null && !e.note().get(view.only()).equals("true")) continue;
-            if (value != null && !has(e, view.groupBy(), value)) continue;
-            if (!wanted.isEmpty() && !fold(e.title() + " " + fields.stream().map(f -> e.note().get(f.key()))
+            if (view.only() != null && !type.matches(e.note(), view.only())) continue;
+            if (value != null && !has(type.values(e.note(), view.groupBy()), value)) continue;
+            if (!wanted.isEmpty() && !fold(e.title() + " " + fields.stream().map(f -> String.join(" ", type.values(e.note(), f.key())))
                     .collect(Collectors.joining(" "))).contains(wanted)) continue;
             notes.add(e);
         }
@@ -374,10 +416,10 @@ final class NotebookView {
         Map<String, List<Entry>> groups = new TreeMap<>(groupOrder(fields, view.groupBy()));
         List<Entry> none = new ArrayList<>();
         for (Entry e : notes) {
-            List<String> values = e.note().list(view.groupBy());
+            List<String> values = type.values(e.note(), view.groupBy());
             if (values.isEmpty()) none.add(e);
             for (String v : values) {
-                List<Entry> group = groups.computeIfAbsent(v, k -> new ArrayList<>());
+                List<Entry> group = groups.computeIfAbsent(v.split("/", 2)[0].strip(), k -> new ArrayList<>());
                 if (group.isEmpty() || group.get(group.size() - 1) != e) group.add(e);
             }
         }
@@ -387,15 +429,55 @@ final class NotebookView {
         return result;
     }
 
-    /** "DP" and "dp" are the same value; "" stands for no value. */
-    private static boolean has(Entry e, String key, String value) {
-        List<String> values = e.note().list(key);
-        return value.isEmpty() ? values.isEmpty() : values.stream().anyMatch(v -> v.equalsIgnoreCase(value));
+    /**
+     * How many notes of the view have each value, and each first part of one ("graphs" for
+     * "graphs/dijkstra"), in the sidebar's order; "" counts those with none, last.
+     */
+    static Map<String, Integer> counts(NotebookType type, View view, List<Entry> entries) {
+        Map<String, Set<Path>> notes = new TreeMap<>(pathOrder(type.fields(view), view.groupBy()));
+        for (Group g : rows(type, view, null, "", entries)) {
+            for (Entry e : g.notes()) {
+                List<String> values = type.values(e.note(), view.groupBy());
+                if (values.isEmpty()) notes.computeIfAbsent("", k -> new HashSet<>()).add(e.path());
+                for (String v : values) {
+                    String path = "";
+                    for (String part : v.split("/")) {
+                        path = path.isEmpty() ? part.strip() : path + "/" + part.strip();
+                        notes.computeIfAbsent(path, k -> new HashSet<>()).add(e.path());
+                    }
+                }
+            }
+        }
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        notes.forEach((path, set) -> counts.put(path, set.size()));
+        return counts;
     }
 
-    /** Values in natural order, or in the order of the property's choices (To do, Attempted, …). */
+    /** A picked value matches itself and everything under it ("graphs" has "graphs/dijkstra"), in any case; "" is none. */
+    private static boolean has(List<String> values, String value) {
+        if (value.isEmpty()) return values.isEmpty();
+        String under = value.toLowerCase(Locale.ROOT) + "/";
+        return values.stream().anyMatch(v -> v.equalsIgnoreCase(value) || v.toLowerCase(Locale.ROOT).startsWith(under));
+    }
+
+    /** "graphs" before "graphs/bfs" before "greedy"; the first part in group order; none ("") last. */
+    private static Comparator<String> pathOrder(List<Field> fields, String key) {
+        Comparator<String> first = groupOrder(fields, key), natural = Vault::compareNatural;
+        return (a, b) -> {
+            if (a.isEmpty() || b.isEmpty()) return Boolean.compare(a.isEmpty(), b.isEmpty());
+            String[] x = a.split("/"), y = b.split("/");
+            for (int i = 0; i < Math.min(x.length, y.length); i++) {
+                int c = (i == 0 ? first : natural).compare(x[i], y[i]);
+                if (c != 0) return c;
+            }
+            return Integer.compare(x.length, y.length);
+        };
+    }
+
+    /** Values in natural order, or a choice's in the order of its options (To do, Attempted, …). */
     private static Comparator<String> groupOrder(List<Field> fields, String key) {
-        List<String> options = fields.stream().filter(f -> f.key().equals(key)).findFirst().map(Field::options).orElse(List.of());
+        List<String> options = fields.stream().filter(f -> f.key().equals(key) && f.input() == Input.CHOICE)
+                .findFirst().map(Field::options).orElse(List.of());
         Comparator<String> natural = Vault::compareNatural;
         if (options.isEmpty()) return natural;
         return Comparator.comparingInt((String v) -> {

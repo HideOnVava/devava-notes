@@ -2,6 +2,9 @@ package com.devavaxp.notes;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -35,6 +38,18 @@ final class Note {
 
     String text() {
         return header.isEmpty() ? body : "---\n" + String.join("\n", header) + "\n---\n" + body;
+    }
+
+    /** A fenced block of code: its language ("cpp", or "") and its lines. */
+    record Code(String language, String text) {
+    }
+
+    private static final Pattern FENCE = Pattern.compile("(?m)^```([\\w+#.-]*)[^\\n]*\\n([\\s\\S]*?)\\n?^```");
+
+    /** The first block of code in the body, as a snippet is inserted. */
+    Optional<Code> firstCode() {
+        Matcher m = FENCE.matcher(body.replace("\r\n", "\n"));
+        return m.find() ? Optional.of(new Code(m.group(1), m.group(2))) : Optional.empty();
     }
 
     /** A property as text: its value, or its items joined by ", "; "" when it is not there. */

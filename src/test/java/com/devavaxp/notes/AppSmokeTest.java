@@ -30,21 +30,16 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * Opens the real window, CodeMirror included, and uses it as a person would minus the keyboard:
- * {@code ./mvnw verify -Dsmoke=true}. Screenshots of each step land in target/smoke.
+ * {@code ./mvnw verify -Dsmoke=true}. Screenshots of each step land in target/smoke. It never
+ * presses Copy, which would overwrite the clipboard of whoever runs it.
  */
 @EnabledIfSystemProperty(named = "smoke", matches = "true")
 class AppSmokeTest {
 
+    private static final String TEMPLATE = "#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n}";
+
     private static final String IDEA = """
             Keep each value's index in a **hash map**; for every `x`, look up `target - x`.
-
-            ```cpp
-            unordered_map<int, int> seen;
-            for (int i = 0; i < n; i++) {
-                if (seen.count(target - a[i])) return {seen[target - a[i]], i};
-                seen[a[i]] = i;
-            }
-            ```
 
             """;
 
@@ -65,6 +60,21 @@ class AppSmokeTest {
             Two even parts only if w is even and greater than 2.
             """;
 
+    private static final String DSU = """
+            ---
+            kind: snippet
+            algorithms: [dsu]
+            ---
+            ## When to use
+            Joining sets and asking whether two items are together.
+
+            ## Code
+
+            ```cpp
+            int find(int x) { return p[x] == x ? x : p[x] = find(p[x]); }
+            ```
+            """;
+
     @Test
     void usesACompetitiveProgrammingNotebook(@TempDir Path home) throws Exception {
         Platform.startup(() -> {
@@ -81,52 +91,64 @@ class AppSmokeTest {
         waitFor("the editor to load", () -> fx(() -> app.editor.ready));
 
         NotebookType cp = NotebookType.COMPETITIVE_PROGRAMMING;
-        Kind problem = cp.kinds().get(0), snippet = cp.kinds().get(1);
+        Kind problem = cp.kinds().get(0);
         Path notebook = fx(() -> app.createNotebook("Algorithms", cp));
+        Vault.setMeta(notebook, "cpp", TEMPLATE + "\n");
         fx(() -> run(() -> app.openNotebook(notebook)));
-        Path twoSum = fx(() -> app.createNote(problem, "Two Sum"));
-        assertTrue(Files.readString(twoSum).startsWith("---\nstatus: To do\ndate: " + LocalDate.now() + "\n---\n## Idea"));
 
-        // Properties through the panel, the text through CodeMirror: the note saves itself.
+        // A LeetCode link: judge and id filled in, and no C++ main() in its solution.
+        Path twoSum = fx(() -> app.createNote(problem, "Two Sum", "https://leetcode.com/problems/two-sum/"));
+        String created = Files.readString(twoSum);
+        assertTrue(created.startsWith("---\nstatus: To do\ndate: " + LocalDate.now()
+                + "\nurl: https://leetcode.com/problems/two-sum/\njudge: LeetCode\nid: two-sum\n---\n"), created);
+        assertTrue(created.contains("```cpp\n\n```"), created);
         fx(() -> run(() -> {
-            choose(stage, "judge", "LeetCode");
-            type(stage, "id", "1");
             type(stage, "difficulty", "Easy");
             type(stage, "algorithms", "hash map, arrays");
             choose(stage, "status", "Solved");
             ((JSObject) engine.executeScript("window")).call("insertText", IDEA);
         }));
-        waitFor("the note to save itself", () -> Files.readString(twoSum).contains("seen[a[i]] = i;"));
-        String saved = Files.readString(twoSum);
-        assertTrue(saved.startsWith("---\nstatus: Solved\ndate: " + LocalDate.now() + "\njudge: LeetCode\nid: 1\ndifficulty: Easy\n"
-                + "algorithms: [hash map, arrays]\n---\n" + IDEA + "## Idea"), saved);
+        waitFor("the note to save itself", () -> Files.readString(twoSum).contains("look up `target - x`"));
+        assertTrue(Files.readString(twoSum).contains("algorithms: [hash map, arrays]"));
 
-        // A note written elsewhere (Obsidian) shows up when the window comes back, and a snippet.
-        Files.writeString(notebook.resolve("CF 4A - Watermelon.md"), WATERMELON);
-        fx(() -> run(app::refreshFromDisk));
-        fx(() -> app.createNote(snippet, "DSU"));
+        // A Codeforces link: its solution starts with the notebook's C++ template.
+        Path cf = fx(() -> app.createNote(problem, "CF 1850G", "https://codeforces.com/contest/1850/problem/G"));
+        String cfText = Files.readString(cf);
+        assertTrue(cfText.contains("judge: Codeforces\nid: 1850G\n") && cfText.contains("```cpp\n" + TEMPLATE + "\n```"), cfText);
         fx(() -> run(() -> {
-            app.openNote(twoSum);
-            app.browser.choose("All problems", null);
+            type(stage, "difficulty", "1700");
+            type(stage, "algorithms", "graphs/dijkstra, math");
+            choose(stage, "status", "Solved with help");
         }));
+
+        // Written elsewhere (Obsidian): a problem and a snippet of the Code Library.
+        Files.writeString(notebook.resolve("CF 4A - Watermelon.md"), WATERMELON);
+        Files.writeString(notebook.resolve("DSU.md"), DSU);
+        fx(() -> run(app::refreshFromDisk));
+        fx(() -> run(() -> app.insertSnippet(notebook.resolve("DSU.md"))));
+        waitFor("the snippet to be saved in the problem", () -> Files.readString(cf).contains("int find(int x)"));
+        fx(() -> run(() -> app.browser.choose("All problems", null)));
         shot(stage, "1-problem");
 
-        fx(() -> run(() -> app.browser.choose("By algorithm", null)));
-        shot(stage, "2-by-algorithm");
+        fx(() -> run(() -> app.browser.choose("By algorithm", "graphs")));
+        shot(stage, "2-graphs");
+        fx(() -> run(() -> app.browser.choose("By difficulty", null)));
+        shot(stage, "3-by-difficulty");
         fx(() -> run(() -> {
             app.browser.choose("All problems", null);
             app.browser.showTable(true);
         }));
-        shot(stage, "3-table");
+        shot(stage, "4-table");
         fx(() -> run(() -> {
             app.browser.showTable(false);
             app.toggleMode();
         }));
         waitFor("C++ colored in the reading view", () -> fx(() ->
                 ((Number) engine.executeScript("document.querySelectorAll('#reading .tok-keyword').length")).intValue() > 0));
-        shot(stage, "4-read");
+        assertEquals(2, fx(() -> ((Number) engine.executeScript("document.querySelectorAll('#reading .code-card .copy').length")).intValue()));
+        shot(stage, "5-read");
         fx(() -> run(app::showHome));
-        shot(stage, "5-home");
+        shot(stage, "6-home");
 
         assertEquals(WATERMELON, Files.readString(notebook.resolve("CF 4A - Watermelon.md")));   // only read, never rewritten
         assertEquals(List.of(), fx(() -> List.copyOf(app.editor.errors)));
