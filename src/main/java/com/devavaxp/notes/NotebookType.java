@@ -1,5 +1,6 @@
 package com.devavaxp.notes;
 
+import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -93,11 +94,12 @@ record NotebookType(String id, String name, String description, List<Kind> kinds
 
                             ## Notes
                             """)),
-            List.of(new View("All notes", null, null, "-date", null),
-                    new View("Lectures", "lecture", null, "-date", null),
+            List.of(new View("Lectures", "lecture", null, "-date", null),
                     new View("By unit", "lecture", null, "date", "unit"),
-                    new View("Assignments", "assignment", null, "due", null),
-                    new View("Exams", "exam", null, "date", null)));
+                    new View("Upcoming", null, "upcoming", "when", null),
+                    new View("Assignments", "assignment", null, "-due", null),
+                    new View("Exams", "exam", null, "-date", null),
+                    new View("All notes", null, null, "-when", null)));
 
     static final NotebookType COMPETITIVE_PROGRAMMING = new NotebookType("competitive-programming", "Competitive Programming",
             "Problems you solve, by topic and difficulty, and the code you reuse.",
@@ -155,11 +157,22 @@ record NotebookType(String id, String name, String description, List<Kind> kinds
         return kinds.get(0);
     }
 
-    /** A note's values for a property; a problem's level, when the note does not set it, comes from its difficulty. */
+    /**
+     * A note's values for a property, some worked out rather than written: a problem's "level"
+     * (from its difficulty, unless the note sets it), and in a course "when" (an assignment's due
+     * date, another note's date) and "upcoming" (true while it is still to do).
+     */
     List<String> values(Note note, String key) {
         if (this == COMPETITIVE_PROGRAMMING && key.equals("level")) {
             String level = Judges.level(note);
             return level.isEmpty() ? List.of() : List.of(level);
+        }
+        if (this == CLASS_NOTES && key.equals("when")) {
+            LocalDate when = Agenda.when(note);
+            return when == null ? List.of() : List.of(when.toString());
+        }
+        if (this == CLASS_NOTES && key.equals("upcoming")) {
+            return Agenda.upcoming(note, LocalDate.now()) ? List.of("true") : List.of();
         }
         return note.list(key);
     }
@@ -167,11 +180,13 @@ record NotebookType(String id, String name, String description, List<Kind> kinds
     /** Whether the note is one a view's {@code only} asks for: "pinned" (true) or "status=Solved with help". */
     boolean matches(Note note, String only) {
         int eq = only.indexOf('=');
-        return eq < 0 ? note.get(only).equals("true") : note.get(only.substring(0, eq)).equalsIgnoreCase(only.substring(eq + 1));
+        List<String> values = values(note, eq < 0 ? only : only.substring(0, eq));
+        return eq < 0 ? values.contains("true") : values.stream().anyMatch(only.substring(eq + 1)::equalsIgnoreCase);
     }
 
-    /** A problem's difficulty as its judge writes and colors it (or its level); null for other notes. */
+    /** A short colored mark: a problem's difficulty as its judge colors it, how near a course's assignment or exam is. */
     Badge badge(Note note) {
+        if (this == CLASS_NOTES) return Agenda.badge(note, LocalDate.now());
         if (this != COMPETITIVE_PROGRAMMING || !kindOf(note).id().equals("problem")) return null;
         String text = note.get("difficulty").isEmpty() ? Judges.level(note) : note.get("difficulty");
         return text.isEmpty() ? null : new Badge(text, Judges.color(note));

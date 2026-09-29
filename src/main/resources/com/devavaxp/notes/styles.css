@@ -313,6 +313,30 @@
     -fx-text-fill: -text-faint;
 }
 
+.upcoming {
+    -fx-background-color: -surface;
+    -fx-background-radius: 12;
+    -fx-border-color: -border;
+    -fx-border-radius: 12;
+    -fx-padding: 6;
+    -fx-max-width: 760;
+}
+
+.button.upcoming-row {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-alignment: center-left;
+    -fx-padding: 8 12;
+}
+
+.button.upcoming-row:hover {
+    -fx-background-color: -surface-hover;
+}
+
+.button.upcoming-row:focused {
+    -fx-border-color: -accent;
+}
+
 .placeholder {
     -fx-padding: 32;
 }

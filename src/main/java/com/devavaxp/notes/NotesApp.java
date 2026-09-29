@@ -57,6 +57,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -196,14 +197,68 @@ public final class NotesApp extends Application {
         }
         FlowPane cards = new FlowPane(16, 16);
         cards.getChildren().setAll(notebooks.stream().map(this::card).toList());
-        Label title = new Label("NOTEBOOKS");
-        title.getStyleClass().add("section-title");
-        VBox home = new VBox(14, title, cards);
+        VBox home = new VBox(14);
+        List<Upcoming> upcoming = upcoming(notebooks);
+        if (!upcoming.isEmpty()) {
+            VBox rows = new VBox(2);
+            upcoming.stream().limit(8).forEach(u -> rows.getChildren().add(upcomingRow(u)));
+            rows.getStyleClass().add("upcoming");
+            home.getChildren().addAll(sectionTitle("UPCOMING"), rows);
+        }
+        home.getChildren().addAll(sectionTitle("NOTEBOOKS"), cards);
         home.getStyleClass().add("home");
         ScrollPane scroll = new ScrollPane(home);
         scroll.setFitToWidth(true);
         scroll.getStyleClass().add("home-scroll");
         return scroll;
+    }
+
+    /** A pending assignment or a coming exam, in one of the Class Notes notebooks. */
+    private record Upcoming(Vault.Notebook notebook, Path path, Note note) {
+    }
+
+    /** What is still to do in every course: late assignments first, then by day. */
+    private static List<Upcoming> upcoming(List<Vault.Notebook> notebooks) {
+        LocalDate today = LocalDate.now();
+        List<Upcoming> items = new ArrayList<>();
+        for (Vault.Notebook nb : notebooks) {
+            if (!nb.type().equals(NotebookType.CLASS_NOTES)) continue;
+            try {
+                for (Path p : Vault.notes(nb.dir())) {
+                    Note n = Note.parse(Vault.read(p));
+                    if (Agenda.upcoming(n, today)) items.add(new Upcoming(nb, p, n));
+                }
+            } catch (IOException ignored) {
+                // A course that cannot be read right now just has nothing to show.
+            }
+        }
+        items.sort(Comparator.comparing((Upcoming u) -> Agenda.when(u.note())).thenComparing(u -> Vault.title(u.path()), Vault::compareNatural));
+        return items;
+    }
+
+    private Button upcomingRow(Upcoming u) {
+        Badge b = Agenda.badge(u.note(), LocalDate.now());
+        Label when = new Label(b == null ? "" : b.text()), title = new Label(Vault.title(u.path())), course = new Label(u.notebook().name());
+        when.setStyle(b == null ? "" : "-fx-text-fill: " + b.color() + "; -fx-font-weight: bold;");
+        when.setMinWidth(120);
+        course.getStyleClass().add("card-meta");
+        HBox line = new HBox(12, when, title, course);
+        line.setAlignment(Pos.CENTER_LEFT);
+        Button row = new Button(null, line);
+        row.getStyleClass().add("upcoming-row");
+        row.setMaxWidth(Double.MAX_VALUE);
+        row.setOnAction(e -> {
+            openNotebook(u.notebook().dir());
+            openNote(u.path());
+            browser.reveal(u.path());
+        });
+        return row;
+    }
+
+    private static Label sectionTitle(String text) {
+        Label title = new Label(text);
+        title.getStyleClass().add("section-title");
+        return title;
     }
 
     private Button card(Vault.Notebook nb) {
@@ -593,8 +648,34 @@ public final class NotesApp extends Application {
     }
 
     ContextMenu noteMenu(Path p) {
-        return new ContextMenu(item("Rename…", () -> renameNote(p)), new SeparatorMenuItem(),
-                danger(item("Move to trash…", () -> trashNote(p))));
+        ContextMenu menu = new ContextMenu(item("Rename…", () -> renameNote(p)));
+        Note n = entries.stream().filter(e -> e.path().equals(p)).map(Entry::note).findFirst().orElse(null);
+        if (n != null && type.equals(NotebookType.CLASS_NOTES) && type.kindOf(n).id().equals("assignment")) {
+            boolean done = n.get("status").equalsIgnoreCase("Done");
+            menu.getItems().add(item(done ? "Mark as pending" : "Mark as done", () -> setProperty(p, "status", done ? "Pending" : "Done")));
+        }
+        menu.getItems().addAll(new SeparatorMenuItem(), danger(item("Move to trash…", () -> trashNote(p))));
+        return menu;
+    }
+
+    /** Sets one property of a note from the list, whether it is the open note or not. */
+    void setProperty(Path p, String key, String value) {
+        if (p.equals(note)) {
+            current.set(key, value);
+            properties.show(type.kindOf(current), current);
+            propertiesChanged(key);
+            return;
+        }
+        try {
+            Note n = Note.parse(Vault.read(p));
+            n.set(key, value);
+            Vault.write(p, n.text());
+        } catch (IOException e) {
+            error("Couldn't change “" + Vault.title(p) + "”", reason(e));
+            return;
+        }
+        loadEntries(true);
+        browser.update();
     }
 
     void toggleMode() {

@@ -40,6 +40,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -410,7 +411,7 @@ final class NotebookView {
                     .collect(Collectors.joining(" "))).contains(wanted)) continue;
             notes.add(e);
         }
-        notes.sort(order(view.sortBy()));
+        notes.sort(order(type, view.sortBy()));
         if (view.groupBy() == null || value != null) return List.of(new Group(null, notes));
 
         Map<String, List<Entry>> groups = new TreeMap<>(groupOrder(fields, view.groupBy()));
@@ -486,19 +487,20 @@ final class NotebookView {
         }).thenComparing(natural);
     }
 
-    /** "title", "modified" or a property; "-" in front for highest first. Notes without the property go last. */
-    private static Comparator<Entry> order(String sortBy) {
+    /** "title", "modified" or a property (maybe a worked-out one); "-" in front for highest first. Notes without it go last. */
+    private static Comparator<Entry> order(NotebookType type, String sortBy) {
         boolean desc = sortBy.startsWith("-");
         String key = desc ? sortBy.substring(1) : sortBy;
         Comparator<Entry> byTitle = (a, b) -> Vault.compareNatural(a.title(), b.title());
+        Function<Entry, String> value = e -> String.join(", ", type.values(e.note(), key));
         Comparator<Entry> c = switch (key) {
             case "title" -> byTitle;
             case "modified" -> Comparator.comparing(Entry::modified);
-            default -> (a, b) -> Vault.compareNatural(a.note().get(key), b.note().get(key));
+            default -> (a, b) -> Vault.compareNatural(value.apply(a), value.apply(b));
         };
         if (desc) c = c.reversed();
         if (!key.equals("title") && !key.equals("modified")) {
-            c = Comparator.comparing((Entry e) -> e.note().get(key).isEmpty()).thenComparing(c);
+            c = Comparator.comparing((Entry e) -> value.apply(e).isEmpty()).thenComparing(c);
         }
         return c.thenComparing(byTitle);
     }

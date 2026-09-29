@@ -31,4 +31,26 @@ class EditorTest {
         assertTrue(html.contains("type=\"checkbox\""));
         assertTrue(html.contains("<table>"));
     }
+
+    @Test
+    void mathIsLeftForKatexButCodeStaysCode() {
+        String html = Editor.html("""
+                Area: $a_1 + b_1$, and on its own:
+
+                $$
+                \\frac{1}{2} < 1
+                $$
+
+                Not math: `$HOME`, $5 and $10, \\$x\\$.
+
+                ```bash
+                echo $PATH
+                ```
+                """);
+        assertTrue(html.contains("<span class=\"math\">a_1 + b_1</span>"), html);
+        assertTrue(html.contains("<span class=\"math display\">\n\\frac{1}{2} &lt; 1\n</span>"), html);
+        assertTrue(html.contains("<code>$HOME</code>, $5 and $10, $x$."), html);
+        assertTrue(html.contains("echo $PATH"), html);
+        assertFalse(html.contains("<em>"), html);   // a_1 … b_1 did not turn into emphasis
+    }
 }

@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
+import java.time.LocalDate;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -53,6 +54,22 @@ class NotebookViewTest {
     }
 
     @Test
+    void aCourseShowsWhatIsStillToDoLateFirst() {
+        NotebookType course = NotebookType.CLASS_NOTES;
+        LocalDate today = LocalDate.now();
+        List<Entry> notes = List.of(
+                entry("Homework 3", "kind: assignment\ndue: " + today.plusDays(1)),
+                entry("Homework 2", "kind: assignment\ndue: " + today.minusDays(3) + "\nstatus: Pending"),
+                entry("Homework 1", "kind: assignment\ndue: " + today.minusDays(9) + "\nstatus: Done"),
+                entry("Midterm", "kind: exam\ndate: " + today.plusDays(5)),
+                entry("Quiz", "kind: exam\ndate: " + today.minusDays(1)),
+                entry("Limits", "date: " + today));
+        assertEquals(List.of("Homework 2", "Homework 3", "Midterm"), titles(NotebookView.rows(course, view(course, "Upcoming"), null, "", notes).get(0)));
+        assertEquals(List.of("Limits"), titles(NotebookView.rows(course, view(course, "Lectures"), null, "", notes).get(0)));
+        assertEquals("3 days late", course.badge(notes.get(1).note()).text());
+    }
+
+    @Test
     void everyTemplateMakesANoteOfItsOwnKind() {
         for (NotebookType type : NotebookType.ALL) {
             for (NotebookType.Kind kind : type.kinds()) {
@@ -66,7 +83,11 @@ class NotebookViewTest {
     }
 
     private static View view(String name) {
-        return CP.views().stream().filter(v -> v.name().equals(name)).findFirst().orElseThrow();
+        return view(CP, name);
+    }
+
+    private static View view(NotebookType type, String name) {
+        return type.views().stream().filter(v -> v.name().equals(name)).findFirst().orElseThrow();
     }
 
     private static List<String> titles(Group group) {

@@ -3,7 +3,7 @@
   "private": true,
   "description": "CodeMirror 6 for the WebView of Devava Notes. After changing main.js: npm install, npm run build, and commit the bundle.",
   "scripts": {
-    "build": "esbuild main.js --bundle --minify --format=iife --target=safari16 --outfile=../src/main/resources/com/devavaxp/notes/editor.js"
+    "build": "esbuild main.js --bundle --minify --format=iife --target=safari16 --outfile=../src/main/resources/com/devavaxp/notes/editor.js && node copy-katex.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",
@@ -14,7 +14,8 @@
     "@codemirror/search": "^6.7.2",
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.13",
-    "@lezer/highlight": "^1.2.5"
+    "@lezer/highlight": "^1.2.5",
+    "katex": "^0.18.9"
   },
   "devDependencies": {
     "esbuild": "^0.28.2"

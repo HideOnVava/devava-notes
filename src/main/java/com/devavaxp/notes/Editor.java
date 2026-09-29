@@ -127,8 +127,87 @@ final class Editor {
         if (ready && !reading) call("insertCode", code, language);
     }
 
+    /**
+     * The note as HTML. Math ($…$ inline, $$…$$ on its own) is set aside first and left as spans
+     * for KaTeX, since Markdown would read a_1 … b_1 as emphasis; math inside code stays code.
+     */
     static String html(String markdown) {
-        return RENDERER.render(PARSER.parse(markdown));
+        List<String> math = new ArrayList<>();
+        String html = RENDERER.render(PARSER.parse(setMathAside(markdown.replace("\r\n", "\n"), math)));
+        for (int i = 0; i < math.size(); i++) html = html.replace(MARK + i + MARK, math.get(i));
+        return html;
+    }
+
+    /** Stands in for a piece of math while Markdown is parsed; a control character no note contains. */
+    private static final String MARK = String.valueOf((char) 1);
+
+    private static String setMathAside(String text, List<String> math) {
+        StringBuilder out = new StringBuilder();
+        String fence = null;   // the ``` or ~~~ of the code block we are in
+        int i = 0, n = text.length();
+        while (i < n) {
+            if (i == 0 || text.charAt(i - 1) == '\n') {   // a fenced code block passes whole
+                int end = text.indexOf('\n', i) < 0 ? n : text.indexOf('\n', i) + 1;
+                String line = text.substring(i, end).stripLeading();
+                if (fence != null || line.startsWith("```") || line.startsWith("~~~")) {
+                    if (fence == null) fence = line.substring(0, 3);
+                    else if (line.startsWith(fence)) fence = null;
+                    out.append(text, i, end);
+                    i = end;
+                    continue;
+                }
+            }
+            char c = text.charAt(i);
+            if (c == '\\' && i + 1 < n) {   // \$ stays a dollar
+                out.append(text, i, i + 2);
+                i += 2;
+                continue;
+            }
+            if (c == '`') {   // an inline code span, whole
+                int run = 0;
+                while (i + run < n && text.charAt(i + run) == '`') run++;
+                int close = text.indexOf("`".repeat(run), i + run);
+                int end = close < 0 ? i + run : close + run;
+                out.append(text, i, end);
+                i = end;
+                continue;
+            }
+            if (c == '$') {
+                boolean display = i + 1 < n && text.charAt(i + 1) == '$';
+                int start = i + (display ? 2 : 1), close = display ? text.indexOf("$$", start) : inlineMathEnd(text, start);
+                if (close > start) {
+                    math.add("<span class=\"math" + (display ? " display" : "") + "\">" + escape(text.substring(start, close)) + "</span>");
+                    out.append(MARK).append(math.size() - 1).append(MARK);
+                    i = close + (display ? 2 : 1);
+                    continue;
+                }
+            }
+            out.append(c);
+            i++;
+        }
+        return out.toString();
+    }
+
+    /** Where inline math opened at {@code start} closes, on the same line: "$x^2$" is math, "$5 and $10" is not. */
+    private static int inlineMathEnd(String text, int start) {
+        if (start >= text.length() || Character.isWhitespace(text.charAt(start))) return -1;
+        for (int j = start; j < text.length(); j++) {
+            char c = text.charAt(j);
+            if (c == '\n') return -1;
+            if (c == '\\') {
+                j++;
+                continue;
+            }
+            if (c == '$') {
+                boolean digitAfter = j + 1 < text.length() && Character.isDigit(text.charAt(j + 1));
+                return Character.isWhitespace(text.charAt(j - 1)) || digitAfter ? -1 : j;
+            }
+        }
+        return -1;
+    }
+
+    private static String escape(String s) {
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
     }
 
     private Object call(String function, Object... args) {

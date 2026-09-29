@@ -304,6 +304,13 @@ html, body {
     max-width: 100%;
 }
 
+#reading .math.display {
+    display: block;
+    margin: 0.6em 0;
+    overflow-x: auto;
+    text-align: center;
+}
+
 #reading li:has(> input[type=checkbox]) {
     list-style: none;
 }

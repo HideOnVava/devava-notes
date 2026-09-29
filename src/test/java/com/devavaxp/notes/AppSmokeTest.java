@@ -4,12 +4,14 @@ import com.devavaxp.notes.NotebookType.Kind;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.DatePicker;
 import javafx.scene.control.TextField;
 import javafx.scene.image.PixelFormat;
 import javafx.scene.image.WritableImage;
 import javafx.scene.web.WebEngine;
 import javafx.stage.Stage;
 import netscape.javascript.JSObject;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
@@ -75,20 +77,89 @@ class AppSmokeTest {
             ```
             """;
 
-    @Test
-    void usesACompetitiveProgrammingNotebook(@TempDir Path home) throws Exception {
+    private static final String LECTURE = """
+            The limit that starts it all: $\\lim_{x \\to 0} \\frac{\\sin x}{x} = 1$, and on its own line
+
+            $$
+            f'(x) = \\lim_{h \\to 0} \\frac{f(x + h) - f(x)}{h}
+            $$
+
+            """;
+
+    @BeforeAll
+    static void startJavaFx() {
         Platform.startup(() -> {
         });
         Platform.setImplicitExit(false);
+    }
+
+    /** The window, off screen so the test does not get in anyone's way, once the editor is ready. */
+    private static NotesApp open(Path home, Stage[] stage) throws Exception {
         NotesApp app = fx(NotesApp::new);
-        Stage stage = fx(() -> {
+        stage[0] = fx(() -> {
             Stage s = new Stage();
-            s.setX(-4000);   // off screen: the test should not get in anyone's way
+            s.setX(-4000);
             app.show(s, new Vault(home));
             return s;
         });
-        WebEngine engine = fx(() -> app.editor.view.getEngine());
         waitFor("the editor to load", () -> fx(() -> app.editor.ready));
+        return app;
+    }
+
+    @Test
+    void usesAClassNotesNotebook(@TempDir Path home) throws Exception {
+        Stage[] window = new Stage[1];
+        NotesApp app = open(home, window);
+        Stage stage = window[0];
+        WebEngine engine = fx(() -> app.editor.view.getEngine());
+        NotebookType course = NotebookType.CLASS_NOTES;
+        LocalDate today = LocalDate.now();
+        Path notebook = fx(() -> app.createNotebook("Calculus II", course));
+        fx(() -> run(() -> app.openNotebook(notebook)));
+
+        Path limits = fx(() -> app.createNote(course.kinds().get(0), "Limits", ""));
+        fx(() -> run(() -> {
+            type(stage, "unit", "1. Limits");
+            ((JSObject) engine.executeScript("window")).call("insertText", LECTURE);
+        }));
+        waitFor("the lecture to save itself", () -> Files.readString(limits).contains("\\frac{\\sin x}{x}"));
+        Path homework = fx(() -> app.createNote(course.kinds().get(1), "Homework 3", ""));
+        fx(() -> run(() -> ((DatePicker) stage.getScene().lookup("#property-due")).setValue(today.plusDays(1))));
+        waitFor("the due date to be saved", () -> Files.readString(homework).contains("due: " + today.plusDays(1)));
+
+        // Written elsewhere: a late assignment, one already done, and an exam.
+        Files.writeString(notebook.resolve("Homework 2.md"), "---\nkind: assignment\ndue: " + today.minusDays(3) + "\nstatus: Pending\n---\n");
+        Files.writeString(notebook.resolve("Homework 1.md"), "---\nkind: assignment\ndue: " + today.minusDays(9) + "\nstatus: Done\n---\n");
+        Files.writeString(notebook.resolve("Midterm.md"), "---\nkind: exam\ndate: " + today.plusDays(5) + "\ntopics: [limits, derivatives]\n---\n");
+        fx(() -> run(app::refreshFromDisk));
+        fx(() -> run(() -> app.browser.choose("Upcoming", null)));
+        shot(stage, "c1-upcoming");
+
+        fx(() -> run(() -> app.setProperty(notebook.resolve("Homework 2.md"), "status", "Done")));   // "Mark as done"
+        assertTrue(Files.readString(notebook.resolve("Homework 2.md")).contains("status: Done"));
+
+        fx(() -> run(() -> app.openNote(limits)));
+        fx(() -> run(app::toggleMode));
+        waitFor("the formulas drawn by KaTeX", () -> fx(() ->
+                ((Number) engine.executeScript("document.querySelectorAll('#reading .katex').length")).intValue() == 2));
+        waitFor("KaTeX's fonts", () -> fx(() -> Boolean.TRUE.equals(engine.executeScript(
+                "[...document.fonts].some(f => f.family.replace(/\"/g, '') === 'KaTeX_Main' && f.status === 'loaded')"))));
+        shot(stage, "c2-lecture");
+        fx(() -> run(app::toggleMode));
+
+        fx(() -> run(app::showHome));
+        shot(stage, "c3-home");
+        assertEquals(2, fx(() -> stage.getScene().getRoot().lookupAll(".upcoming-row").size()));   // Homework 3 and the Midterm
+        assertEquals(List.of(), fx(() -> List.copyOf(app.editor.errors)));
+        fx(() -> run(stage::close));
+    }
+
+    @Test
+    void usesACompetitiveProgrammingNotebook(@TempDir Path home) throws Exception {
+        Stage[] window = new Stage[1];
+        NotesApp app = open(home, window);
+        Stage stage = window[0];
+        WebEngine engine = fx(() -> app.editor.view.getEngine());
 
         NotebookType cp = NotebookType.COMPETITIVE_PROGRAMMING;
         Kind problem = cp.kinds().get(0);

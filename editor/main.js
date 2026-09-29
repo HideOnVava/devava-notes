@@ -10,6 +10,7 @@ import {LanguageDescription, bracketMatching, indentOnInput, syntaxHighlighting,
 import {markdown, markdownLanguage} from "@codemirror/lang-markdown";
 import {languages} from "@codemirror/language-data";
 import {classHighlighter, highlightCode, tagHighlighter, tags} from "@lezer/highlight";
+import katex from "katex";
 
 // Java never hands this page an object: the page tells Java things as text, through alert().
 const tell = message => window.alert(message);
@@ -93,6 +94,8 @@ window.showEditor = () => {
 };
 window.showReading = html => {
     reading.innerHTML = html;   // commonmark-java already turned any HTML written in the note into text
+    reading.querySelectorAll(".math").forEach(math => katex.render(math.textContent, math,
+        {displayMode: math.classList.contains("display"), throwOnError: false}));
     reading.querySelectorAll("pre > code").forEach(card);
     editor.hidden = true;
     reading.hidden = false;
