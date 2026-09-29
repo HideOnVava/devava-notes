@@ -1,0 +1,261 @@
+/* The editor and the reading view (editor.html), with the palette of styles.css. */
+
+:root {
+    --bg: #FFFFFF;
+    --text: #1C1C21;
+    --muted: #6E6E78;
+    --faint: #9A9AA5;
+    --border: #E4E4E9;
+    --accent: #4F46E5;
+    --selection: #DDE0FF;
+    --code-bg: #F6F6F9;
+    --font: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    --mono: "Cascadia Mono", Consolas, "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
+    /* Code colors, the same in the editor and in the reading view */
+    --keyword: #4F46E5;
+    --string: #0F7B3E;
+    --number: #B45309;
+    --type: #0E7490;
+    --comment: #8A8A96;
+    --meta: #9A3412;
+}
+
+html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.65 var(--font);
+}
+
+[hidden] {
+    display: none !important;
+}
+
+#editor, #reading {
+    height: 100%;
+    box-sizing: border-box;
+}
+
+/* ---------- Editor ---------- */
+
+#editor .cm-editor {
+    height: 100%;
+}
+
+#editor .cm-editor.cm-focused {
+    outline: none;
+}
+
+#editor .cm-scroller {
+    font-family: var(--font);
+    line-height: 1.65;
+}
+
+/* A readable line length, centered, with room to scroll the last line up */
+#editor .cm-content {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 32px 28px 40vh;
+    caret-color: var(--accent);
+}
+
+#editor .cm-cursor {
+    border-left: 2px solid var(--accent);
+}
+
+#editor .cm-selectionBackground {
+    background: var(--selection) !important;
+}
+
+#editor .cm-placeholder {
+    color: var(--faint);
+}
+
+#editor .cm-code {
+    font-family: var(--mono);
+    font-size: 13.5px;
+    line-height: 1.5;
+    background: var(--code-bg);
+}
+
+/* Markdown's own marks (# ** ` >) stay quiet; they also carry tok-meta, hence the id */
+#editor .tok-mark {
+    color: var(--faint);
+}
+
+.tok-heading {
+    font-weight: 700;
+}
+
+#editor .tok-h1 {
+    font-size: 1.6em;
+}
+
+#editor .tok-h2 {
+    font-size: 1.35em;
+}
+
+#editor .tok-h3 {
+    font-size: 1.15em;
+}
+
+.tok-emphasis {
+    font-style: italic;
+}
+
+.tok-strong {
+    font-weight: 700;
+}
+
+.tok-strike {
+    text-decoration: line-through;
+}
+
+.tok-link {
+    color: var(--accent);
+}
+
+.tok-url, .tok-quote {
+    color: var(--muted);
+}
+
+#editor .tok-monospace {
+    font-family: var(--mono);
+    font-size: 0.9em;
+    background: var(--code-bg);
+    border-radius: 4px;
+}
+
+/* ---------- Code, in both views ---------- */
+
+.tok-keyword, .tok-bool {
+    color: var(--keyword);
+}
+
+.tok-string, .tok-string2 {
+    color: var(--string);
+}
+
+.tok-number, .tok-atom, .tok-literal {
+    color: var(--number);
+}
+
+.tok-typeName, .tok-className, .tok-namespace {
+    color: var(--type);
+}
+
+.tok-comment {
+    color: var(--comment);
+    font-style: italic;
+}
+
+.tok-meta, .tok-macroName, #editor .cm-code .tok-mark {
+    color: var(--meta);
+}
+
+.tok-invalid {
+    color: #DC2626;
+}
+
+/* ---------- Reading view ---------- */
+
+#reading {
+    overflow: auto;
+    padding: 32px max(28px, calc((100% - 760px) / 2)) 80px;
+}
+
+#reading h1, #reading h2, #reading h3, #reading h4 {
+    line-height: 1.25;
+    margin: 1.2em 0 0.5em;
+}
+
+#reading h1 {
+    font-size: 1.8em;
+}
+
+#reading h2 {
+    font-size: 1.45em;
+}
+
+#reading h3 {
+    font-size: 1.2em;
+}
+
+#reading > :first-child {
+    margin-top: 0;
+}
+
+#reading p, #reading ul, #reading ol, #reading blockquote, #reading table, #reading pre {
+    margin: 0 0 0.9em;
+}
+
+#reading a {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+#reading a:hover {
+    text-decoration: underline;
+}
+
+#reading code {
+    font-family: var(--mono);
+    font-size: 0.88em;
+    background: var(--code-bg);
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+}
+
+#reading pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    overflow: auto;
+    line-height: 1.5;
+}
+
+#reading pre code {
+    font-size: 13.5px;
+    background: none;
+    padding: 0;
+}
+
+#reading blockquote {
+    padding: 0 1em;
+    border-left: 3px solid var(--border);
+    color: var(--muted);
+}
+
+#reading table {
+    border-collapse: collapse;
+}
+
+#reading th, #reading td {
+    border: 1px solid var(--border);
+    padding: 6px 12px;
+    text-align: left;
+}
+
+#reading th {
+    background: var(--code-bg);
+}
+
+#reading hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 1.5em 0;
+}
+
+#reading img {
+    max-width: 100%;
+}
+
+#reading li:has(> input[type=checkbox]) {
+    list-style: none;
+}
+
+#reading li > input[type=checkbox] {
+    margin: 0 0.5em 0 -1.4em;
+}

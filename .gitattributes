@@ -1,0 +1,10 @@
+# Shell scripts must keep LF line endings even when checked out on Windows.
+*.sh text eol=lf
+*.ps1 text
+*.java text
+*.md text
+mvnw text eol=lf
+
+# The CodeMirror bundle is built from editor/ (npm run build): no text diffs, and GitHub
+# does not count it as the language of the repository.
+src/main/resources/com/devavaxp/notes/editor.js -diff linguist-generated=true

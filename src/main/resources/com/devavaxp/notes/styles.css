@@ -1,0 +1,330 @@
+/* =====================================================================
+   Devava Notes — same palette and controls as Devava Reader and Kardex
+   ===================================================================== */
+
+.root {
+    -fx-font-family: "System";
+    -fx-font-size: 13px;
+    -fx-background-color: -bg;
+
+    -bg: #F5F5F7;
+    -surface: #FFFFFF;
+    -surface-hover: #F0F0F3;
+    -border: #E4E4E9;
+    -text: #1C1C21;
+    -text-muted: #6E6E78;
+    -text-faint: #9A9AA5;
+    -accent: #4F46E5;
+    -accent-hover: #4338CA;
+    -accent-soft: #EEF0FF;
+    -danger: #DC2626;
+
+    /* Keyboard focus stays visible, in the accent color */
+    -fx-accent: -accent;
+    -fx-focus-color: -accent;
+    -fx-faint-focus-color: transparent;
+}
+
+.label {
+    -fx-text-fill: -text;
+}
+
+/* ---------- Buttons, menus and fields (from Devava Reader) ---------- */
+
+.button, .menu-button {
+    -fx-background-color: -surface;
+    -fx-background-radius: 8;
+    -fx-border-color: -border;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+    -fx-text-fill: -text;
+    -fx-padding: 7 14;
+    -fx-cursor: hand;
+    -fx-font-size: 13px;
+}
+
+.button:hover, .menu-button:hover {
+    -fx-background-color: -surface-hover;
+}
+
+.button:pressed, .menu-button:pressed, .menu-button:showing {
+    -fx-background-color: -border;
+}
+
+.button:focused, .menu-button:focused {
+    -fx-border-color: -accent;
+}
+
+.button.primary {
+    -fx-background-color: -accent;
+    -fx-border-color: transparent;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+}
+
+.button.primary:hover {
+    -fx-background-color: -accent-hover;
+}
+
+.button.primary:focused {
+    -fx-border-color: -accent-hover;
+}
+
+.button.danger {
+    -fx-background-color: -danger;
+    -fx-border-color: transparent;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+}
+
+.button.danger:hover {
+    -fx-background-color: #B91C1C;
+}
+
+.button.flat, .menu-button.flat {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+}
+
+.button.flat:hover, .menu-button.flat:hover {
+    -fx-background-color: -surface-hover;
+}
+
+.button.flat:focused, .menu-button.flat:focused {
+    -fx-border-color: -accent;
+}
+
+.menu-button > .arrow-button {
+    -fx-padding: 0;
+}
+
+.menu-button > .arrow-button > .arrow {
+    -fx-padding: 0;
+    -fx-shape: null;
+    -fx-background-color: transparent;
+}
+
+.menu-button.more-menu {
+    -fx-font-size: 18px;
+    -fx-padding: 3 10 5 10;
+}
+
+.text-field {
+    -fx-background-color: -surface;
+    -fx-background-radius: 8;
+    -fx-border-color: -border;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+    -fx-padding: 6 10;
+    -fx-text-fill: -text;
+    -fx-prompt-text-fill: -text-faint;
+    -fx-highlight-fill: -accent-soft;
+    -fx-highlight-text-fill: -text;
+}
+
+.text-field:focused {
+    -fx-border-color: -accent;
+}
+
+.context-menu {
+    -fx-background-color: -surface;
+    -fx-background-radius: 10;
+    -fx-border-color: -border;
+    -fx-border-radius: 10;
+    -fx-padding: 6;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.12), 16, 0, 0, 4);
+}
+
+.menu-item {
+    -fx-background-radius: 6;
+    -fx-padding: 7 14;
+}
+
+.menu-item .label {
+    -fx-text-fill: -text;
+}
+
+.menu-item:focused, .menu-item:hover {
+    -fx-background-color: -accent-soft;
+}
+
+.menu-item.danger .label {
+    -fx-text-fill: -danger;
+}
+
+.separator .line {
+    -fx-border-color: -border transparent transparent transparent;
+}
+
+.tooltip {
+    -fx-background-color: #2A2A32;
+    -fx-text-fill: white;
+    -fx-background-radius: 6;
+    -fx-padding: 6 10;
+    -fx-font-size: 12px;
+}
+
+.dialog {
+    -fx-background-color: -surface;
+}
+
+.dialog .header-panel {
+    -fx-background-color: -surface;
+}
+
+.dialog .header-panel .label {
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -text;
+}
+
+.dialog .content.label {
+    -fx-text-fill: -text-muted;
+    -fx-font-size: 13px;
+}
+
+.dialog .button-bar .container {
+    -fx-background-color: -surface;
+}
+
+.dialog .button-bar .button {
+    -fx-min-width: 90;
+}
+
+/* ---------- Top bar ---------- */
+
+.bar {
+    -fx-background-color: -surface;
+    -fx-border-color: transparent transparent -border transparent;
+    -fx-padding: 10 16;
+}
+
+.app-name {
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+}
+
+.crumb {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+}
+
+/* ---------- Home ---------- */
+
+.home-scroll, .home-scroll > .viewport {
+    -fx-background-color: -bg;
+    -fx-background: -bg;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+.home {
+    -fx-padding: 28 32;
+}
+
+.section-title {
+    -fx-font-size: 11.5px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -text-faint;
+}
+
+.button.card {
+    -fx-background-color: -surface;
+    -fx-background-radius: 12;
+    -fx-border-color: -border;
+    -fx-border-radius: 12;
+    -fx-padding: 16 18;
+    -fx-pref-width: 240;
+    -fx-min-height: 88;
+    -fx-alignment: top-left;
+}
+
+.button.card:hover, .button.card:focused {
+    -fx-border-color: -accent;
+}
+
+.card-title {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+}
+
+.card-meta {
+    -fx-font-size: 12px;
+    -fx-text-fill: -text-muted;
+}
+
+.placeholder {
+    -fx-padding: 32;
+}
+
+.empty-title {
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+}
+
+.empty-text {
+    -fx-text-fill: -text-muted;
+}
+
+/* ---------- A notebook ---------- */
+
+.split-pane {
+    -fx-background-color: -surface;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+.split-pane > .split-pane-divider {
+    -fx-background-color: -border;
+    -fx-padding: 0 0.5 0 0.5;
+}
+
+.list-view.notes, .list-view.notes:focused {
+    -fx-background-color: -bg;
+    -fx-background-insets: 0;
+    -fx-padding: 8 6;
+}
+
+.notes .list-cell {
+    -fx-background-color: transparent;
+    -fx-background-radius: 8;
+    -fx-text-fill: -text;
+    -fx-padding: 8 12;
+    -fx-font-size: 13.5px;
+}
+
+.notes .list-cell:filled:hover {
+    -fx-background-color: -surface-hover;
+}
+
+.notes .list-cell:filled:selected {
+    -fx-background-color: -accent-soft;
+    -fx-text-fill: -text;
+    -fx-font-weight: bold;
+}
+
+.notes:focused .list-cell:filled:selected {
+    -fx-background-color: -accent-soft;
+    -fx-border-color: -accent;
+    -fx-border-radius: 8;
+}
+
+.notes .placeholder .label {
+    -fx-text-fill: -text-faint;
+}
+
+.note-header {
+    -fx-background-color: -surface;
+    -fx-border-color: transparent transparent -border transparent;
+    -fx-padding: 8 16 8 24;
+}
+
+.note-title {
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+}
+
+.status-error {
+    -fx-font-size: 12px;
+    -fx-text-fill: -danger;
+}
