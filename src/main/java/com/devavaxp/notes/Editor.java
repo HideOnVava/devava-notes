@@ -62,9 +62,10 @@ final class Editor {
 
     /**
      * {@code onChange}: the text was edited. {@code onLink}: a link was followed (the page itself
-     * never leaves). {@code onOpen}: a [[link]] to a note. {@code onTag}: a #tag.
+     * never leaves). {@code onOpen}: a [[link]] to a note. {@code onTag}: a #tag. {@code onPaste}:
+     * a paste in which the page found no text on the clipboard (a picture may be there).
      */
-    Editor(Runnable onChange, Consumer<String> onLink, Consumer<String> onOpen, Consumer<String> onTag) {
+    Editor(Runnable onChange, Consumer<String> onLink, Consumer<String> onOpen, Consumer<String> onTag, Runnable onPaste) {
         engine.setOnAlert(e -> {
             String message = e.getData();
             if (message.equals("changed")) {
@@ -77,7 +78,9 @@ final class Editor {
                 Platform.runLater(() -> onOpen.accept(message.substring(5)));
             } else if (message.startsWith("tag:")) {
                 Platform.runLater(() -> onTag.accept(message.substring(4)));
-            } else if (message.startsWith("copy:")) {   // the Copy button of a code block (the page has no clipboard of its own)
+            } else if (message.equals("paste")) {
+                Platform.runLater(onPaste);
+            } else if (message.startsWith("copy:")) {   // copy, cut and the Copy button of a code block (see main.js)
                 Clipboard.getSystemClipboard().setContent(Map.of(DataFormat.PLAIN_TEXT, message.substring(5)));
             } else if (message.startsWith("error:")) {
                 report(message.substring(6));

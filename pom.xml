@@ -6,7 +6,7 @@
 
     <groupId>com.devavaxp</groupId>
     <artifactId>devava-notes</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <name>Devava Notes</name>
     <description>Desktop notes app whose notebooks specialize in what they hold, by devava XP Studios.</description>
 

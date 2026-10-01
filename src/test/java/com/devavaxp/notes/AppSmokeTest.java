@@ -10,6 +10,10 @@ import javafx.scene.control.DialogPane;
 import javafx.scene.control.TextField;
 import javafx.scene.image.PixelFormat;
 import javafx.scene.image.WritableImage;
+import javafx.scene.input.Clipboard;
+import javafx.scene.input.DataFormat;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.web.WebEngine;
 import javafx.stage.Stage;
 import javafx.stage.Window;
@@ -24,7 +28,9 @@ import java.awt.image.BufferedImage;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -34,9 +40,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 /**
- * Opens the real window, CodeMirror included, and uses it as a person would minus the keyboard:
- * {@code ./mvnw verify -Dsmoke=true}. Screenshots of each step land in target/smoke. It never
- * presses Copy, which would overwrite the clipboard of whoever runs it.
+ * Opens the real window, CodeMirror included, and uses it as a person would, mostly without the
+ * keyboard: {@code ./mvnw verify -Dsmoke=true}. Screenshots of each step land in target/smoke. The
+ * clipboard test puts back what the clipboard of whoever runs it held (as far as JavaFX can read it).
  */
 @EnabledIfSystemProperty(named = "smoke", matches = "true")
 class AppSmokeTest {
@@ -148,6 +154,38 @@ class AppSmokeTest {
         waitFor("the [[link]] to open its note", () -> fx(() -> readingList.equals(app.openPath())));
         assertEquals(List.of(), fx(() -> List.copyOf(app.editor.errors)));
         fx(() -> run(stage::close));
+    }
+
+    /** WebKit in JavaFX empties the clipboard when a page writes to it: copy and cut go through Java. */
+    @Test
+    void copiesCutsAndPastesWithTheSystemClipboard(@TempDir Path home) throws Exception {
+        Stage[] window = new Stage[1];
+        NotesApp app = open(home, window);
+        WebEngine engine = fx(() -> app.editor.view.getEngine());
+        NotebookType general = NotebookType.GENERAL;
+        Path notebook = fx(() -> app.createNotebook("Ideas", general));
+        fx(() -> run(() -> app.openNotebook(notebook)));
+        Path note = fx(() -> app.createNote(general.kinds().get(0), "Clipboard", ""));
+        Map<DataFormat, Object> saved = fx(AppSmokeTest::clipboard);
+        try {
+            fx(() -> engine.executeScript("insertText('alpha beta'); selectMatch('beta')"));
+            press(app, KeyCode.C);
+            assertEquals("beta", fx(() -> Clipboard.getSystemClipboard().getString()));
+            fx(() -> engine.executeScript("selectMatch('alpha')"));
+            press(app, KeyCode.X);
+            assertEquals("alpha", fx(() -> Clipboard.getSystemClipboard().getString()));
+            press(app, KeyCode.END);
+            press(app, KeyCode.V);
+            waitFor("the cut word pasted at the end", () -> Files.readString(note).equals(" betaalpha"));
+
+            // A screenshot: no text on the clipboard, a picture saved in attachments/.
+            fx(() -> Clipboard.getSystemClipboard().setContent(Map.of(DataFormat.IMAGE, new WritableImage(3, 2))));
+            press(app, KeyCode.V);
+            waitFor("the picture pasted", () -> Files.readString(note).contains("![](<attachments/Pasted image "));
+        } finally {
+            fx(() -> Clipboard.getSystemClipboard().setContent(saved));
+        }
+        fx(() -> run(window[0]::close));
     }
 
     @Test
@@ -323,6 +361,30 @@ class AppSmokeTest {
         TextField field = (TextField) stage.getScene().lookup("#property-" + key);
         field.setText(text);
         field.fireEvent(new ActionEvent());
+    }
+
+    /** Ctrl + the key, as the keyboard sends it to the editor. */
+    private static void press(NotesApp app, KeyCode key) throws Exception {
+        fx(() -> run(() -> {
+            app.editor.view.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED, "", "", key, false, true, false, false));
+            app.editor.view.fireEvent(new KeyEvent(KeyEvent.KEY_RELEASED, "", "", key, false, true, false, false));
+        }));
+        Thread.sleep(300);
+    }
+
+    /** What the clipboard holds now, to put it back after the test. */
+    private static Map<DataFormat, Object> clipboard() {
+        Clipboard clip = Clipboard.getSystemClipboard();
+        Map<DataFormat, Object> content = new HashMap<>();
+        for (DataFormat format : clip.getContentTypes()) {
+            try {
+                Object o = clip.getContent(format);
+                if (o != null) content.put(format, o);
+            } catch (RuntimeException ignored) {
+                // a format JavaFX cannot read back
+            }
+        }
+        return content;
     }
 
     private static Void run(Runnable r) {

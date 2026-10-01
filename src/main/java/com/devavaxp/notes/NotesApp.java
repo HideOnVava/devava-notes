@@ -95,7 +95,6 @@ public final class NotesApp extends Application {
     private static final KeyCombination READ = new KeyCodeCombination(KeyCode.E, KeyCombination.SHORTCUT_DOWN);
     private static final KeyCombination QUICK_OPEN = new KeyCodeCombination(KeyCode.O, KeyCombination.SHORTCUT_DOWN);
     private static final KeyCombination SEARCH = new KeyCodeCombination(KeyCode.F, KeyCombination.SHORTCUT_DOWN, KeyCombination.SHIFT_DOWN);
-    private static final KeyCombination PASTE = new KeyCodeCombination(KeyCode.V, KeyCombination.SHORTCUT_DOWN);
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ENGLISH)
             .withZone(ZoneId.systemDefault());
 
@@ -144,7 +143,7 @@ public final class NotesApp extends Application {
         Locale.setDefault(Locale.ENGLISH);   // the app speaks English, the stock dialogs' "Cancel" and the calendars too
         this.stage = stage;
         this.vault = vault;
-        editor = new Editor(this::edited, this::openLink, this::openTitle, tag -> browser.showTag(tag));
+        editor = new Editor(this::edited, this::openLink, this::openTitle, tag -> browser.showTag(tag), this::paste);
         browser = new NotebookView(this);
         properties = new PropertiesPanel(this::propertiesChanged, this::openLink, this::usedValues);
         autosave.setOnFinished(e -> save());
@@ -208,8 +207,6 @@ public final class NotesApp extends Application {
                 e.consume();
             } else if (SEARCH.match(e)) {
                 search();
-                e.consume();
-            } else if (PASTE.match(e) && note != null && !reading && editor.view.isFocused() && pasteImages()) {
                 e.consume();
             }
         });
@@ -958,23 +955,25 @@ public final class NotesApp extends Application {
         editor.setTitles(vault.everyNote().stream().map(Vault.Place::title).distinct().sorted(Vault::compareNatural).toList());
     }
 
-    /** Ctrl+V with an image (a screenshot, "Copy image") or image files: into attachments/ and the note. */
-    private boolean pasteImages() {
+    /**
+     * A paste in which the editor found no text (it pastes text itself): an image (a screenshot,
+     * "Copy image") or image files go to attachments/ and into the note. Text is pasted here too, for
+     * when the clipboard was busy (another program reading it) as the editor looked.
+     */
+    private void paste() {
         Clipboard clip = Clipboard.getSystemClipboard();
+        if (note == null || reading) return;
         try {
-            if (clip.hasFiles() && clip.getFiles().stream().anyMatch(f -> Vault.isImage(f.toPath()))) {
+            if (clip.hasString()) {   // also text copied with a picture of it, as from a spreadsheet
+                editor.insert(clip.getString());
+            } else if (clip.hasFiles() && clip.getFiles().stream().anyMatch(f -> Vault.isImage(f.toPath()))) {
                 attachImages(clip.getFiles());
-                return true;
-            }
-            if (clip.hasImage() && !clip.hasString()) {   // text copied with a picture of it (a spreadsheet) pastes as text
+            } else if (clip.hasImage()) {
                 editor.insert(imageLink(Vault.attach(notebook, png(clip.getImage()))));
-                return true;
             }
         } catch (IOException e) {
             error("Couldn't paste the image", reason(e));
-            return true;
         }
-        return false;
     }
 
     /** The open note, for the tests. */

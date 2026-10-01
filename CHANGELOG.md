@@ -5,6 +5,15 @@ All notable changes to Devava Notes are documented here. The format follows
 [Semantic Versioning](https://semver.org/). Each release on GitHub takes its notes from
 the matching section of this file.
 
+## [1.0.1] - 2026-09-30
+
+### Fixed
+- Copying or cutting text in a note (`Ctrl+C`, `Ctrl+X` or the right-click menu) emptied the
+  clipboard instead of filling it, so pasting afterwards brought nothing, and text that was cut
+  was lost. Both now put the text on the clipboard, ready to paste in the app or anywhere else.
+- A picture on the clipboard can also be pasted with the right-click menu's *Paste*, not only
+  with `Ctrl+V`.
+
 ## [1.0.0] - 2026-09-28
 
 The first version of Devava Notes, for Windows.
@@ -49,4 +58,5 @@ The first version of Devava Notes, for Windows.
 - A Windows installer (per user, no administrator rights needed) and a portable ZIP; no Java
   to install.
 
+[1.0.1]: https://github.com/HideOnVava/devava-notes/releases/tag/v1.0.1
 [1.0.0]: https://github.com/HideOnVava/devava-notes/releases/tag/v1.0.0

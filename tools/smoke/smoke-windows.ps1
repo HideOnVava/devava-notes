@@ -3,7 +3,7 @@
     Smoke test of the Windows build: installs the setup.exe silently (or uses an app image),
     opens the app on a sample notebook, drives it with the keyboard, saves screenshots and the
     app's log, then closes it and checks the exit code, the log, the picture shown in the
-    reading view and the note it created.
+    reading view and the note it created and wrote with copy, cut and paste.
 
 .DESCRIPTION
     It takes the keyboard for about half a minute: run it on a machine nobody is using (the
@@ -131,6 +131,11 @@ $reading = Shot "03-reading"
 Key "^n"                                      # a new note: its title dialog has the focus
 DialogKey "Written by the smoke test"; DialogKey "{ENTER}" 3
 Shot "04-new-note" | Out-Null
+# Copy, cut and paste through the system clipboard (version 1.0.0 emptied it on copy and cut).
+Key "Copied twice"
+Key "+{HOME}"; Key "^c"; Key "{END}"; Key "^v"   # the line, pasted after itself
+Key "+{HOME}"; Key "^x"; Key "^v" 2              # all of it cut, and pasted back
+Shot "05-copy-paste" | Out-Null
 
 $windowProc = Get-Process -Name "Devava Notes" | Where-Object { $_.MainWindowTitle -like "*Devava Notes" } | Select-Object -First 1
 $windowProc.CloseMainWindow() | Out-Null
@@ -142,7 +147,9 @@ if ($log -match "(?i)exception|\[editor\.js\]") { Write-Host $log; throw "The lo
 $magenta = Magenta $reading
 Write-Host "magenta pixels in the reading view: $magenta"
 if ($magenta -lt 5000) { throw "The picture of the note is not shown in the reading view" }
-if (-not (Test-Path (Join-Path $notebook "Written by the smoke test.md"))) {
-    Get-ChildItem $notebook; throw "The new note was not created"
-}
+$written = Join-Path $notebook "Written by the smoke test.md"
+if (-not (Test-Path $written)) { Get-ChildItem $notebook; throw "The new note was not created" }
+$text = Get-Content $written -Raw -Encoding UTF8
+Write-Host "the new note holds: $text"
+if ($text -ne "Copied twiceCopied twice") { throw "Copy, cut and paste did not give the expected text" }
 Write-Host "Smoke test passed"

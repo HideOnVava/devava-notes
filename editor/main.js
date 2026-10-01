@@ -129,12 +129,37 @@ const followLinks = EditorView.domEventHandlers({
     }
 });
 
+// Copy and cut go through Java: when a page writes to the clipboard (as CodeMirror's own copy does),
+// JavaFX's WebKit empties it instead. Java gets the text CodeMirror would copy: the selections, or the
+// cursors' whole lines when nothing is selected. A paste with no text (a screenshot, image files) asks
+// Java too, which saves the pictures and puts them in the note.
+function copy(e, view) {
+    const {state} = view, selected = state.selection.ranges.filter(r => !r.empty);
+    const ranges = selected.length ? selected : [...new Set(state.selection.ranges.map(r => state.doc.lineAt(r.head).number))]
+        .map(n => state.doc.line(n)).map(line => ({from: line.from, to: Math.min(line.to + 1, state.doc.length)}));
+    tell("copy:" + ranges.map(r => state.sliceDoc(r.from, r.to)).join(selected.length ? state.lineBreak : ""));
+    if (e.type === "cut") view.dispatch({changes: ranges, scrollIntoView: true, userEvent: "delete.cut"});
+    e.preventDefault();
+    return true;
+}
+
+const clipboard = EditorView.domEventHandlers({
+    copy,
+    cut: copy,
+    paste(e) {
+        if (e.clipboardData?.getData("text/plain")) return false;   // text: CodeMirror pastes it
+        e.preventDefault();
+        tell("paste");
+        return true;
+    }
+});
+
 const extensions = [
     highlightSpecialChars(), history(), drawSelection(), dropCursor(), indentOnInput(), bracketMatching(),
     closeBrackets(), highlightSelectionMatches(), placeholder("Start writing…"),
     markdown({base: markdownLanguage, codeLanguages: languages}),
     highlighters.map(h => syntaxHighlighting(h)),
-    fencedCode, marking(LINK, "cm-wikilink"), marking(TAG, "cm-tag", text => /\p{L}/u.test(text)), followLinks,
+    fencedCode, marking(LINK, "cm-wikilink"), marking(TAG, "cm-tag", text => /\p{L}/u.test(text)), followLinks, clipboard,
     autocompletion({override: [linkCompletions], icons: false}),
     EditorView.lineWrapping,
     keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, indentWithTab]),
