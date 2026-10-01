@@ -44,6 +44,8 @@ import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.devavaxp.notes.Text.t;
+
 /**
  * How a notebook is browsed. On the left, the views of its type; a view that groups by a property
  * opens into that property's values. Next to it, the notes of the chosen view or value, as a list
@@ -77,7 +79,7 @@ final class NotebookView {
     private final TreeView<Choice> views = new TreeView<>(new TreeItem<>());
     private final TreeTableView<Row> table = new TreeTableView<>(new TreeItem<>());
     private final TextField filter = new TextField();
-    private final ToggleButton asList = new ToggleButton("List"), asTable = new ToggleButton("Table");
+    private final ToggleButton asList = new ToggleButton(t("List")), asTable = new ToggleButton(t("Table"));
     private final Set<String> expanded = new HashSet<>();
     private NotebookType type = NotebookType.GENERAL;
     private List<Entry> entries = List.of();
@@ -109,7 +111,7 @@ final class NotebookView {
         });
 
         table.setShowRoot(false);
-        table.setPlaceholder(new Label("No notes here"));
+        table.setPlaceholder(new Label(t("No notes here")));
         table.setColumnResizePolicy(TreeTableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         table.getSelectionModel().selectedItemProperty().addListener((o, old, item) -> {
             Entry e = item == null ? null : item.getValue().entry();
@@ -132,7 +134,7 @@ final class NotebookView {
             else if (e.getCode() == KeyCode.DELETE) app.trashNote(entry.path());
         });
 
-        filter.setPromptText("Filter");
+        filter.setPromptText(t("Filter"));
         filter.textProperty().addListener((o, was, now) -> showNotes());
         ToggleGroup mode = new ToggleGroup();
         asList.setToggleGroup(mode);
@@ -250,7 +252,7 @@ final class NotebookView {
         for (View v : type.views()) {
             List<Group> groups = rows(type, v, null, "", entries);
             long count = groups.stream().flatMap(g -> g.notes().stream()).distinct().count();
-            TreeItem<Choice> item = new TreeItem<>(new Choice(v, null, v.name(), (int) count));
+            TreeItem<Choice> item = new TreeItem<>(new Choice(v, null, t(v.name()), (int) count));
             remember(item, v.name());
             if (v.groupBy() != null) {
                 // Each value under its view, and "graphs/dijkstra" under "graphs".
@@ -324,15 +326,16 @@ final class NotebookView {
         select(open);
     }
 
+    /** A group's name: its value (a choice in the app's language), or "No status" for the notes without one. */
     private String label(View v, String value) {
-        if (!value.isEmpty()) return value;
-        String key = v.groupBy();
-        return "No " + type.fields(v).stream().filter(f -> f.key().equals(key)).findFirst().map(Field::label).orElse(key).toLowerCase(Locale.ROOT);
+        Field field = type.fields(v).stream().filter(f -> f.key().equals(v.groupBy())).findFirst().orElse(null);
+        if (!value.isEmpty()) return field != null && field.input() == Input.CHOICE ? t(value) : value;
+        return t("No %s", (field == null ? v.groupBy() : t(field.label())).toLowerCase(Text.locale()));
     }
 
     /** The title, with (in the list) a second line: the note's badge, dates and choices. */
     private TreeTableColumn<Row, Row> titleColumn(List<Field> subtitle) {
-        TreeTableColumn<Row, Row> c = new TreeTableColumn<>("Title");
+        TreeTableColumn<Row, Row> c = new TreeTableColumn<>(t("Title"));
         c.setCellValueFactory(cell -> new ReadOnlyObjectWrapper<>(cell.getValue().getValue()));
         c.setComparator(Comparator.comparing((Row r) -> r.entry() != null ? r.entry().title() : r.label(), Vault::compareNatural));
         c.setPrefWidth(240);
@@ -351,7 +354,8 @@ final class NotebookView {
                 }
                 Note note = row.entry().note();
                 String line = subtitle.stream().filter(f -> f.input() == Input.CHOICE && !f.key().equals("level") || f.input() == Input.DATE)
-                        .map(f -> note.get(f.key())).filter(s -> !s.isEmpty()).collect(Collectors.joining(" · "));
+                        .map(f -> f.input() == Input.CHOICE ? t(note.get(f.key())) : note.get(f.key())).filter(s -> !s.isEmpty())
+                        .collect(Collectors.joining(" · "));
                 Badge badge = subtitle.isEmpty() ? null : type.badge(note);
                 HBox second = new HBox(6);
                 if (badge != null) second.getChildren().add(colored(new Label(badge.text()), badge.color()));
@@ -365,18 +369,19 @@ final class NotebookView {
     }
 
     private TreeTableColumn<Row, String> column(Field f) {
-        TreeTableColumn<Row, String> c = new TreeTableColumn<>(f.label());
+        TreeTableColumn<Row, String> c = new TreeTableColumn<>(t(f.label()));
         c.setCellValueFactory(cell -> {
             Entry e = cell.getValue().getValue().entry();
             return new ReadOnlyStringWrapper(e == null ? "" : String.join(", ", type.values(e.note(), f.key())));
         });
-        if (f.key().equals("difficulty") || f.key().equals("level")) {
-            // In the judge's colors (the difficulty) or the level's.
+        if (f.input() == Input.CHOICE || f.key().equals("difficulty")) {
+            // A choice in the app's language; the difficulty and the level in the judge's colors or the level's.
             c.setCellFactory(col -> new TreeTableCell<>() {
                 @Override
                 protected void updateItem(String text, boolean empty) {
                     super.updateItem(text, empty);
-                    setText(empty ? null : text);
+                    setText(empty || text == null ? null : f.input() == Input.CHOICE ? t(text) : text);
+                    if (!f.key().equals("difficulty") && !f.key().equals("level")) return;
                     Row row = getTableRow() == null ? null : getTableRow().getItem();
                     Badge badge = empty || row == null || row.entry() == null ? null : type.badge(row.entry().note());
                     String color = badge == null ? "" : f.key().equals("level") ? Judges.levelColor(text) : badge.color();
@@ -433,7 +438,8 @@ final class NotebookView {
             if (view.kind() != null && !type.kindOf(e.note()).id().equals(view.kind())) continue;
             if (view.only() != null && !type.matches(e.note(), view.only())) continue;
             if (value != null && !has(type.values(e.note(), view.groupBy()), value)) continue;
-            if (!wanted.isEmpty() && !fold(e.title() + " " + fields.stream().map(f -> String.join(" ", type.values(e.note(), f.key())))
+            if (!wanted.isEmpty() && !fold(e.title() + " " + fields.stream().map(f -> String.join(" ", type.values(e.note(), f.key()))
+                    + (f.input() == Input.CHOICE ? " " + t(e.note().get(f.key())) : ""))   // "resuelto" finds "Solved" too
                     .collect(Collectors.joining(" ")) + " " + String.join(" ", type.values(e.note(), "tags"))).contains(wanted)) continue;
             notes.add(e);
         }

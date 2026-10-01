@@ -6,6 +6,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.devavaxp.notes.Text.t;
+
 /**
  * What a notebook specializes in: the kinds of notes it holds, with their properties and the text a
  * new one starts with, and the views to browse them. A notebook keeps its type in .notebook.json.
@@ -80,7 +82,7 @@ record NotebookType(String id, String name, String description, List<Kind> kinds
             "Free-form notes, organized with tags.",
             List.of(new Kind("note", "Note", List.of(TAGS, PINNED), "")),
             List.of(new View("All notes", null, null, "-modified", null),
-                    new View("Pinned", null, "pinned", "-modified", null),
+                    new View("Pinned notes", null, "pinned", "-modified", null),
                     new View("By tag", null, null, "title", "tags")));
 
     static final NotebookType CLASS_NOTES = new NotebookType("class-notes", "Class Notes",
@@ -302,11 +304,11 @@ record NotebookType(String id, String name, String description, List<Kind> kinds
         if (course() && (kind.equals("assignment") || kind.equals("exam"))) return Agenda.badge(note, LocalDate.now());
         if (kind.equals("exercise")) {
             String level = note.get("level");
-            return level.isEmpty() ? null : new Badge(level, Judges.levelColor(level));
+            return level.isEmpty() ? null : new Badge(t(level), Judges.levelColor(level));
         }
         if (this != COMPETITIVE_PROGRAMMING || !kind.equals("problem")) return null;
         String text = note.get("difficulty").isEmpty() ? Judges.level(note) : note.get("difficulty");
-        return text.isEmpty() ? null : new Badge(text, Judges.color(note));
+        return text.isEmpty() ? null : new Badge(t(text), Judges.color(note));
     }
 
     /** The properties of a view's notes: those of its kind, or of every kind once. */

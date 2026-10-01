@@ -23,9 +23,11 @@ import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
+import javafx.scene.control.Menu;
 import javafx.scene.control.MenuButton;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.RadioButton;
+import javafx.scene.control.RadioMenuItem;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.SplitPane;
@@ -85,6 +87,8 @@ import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.devavaxp.notes.Text.t;
+
 /**
  * Devava Notes. Home shows the notebooks; a notebook shows the views of its type, the notes of the
  * chosen view, and the open note: its properties above, and below it the text, to write it or to
@@ -97,8 +101,8 @@ public final class NotesApp extends Application {
     private static final KeyCombination READ = new KeyCodeCombination(KeyCode.E, KeyCombination.SHORTCUT_DOWN);
     private static final KeyCombination QUICK_OPEN = new KeyCodeCombination(KeyCode.O, KeyCombination.SHORTCUT_DOWN);
     private static final KeyCombination SEARCH = new KeyCodeCombination(KeyCode.F, KeyCombination.SHORTCUT_DOWN, KeyCombination.SHIFT_DOWN);
-    private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ENGLISH)
-            .withZone(ZoneId.systemDefault());
+    /** Windows' language, before the app sets its own: the app's unless ⋯ → Language picked another. */
+    private static final String SYSTEM_LANGUAGE = Locale.getDefault().getLanguage();
 
     Editor editor;
     NotebookView browser;
@@ -142,7 +146,10 @@ public final class NotesApp extends Application {
     }
 
     void show(Stage stage, Vault vault) {
-        Locale.setDefault(Locale.ENGLISH);   // the app speaks English, the stock dialogs' "Cancel" and the calendars too
+        String language = vault.setting("language");
+        Text.use(language.isEmpty() ? SYSTEM_LANGUAGE : language);
+        Locale.setDefault(Text.locale());   // the stock dialogs' "Cancel" and the calendars speak it too
+        mode.setText(t("Read"));
         this.stage = stage;
         this.vault = vault;
         editor = new Editor(this::edited, this::openLink, this::openTitle, tag -> browser.showTag(tag), this::paste);
@@ -160,7 +167,7 @@ public final class NotesApp extends Application {
             try {
                 attachImages(e.getDragboard().getFiles());
             } catch (IOException ex) {
-                error("Couldn't add the image", reason(ex));
+                error(t("Couldn't add the image"), reason(ex));
             }
             e.setDropCompleted(true);
             e.consume();
@@ -176,7 +183,7 @@ public final class NotesApp extends Application {
         mode.setMinWidth(Region.USE_PREF_SIZE);
         kindName.getStyleClass().add("kind");
         status.getStyleClass().add("status-error");
-        mode.setTooltip(new Tooltip("Read or edit (Ctrl+E)"));
+        mode.setTooltip(new Tooltip(t("Read or edit (Ctrl+E)")));
         mode.setOnAction(e -> toggleMode());
         actions.getChildren().setAll(status, tools, mode);
         actions.setAlignment(Pos.CENTER_RIGHT);
@@ -237,11 +244,11 @@ public final class NotesApp extends Application {
         if (!leaveNote()) return;
         notebook = null;
         note = null;
-        Button add = button("+ New notebook", "primary", e -> newNotebook());
+        Button add = button(t("+ New notebook"), "primary", e -> newNotebook());
         add.setTooltip(new Tooltip("Ctrl+N"));
-        bar.getChildren().setAll(brand(), grow(), finder(), add, more(item("Search in all notes…", this::search),
-                item("Import notebook…", this::importNotebook), item("Open data folder", () -> showInFolder(vault.root)),
-                new SeparatorMenuItem(), themeItem()));
+        bar.getChildren().setAll(brand(), grow(), finder(), add, more(item(t("Search in all notes…"), this::search),
+                item(t("Import notebook…"), this::importNotebook), item(t("Open data folder"), () -> showInFolder(vault.root)),
+                new SeparatorMenuItem(), themeItem(), languageMenu()));
         root.setCenter(homeContent(true));
         stage.setTitle(NAME);
         refreshTitles();
@@ -268,7 +275,7 @@ public final class NotesApp extends Application {
         glass.getStyleClass().add("icon");
         glass.setScaleX(0.62);
         glass.setScaleY(0.62);
-        Label text = new Label("Quick open…"), keys = new Label("Ctrl+O");
+        Label text = new Label(t("Quick open…")), keys = new Label("Ctrl+O");
         text.getStyleClass().add("finder-text");
         keys.getStyleClass().add("finder-keys");
         HBox content = new HBox(8, new Group(glass), text, grow(), keys);
@@ -278,12 +285,12 @@ public final class NotesApp extends Application {
         find.getStyleClass().add("finder");
         find.setOnAction(e -> quickOpen());
         find.setFocusTraversable(false);   // focused, it would look like a field being typed in; Ctrl+O reaches it
-        find.setTooltip(new Tooltip("Open any note by its title (Ctrl+O); search all their text with Ctrl+Shift+F"));
+        find.setTooltip(new Tooltip(t("Open any note by its title (Ctrl+O); search all their text with Ctrl+Shift+F")));
         return find;
     }
 
     private CheckMenuItem themeItem() {
-        CheckMenuItem item = new CheckMenuItem("Dark theme");
+        CheckMenuItem item = new CheckMenuItem(t("Dark theme"));
         item.setSelected(dark);
         item.setOnAction(e -> setDark(item.isSelected()));
         return item;
@@ -299,6 +306,46 @@ public final class NotesApp extends Application {
         }
     }
 
+    /** English or Español; the window opens again in the one picked, where it was. */
+    private Menu languageMenu() {
+        Menu menu = new Menu(t("Language"));
+        ToggleGroup languages = new ToggleGroup();
+        for (String[] language : new String[][]{{Text.ENGLISH, "English"}, {Text.SPANISH, "Español"}}) {
+            RadioMenuItem item = new RadioMenuItem(language[1]);
+            item.setToggleGroup(languages);
+            item.setSelected(language[0].equals(Text.language()));
+            item.setOnAction(e -> setLanguage(language[0]));
+            menu.getItems().add(item);
+        }
+        return menu;
+    }
+
+    /**
+     * Remembers the language and replaces this window with a new one in it, showing the same
+     * notebook and note; returns the new window's app (this one when nothing changes).
+     */
+    NotesApp setLanguage(String language) {
+        if (language.equals(Text.language()) || !leaveNote()) return this;
+        try {
+            vault.setSetting("language", language);
+        } catch (IOException e) {
+            error(t("Couldn't save the language"), reason(e));
+            return this;
+        }
+        Stage next = new Stage();
+        next.setX(stage.getX());
+        next.setY(stage.getY());
+        next.setWidth(stage.getWidth());
+        next.setHeight(stage.getHeight());
+        next.setMaximized(stage.isMaximized());
+        NotesApp app = new NotesApp();
+        app.show(next, vault);
+        if (notebook != null) app.openNotebook(notebook);
+        if (note != null) app.openNote(note);
+        stage.close();
+        return app;
+    }
+
     private void applyTheme() {
         root.getStyleClass().remove("dark");
         if (dark) root.getStyleClass().add("dark");
@@ -311,22 +358,22 @@ public final class NotesApp extends Application {
             notebooks = vault.notebooks();
         } catch (IOException e) {
             notebooks = List.of();
-            if (showErrors) error("Couldn't open your notes", vault.root + "\n\n" + reason(e));
+            if (showErrors) error(t("Couldn't open your notes"), vault.root + "\n\n" + reason(e));
         }
         if (notebooks.isEmpty()) {
             ImageView logo = new ImageView(icon);
             logo.setFitWidth(72);
             logo.setFitHeight(72);
             logo.setSmooth(true);
-            VBox empty = placeholder("Welcome to Devava Notes", "A notebook keeps the notes of one subject, course or project.");
+            VBox empty = placeholder(t("Welcome to Devava Notes"), t("A notebook keeps the notes of one subject, course or project."));
             empty.getChildren().add(0, logo);
-            empty.getChildren().add(button("+ New notebook", "primary", e -> newNotebook()));
+            empty.getChildren().add(button(t("+ New notebook"), "primary", e -> newNotebook()));
             return empty;
         }
         // On the left the notebooks; on the right what is coming and what was written last.
         FlowPane cards = new FlowPane(16, 16);
         cards.getChildren().setAll(notebooks.stream().map(this::card).toList());
-        Label title = new Label("Notebooks");
+        Label title = new Label(t("Notebooks"));
         title.getStyleClass().add("page-title");
         VBox main = new VBox(18, title, cards);
         HBox.setHgrow(main, Priority.ALWAYS);
@@ -335,11 +382,11 @@ public final class NotesApp extends Application {
         side.setPrefWidth(370);
         List<Upcoming> upcoming = upcoming(notebooks);
         if (!upcoming.isEmpty()) {
-            side.getChildren().addAll(sectionTitle("UPCOMING"), panel(upcoming.stream().limit(8).map(this::upcomingRow).toList()));
+            side.getChildren().addAll(sectionTitle(t("UPCOMING")), panel(upcoming.stream().limit(8).map(this::upcomingRow).toList()));
         }
         List<Vault.Place> recent = recent(vault.everyNote(), 6);
         if (!recent.isEmpty()) {
-            Label recentTitle = sectionTitle("RECENT");
+            Label recentTitle = sectionTitle(t("RECENT"));
             if (!side.getChildren().isEmpty()) VBox.setMargin(recentTitle, new Insets(16, 0, 0, 0));
             side.getChildren().addAll(recentTitle, panel(recent.stream().map(this::recentRow).toList()));
         }
@@ -450,11 +497,16 @@ public final class NotesApp extends Application {
     /** "Just now", "12 minutes ago", "3 hours ago", "Yesterday", or the day. */
     private static String ago(FileTime time) {
         long minutes = ChronoUnit.MINUTES.between(time.toInstant(), Instant.now());
-        if (minutes < 1) return "Just now";
-        if (minutes < 60) return minutes == 1 ? "1 minute ago" : minutes + " minutes ago";
-        if (minutes < 60 * 24) return minutes < 120 ? "1 hour ago" : minutes / 60 + " hours ago";
+        if (minutes < 1) return t("Just now");
+        if (minutes < 60) return minutes == 1 ? t("1 minute ago") : t("%d minutes ago", minutes);
+        if (minutes < 60 * 24) return minutes < 120 ? t("1 hour ago") : t("%d hours ago", minutes / 60);
         LocalDate day = LocalDate.ofInstant(time.toInstant(), ZoneId.systemDefault());
-        return day.equals(LocalDate.now().minusDays(1)) ? "Yesterday" : DAY.format(time.toInstant());
+        return day.equals(LocalDate.now().minusDays(1)) ? t("Yesterday") : day().format(time.toInstant());
+    }
+
+    /** "Sep 28, 2026", "28 sept 2026". */
+    private static DateTimeFormatter day() {
+        return DateTimeFormatter.ofPattern(t("MMM d, yyyy"), Text.locale()).withZone(ZoneId.systemDefault());
     }
 
     private static Label sectionTitle(String text) {
@@ -469,10 +521,10 @@ public final class NotesApp extends Application {
         mark.setStyle("-fx-background-color: " + color(nb.type()) + ";");
         Label name = new Label(nb.name());
         name.getStyleClass().add("card-title");
-        Label kind = new Label(nb.type().name());
+        Label kind = new Label(t(nb.type().name()));
         kind.getStyleClass().add("card-type");
         NotebookView.colored(kind, color(nb.type()));
-        Label meta = new Label(count(nb.notes()) + " · edited " + DAY.format(nb.edited().toInstant()));
+        Label meta = new Label(t("%s · edited %s", count(nb.notes()), day().format(nb.edited().toInstant())));
         meta.getStyleClass().add("card-meta");
         VBox body = new VBox(4, mark, name, kind, meta);
         VBox.setMargin(name, new Insets(8, 0, 0, 0));
@@ -485,14 +537,14 @@ public final class NotesApp extends Application {
 
     private MenuItem[] notebookItems(Path dir) {
         List<MenuItem> items = new ArrayList<>(List.of(
-                item("Rename…", () -> renameNotebook(dir)),
-                item("Change type…", () -> changeType(dir))));
-        if (Vault.type(dir).equals(NotebookType.COMPETITIVE_PROGRAMMING)) items.add(item("C++ template…", () -> editTemplate(dir)));
+                item(t("Rename…"), () -> renameNotebook(dir)),
+                item(t("Change type…"), () -> changeType(dir))));
+        if (Vault.type(dir).equals(NotebookType.COMPETITIVE_PROGRAMMING)) items.add(item(t("C++ template…"), () -> editTemplate(dir)));
         items.addAll(List.of(
-                item("Export as ZIP…", () -> exportNotebook(dir)),
-                item("Show in folder", () -> showInFolder(dir)),
+                item(t("Export as ZIP…"), () -> exportNotebook(dir)),
+                item(t("Show in folder"), () -> showInFolder(dir)),
                 new SeparatorMenuItem(),
-                danger(item("Move to trash…", () -> trashNotebook(dir)))));
+                danger(item(t("Move to trash…"), () -> trashNotebook(dir)))));
         return items.toArray(MenuItem[]::new);
     }
 
@@ -500,7 +552,7 @@ public final class NotesApp extends Application {
     private void exportNotebook(Path dir) {
         if (dir.equals(notebook)) save();   // the open note, as it is now
         FileChooser chooser = new FileChooser();
-        chooser.setTitle("Export “" + dir.getFileName() + "”");
+        chooser.setTitle(t("Export “%s”", dir.getFileName()));
         chooser.setInitialFileName(dir.getFileName() + ".zip");
         chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("ZIP", "*.zip"));
         File zip = chooser.showSaveDialog(stage);
@@ -508,21 +560,21 @@ public final class NotesApp extends Application {
         try {
             Vault.exportZip(dir, zip.toPath());
         } catch (IOException e) {
-            error("Couldn't export the notebook", reason(e));
+            error(t("Couldn't export the notebook"), reason(e));
         }
     }
 
     /** Adds a notebook someone shared as a ZIP, and opens it. */
     private void importNotebook() {
         FileChooser chooser = new FileChooser();
-        chooser.setTitle("Import a notebook");
+        chooser.setTitle(t("Import a notebook"));
         chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("ZIP", "*.zip"));
         File zip = chooser.showOpenDialog(stage);
         if (zip == null) return;
         try {
             openNotebook(vault.importZip(zip.toPath()));
         } catch (IOException e) {
-            error("Couldn't import the notebook", reason(e));
+            error(t("Couldn't import the notebook"), reason(e));
         }
     }
 
@@ -532,20 +584,20 @@ public final class NotesApp extends Application {
         code.getStyleClass().add("code-area");
         code.setPrefColumnCount(64);
         code.setPrefRowCount(18);
-        Label about = new Label("New problems and + Solution start with it (LeetCode problems start empty).");
+        Label about = new Label(t("New problems and + Solution start with it (LeetCode problems start empty)."));
         about.getStyleClass().add("type-description");
         Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.setTitle("C++ template");
-        dialog.setHeaderText("C++ template");
+        dialog.setTitle(t("C++ template"));
+        dialog.setHeaderText(t("C++ template"));
         style(dialog);
-        ButtonType save = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
+        ButtonType save = new ButtonType(t("Save"), ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().setAll(save, ButtonType.CANCEL);
         dialog.getDialogPane().setContent(new VBox(8, about, code));
         if (dialog.showAndWait().orElse(ButtonType.CANCEL) != save) return;
         try {
             Vault.setMeta(dir, "cpp", code.getText());
         } catch (IOException e) {
-            error("Couldn't save the template", reason(e));
+            error(t("Couldn't save the template"), reason(e));
         }
     }
 
@@ -555,11 +607,11 @@ public final class NotesApp extends Application {
     }
 
     void newNotebook() {
-        askNotebook("New notebook", NotebookType.GENERAL, true).ifPresent(choice -> {
+        askNotebook(t("New notebook"), NotebookType.GENERAL, true).ifPresent(choice -> {
             try {
                 openNotebook(createNotebook(choice.name(), choice.type()));
             } catch (IOException e) {
-                error("Couldn't create the notebook", reason(e));
+                error(t("Couldn't create the notebook"), reason(e));
             }
         });
     }
@@ -569,7 +621,7 @@ public final class NotesApp extends Application {
     }
 
     private void renameNotebook(Path dir) {
-        ask("Rename notebook", "Name", dir.getFileName().toString()).ifPresent(name -> {
+        ask(t("Rename notebook"), t("Name"), dir.getFileName().toString()).ifPresent(name -> {
             boolean open = dir.equals(notebook);
             if (open && !leaveNote()) return;
             Path openNote = note;
@@ -582,13 +634,13 @@ public final class NotesApp extends Application {
                 openNotebook(renamed);
                 if (openNote != null) openNote(renamed.resolve(openNote.getFileName()));
             } catch (IOException e) {
-                error("Couldn't rename the notebook", reason(e));
+                error(t("Couldn't rename the notebook"), reason(e));
             }
         });
     }
 
     private void changeType(Path dir) {
-        askNotebook("Change “" + dir.getFileName() + "” to", Vault.type(dir), false).ifPresent(choice -> {
+        askNotebook(t("Change “%s” to", dir.getFileName()), Vault.type(dir), false).ifPresent(choice -> {
             boolean open = dir.equals(notebook);
             if (open && !leaveNote()) return;
             try {
@@ -596,7 +648,7 @@ public final class NotesApp extends Application {
                 if (open) openNotebook(dir);
                 else showHome();
             } catch (IOException e) {
-                error("Couldn't change the type", reason(e));
+                error(t("Couldn't change the type"), reason(e));
             }
         });
     }
@@ -609,15 +661,15 @@ public final class NotesApp extends Application {
             notes = 0;
         }
         String name = dir.getFileName().toString();
-        if (!confirm("Move “" + name + "” to the trash?",
-                "The notebook and its " + count(notes) + " go to the trash, where you can restore them.", "Move to trash")) return;
+        if (!confirm(t("Move “%s” to the trash?", name), notes == 0 ? t("The notebook goes to the trash, where you can restore it.")
+                : t("The notebook and its %s go to the trash, where you can restore them.", count(notes)), t("Move to trash"))) return;
         if (dir.equals(notebook) && !leaveNote()) return;
         try {
             Vault.trash(dir);
             note = null;
             showHome();
         } catch (IOException e) {
-            error("Couldn't move “" + name + "” to the trash", reason(e));
+            error(t("Couldn't move “%s” to the trash", name), reason(e));
         }
     }
 
@@ -632,11 +684,11 @@ public final class NotesApp extends Application {
         closeNote();
         Label name = new Label(dir.getFileName().toString());
         name.getStyleClass().add("crumb");
-        Label typeName = new Label(type.name());
+        Label typeName = new Label(t(type.name()));
         typeName.getStyleClass().add("kind");
         List<MenuItem> menu = new ArrayList<>(List.of(notebookItems(dir)));
-        menu.addAll(List.of(new SeparatorMenuItem(), themeItem()));
-        bar.getChildren().setAll(button("‹ Home", "flat", e -> showHome()), name, typeName, grow(), finder(), newButton(),
+        menu.addAll(List.of(new SeparatorMenuItem(), themeItem(), languageMenu()));
+        bar.getChildren().setAll(button(t("‹ Home"), "flat", e -> showHome()), name, typeName, grow(), finder(), newButton(),
                 more(menu.toArray(MenuItem[]::new)));
         loadEntries(true);
         browser.open(type, entries);
@@ -648,14 +700,14 @@ public final class NotesApp extends Application {
     private Node newButton() {
         Kind first = type.kinds().get(0);
         if (type.kinds().size() == 1) {
-            Button add = button("+ New " + first.name().toLowerCase(Locale.ROOT), "primary", e -> newNote(first));
+            Button add = button(t("+ New " + first.name().toLowerCase(Locale.ROOT)), "primary", e -> newNote(first));
             add.setTooltip(new Tooltip("Ctrl+N"));
             return add;
         }
-        MenuButton add = new MenuButton("+ New  ▾");
-        type.kinds().forEach(k -> add.getItems().add(item(k.name(), () -> newNote(k))));
+        MenuButton add = new MenuButton(t("+ New  ▾"));
+        type.kinds().forEach(k -> add.getItems().add(item(t(k.name()), () -> newNote(k))));
         add.getStyleClass().add("primary");
-        add.setTooltip(new Tooltip("Ctrl+N: " + first.name().toLowerCase(Locale.ROOT)));
+        add.setTooltip(new Tooltip("Ctrl+N: " + t(first.name()).toLowerCase(Text.locale())));
         return add;
     }
 
@@ -665,7 +717,7 @@ public final class NotesApp extends Application {
         try {
             paths = Vault.notes(notebook);
         } catch (IOException e) {
-            if (showErrors) error("Couldn't list the notes", reason(e));
+            if (showErrors) error(t("Couldn't list the notes"), reason(e));
             return;
         }
         List<Entry> loaded = new ArrayList<>();
@@ -694,7 +746,7 @@ public final class NotesApp extends Application {
             String text = Vault.read(p);
             display(p, Note.parse(text), Files.getLastModifiedTime(p));
         } catch (IOException e) {
-            error("Couldn't open “" + Vault.title(p) + "”", reason(e));
+            error(t("Couldn't open “%s”", Vault.title(p)), reason(e));
             browser.select(note);
         }
     }
@@ -708,21 +760,21 @@ public final class NotesApp extends Application {
         entries.replaceAll(e -> e.path().equals(p) ? new Entry(p, n, modified) : e);
         Kind kind = type.kindOf(n);
         noteTitle.setText(Vault.title(p));
-        kindName.setText(type.kinds().size() > 1 ? kind.name() : "");
+        kindName.setText(type.kinds().size() > 1 ? t(kind.name()) : "");
         status.setText("");
         showBadge();
         tools.getChildren().clear();
         if (type.equals(NotebookType.COMPETITIVE_PROGRAMMING) && kind.id().equals("problem")) {
-            tools.getChildren().add(button("+ Solution", "flat", e -> newSolution()));
+            tools.getChildren().add(button(t("+ Solution"), "flat", e -> newSolution()));
         }
         if (type.equals(NotebookType.DATABASES)) {
-            tools.getChildren().add(button("+ Query", "flat", e -> {
+            tools.getChildren().add(button(t("+ Query"), "flat", e -> {
                 setReading(false);
                 editor.insertCode("", "plsql");
             }));
         }
         if (type.kinds().stream().anyMatch(k -> k.id().equals("snippet"))) {
-            tools.getChildren().add(button("Insert snippet…", "flat", e -> insertSnippet()));
+            tools.getChildren().add(button(t("Insert snippet…"), "flat", e -> insertSnippet()));
         }
         properties.show(kind, n);
         editor.open(n.body, p.getParent());
@@ -746,7 +798,7 @@ public final class NotesApp extends Application {
     /** A problem's difficulty in its judge's color, and its level when that says more ("800 · Easy"). */
     private void showBadge() {
         Badge b = current == null ? null : type.badge(current);
-        String level = current == null ? "" : Judges.level(current);
+        String level = current == null ? "" : t(Judges.level(current));
         badge.setText(b == null ? "" : b.text().equalsIgnoreCase(level) || level.isEmpty() ? b.text() : b.text() + " · " + level);
         NotebookView.colored(badge, b == null ? "" : b.color());
         fitHeader();
@@ -758,19 +810,19 @@ public final class NotesApp extends Application {
         current = null;
         dirty = false;
         notePane.setTop(null);
-        notePane.setCenter(placeholder("No note open", "Pick a note, or press Ctrl+N to write a new one."));
+        notePane.setCenter(placeholder(t("No note open"), t("Pick a note, or press Ctrl+N to write a new one.")));
     }
 
     void newNote(Kind kind) {
         if (notebook == null) return;
         boolean hasLink = kind.fields().stream().anyMatch(f -> f.key().equals("url"));
         Optional<String[]> answer = hasLink ? askProblem()
-                : ask("New " + kind.name().toLowerCase(Locale.ROOT), "Title", "").map(title -> new String[]{title, ""});
+                : ask(t("New " + kind.name().toLowerCase(Locale.ROOT)), t("Title"), "").map(title -> new String[]{title, ""});
         answer.ifPresent(a -> {
             try {
                 createNote(kind, a[0], a[1]);
             } catch (IOException e) {
-                error("Couldn't create the note", reason(e));
+                error(t("Couldn't create the note"), reason(e));
             }
         });
     }
@@ -781,7 +833,7 @@ public final class NotesApp extends Application {
      */
     Path createNote(Kind kind, String title, String link) throws IOException {
         if (!leaveNote()) return null;
-        Note start = Note.parse(kind.template().replace("{today}", LocalDate.now().toString()));
+        Note start = Note.parse(Text.template(kind.template()).replace("{today}", LocalDate.now().toString()));
         if (!link.isBlank()) {
             start.set("url", link);
             Judges.fromLink(link).ifPresent(problem -> {
@@ -806,10 +858,10 @@ public final class NotesApp extends Application {
     }
 
     void renameNote(Path p) {
-        ask("Rename note", "Title", Vault.title(p)).ifPresent(title -> {
+        ask(t("Rename note"), t("Title"), Vault.title(p)).ifPresent(title -> {
             boolean open = p.equals(note);
             if (open && !save()) {
-                error("Couldn't rename the note", "Its latest changes aren't saved: " + saveError);
+                error(t("Couldn't rename the note"), t("Its latest changes aren't saved: %s", saveError));
                 return;
             }
             try {
@@ -822,13 +874,13 @@ public final class NotesApp extends Application {
                 loadEntries(true);
                 browser.update();
             } catch (IOException e) {
-                error("Couldn't rename the note", reason(e));
+                error(t("Couldn't rename the note"), reason(e));
             }
         });
     }
 
     void trashNote(Path p) {
-        if (!confirm("Move “" + Vault.title(p) + "” to the trash?", "You can restore it from the trash.", "Move to trash")) return;
+        if (!confirm(t("Move “%s” to the trash?", Vault.title(p)), t("You can restore it from the trash."), t("Move to trash"))) return;
         boolean open = p.equals(note);
         if (open) save();   // its latest text goes to the trash with it
         try {
@@ -837,7 +889,7 @@ public final class NotesApp extends Application {
             loadEntries(true);
             browser.update();
         } catch (IOException e) {
-            error("Couldn't move “" + Vault.title(p) + "” to the trash", reason(e));
+            error(t("Couldn't move “%s” to the trash", Vault.title(p)), reason(e));
         }
     }
 
@@ -845,7 +897,7 @@ public final class NotesApp extends Application {
     private void newSolution() {
         setReading(false);
         String code = current.get("judge").equals("LeetCode") ? "" : template(notebook);
-        editor.insert("\n### Solution · O( )\n\n```cpp\n" + code + "\n```\n");
+        editor.insert("\n" + t("### Solution · O( )") + "\n\n```cpp\n" + code + "\n```\n");
         editor.focus();
     }
 
@@ -854,7 +906,7 @@ public final class NotesApp extends Application {
         List<Entry> snippets = entries.stream()
                 .filter(e -> type.kindOf(e.note()).id().equals("snippet") && !e.path().equals(note)).toList();
         if (snippets.isEmpty()) {
-            error("The Code Library is empty", "Add a snippet with + New ▾ → Snippet, with its code in a block of code.");
+            error(t("The Code Library is empty"), t("Add a snippet with + New ▾ → Snippet, with its code in a block of code."));
             return;
         }
         // What a snippet is filed under (algorithms and techniques, or topics): shown and searched with its title.
@@ -862,7 +914,7 @@ public final class NotesApp extends Application {
         Function<Entry, String> filed = e -> kind.fields().stream().filter(f -> f.input() == NotebookType.Input.LIST)
                 .flatMap(f -> e.note().list(f.key()).stream()).collect(Collectors.joining(", "));
         TextField filter = new TextField();
-        filter.setPromptText("Filter");
+        filter.setPromptText(t("Filter"));
         ListView<Entry> list = new ListView<>();
         list.setCellFactory(v -> new ListCell<>() {
             @Override
@@ -879,7 +931,7 @@ public final class NotesApp extends Application {
         };
         filter.textProperty().addListener((o, was, now) -> narrow.run());
         narrow.run();
-        pick("Insert snippet", "Insert", filter, list).ifPresent(e -> insertSnippet(e.path()));
+        pick(t("Insert snippet"), t("Insert"), filter, list).ifPresent(e -> insertSnippet(e.path()));
     }
 
     /** Ctrl+O: any note of any notebook by a part of its title; with nothing typed, the latest first. */
@@ -888,7 +940,7 @@ public final class NotesApp extends Application {
         Map<Path, FileTime> times = new HashMap<>();
         all.forEach(p -> times.put(p.note(), modified(p.note())));
         TextField title = new TextField();
-        title.setPromptText("Title");
+        title.setPromptText(t("Title"));
         ListView<Vault.Place> list = new ListView<>();
         list.setCellFactory(v -> placeCell(p -> p.notebook().getFileName().toString()));
         Runnable narrow = () -> {
@@ -901,7 +953,7 @@ public final class NotesApp extends Application {
         };
         title.textProperty().addListener((o, was, now) -> narrow.run());
         narrow.run();
-        pick("Quick open", "Open", title, list).ifPresent(this::go);
+        pick(t("Quick open"), t("Open"), title, list).ifPresent(this::go);
     }
 
     /** A line found by Search: the note and the line where the words are. */
@@ -922,7 +974,7 @@ public final class NotesApp extends Application {
             }
         }
         TextField words = new TextField();
-        words.setPromptText("Words to find");
+        words.setPromptText(t("Words to find"));
         ListView<Hit> list = new ListView<>();
         list.setCellFactory(v -> new ListCell<>() {
             @Override
@@ -953,7 +1005,7 @@ public final class NotesApp extends Application {
             list.getSelectionModel().selectFirst();
         });
         words.textProperty().addListener((o, was, now) -> typing.playFromStart());
-        pick("Search in all notes", "Open", words, list).ifPresent(hit -> {
+        pick(t("Search in all notes"), t("Open"), words, list).ifPresent(hit -> {
             go(hit.place());
             if (!hit.place().note().equals(note)) return;
             setReading(false);
@@ -998,7 +1050,7 @@ public final class NotesApp extends Application {
             try {
                 createNote(type.kinds().get(0), title, "");
             } catch (IOException e) {
-                error("Couldn't create “" + title + "”", reason(e));
+                error(t("Couldn't create “%s”", title), reason(e));
             }
         }
     }
@@ -1025,7 +1077,7 @@ public final class NotesApp extends Application {
                 editor.insert(imageLink(Vault.attach(notebook, png(clip.getImage()))));
             }
         } catch (IOException e) {
-            error("Couldn't paste the image", reason(e));
+            error(t("Couldn't paste the image"), reason(e));
         }
     }
 
@@ -1098,7 +1150,7 @@ public final class NotesApp extends Application {
         Entry entry = entries.stream().filter(e -> e.path().equals(snippet)).findFirst().orElse(null);
         Optional<Note.Code> code = entry == null ? Optional.empty() : entry.note().firstCode();
         if (code.isEmpty()) {
-            error("Nothing to insert", "“" + Vault.title(snippet) + "” has no block of code yet.");
+            error(t("Nothing to insert"), t("“%s” has no block of code yet.", Vault.title(snippet)));
             return;
         }
         setReading(false);
@@ -1111,13 +1163,13 @@ public final class NotesApp extends Application {
     }
 
     ContextMenu noteMenu(Path p) {
-        ContextMenu menu = new ContextMenu(item("Rename…", () -> renameNote(p)));
+        ContextMenu menu = new ContextMenu(item(t("Rename…"), () -> renameNote(p)));
         Note n = entries.stream().filter(e -> e.path().equals(p)).map(Entry::note).findFirst().orElse(null);
         if (n != null && type.course() && type.kindOf(n).id().equals("assignment")) {
             boolean done = n.get("status").equalsIgnoreCase("Done");
-            menu.getItems().add(item(done ? "Mark as pending" : "Mark as done", () -> setProperty(p, "status", done ? "Pending" : "Done")));
+            menu.getItems().add(item(done ? t("Mark as pending") : t("Mark as done"), () -> setProperty(p, "status", done ? "Pending" : "Done")));
         }
-        menu.getItems().addAll(new SeparatorMenuItem(), danger(item("Move to trash…", () -> trashNote(p))));
+        menu.getItems().addAll(new SeparatorMenuItem(), danger(item(t("Move to trash…"), () -> trashNote(p))));
         return menu;
     }
 
@@ -1134,7 +1186,7 @@ public final class NotesApp extends Application {
             n.set(key, value);
             Vault.write(p, n.text());
         } catch (IOException e) {
-            error("Couldn't change “" + Vault.title(p) + "”", reason(e));
+            error(t("Couldn't change “%s”", Vault.title(p)), reason(e));
             return;
         }
         loadEntries(true);
@@ -1147,7 +1199,7 @@ public final class NotesApp extends Application {
 
     private void setReading(boolean on) {
         reading = on;
-        mode.setText(on ? "Edit" : "Read");
+        mode.setText(on ? t("Edit") : t("Read"));
         editor.setReading(on);
     }
 
@@ -1191,15 +1243,15 @@ public final class NotesApp extends Application {
             return true;
         } catch (IOException e) {
             saveError = reason(e);
-            status.setText("Not saved: " + saveError);   // tried again on the next change or when leaving
+            status.setText(t("Not saved: %s", saveError));   // tried again on the next change or when leaving
             return false;
         }
     }
 
     /** Saves the open note before leaving it; if that fails, asks whether to leave it anyway. */
     private boolean leaveNote() {
-        return save() || confirm("Leave without saving?", "The latest changes to “" + Vault.title(note)
-                + "” couldn't be saved (" + saveError + "). If you leave, they are lost.", "Leave anyway");
+        return save() || confirm(t("Leave without saving?"), t("The latest changes to “%s” couldn't be saved (%s). If you leave, they are lost.",
+                Vault.title(note), saveError), t("Leave anyway"));
     }
 
     /**
@@ -1245,21 +1297,21 @@ public final class NotesApp extends Application {
         try {
             Desktop.getDesktop().open(dir.toFile());
         } catch (IOException | RuntimeException e) {
-            error("Couldn't open the folder", dir.toString());
+            error(t("Couldn't open the folder"), dir.toString());
         }
     }
 
     /** A short reason people understand; the exception's own message is often just a path. */
     private static String reason(IOException e) {
-        if (e instanceof FileAlreadyExistsException) return "there's already one with that name";
-        if (e instanceof AccessDeniedException) return "access to the file was denied";
-        if (e instanceof NoSuchFileException) return "the file is no longer there";
-        if (e instanceof CharacterCodingException) return "it isn't UTF-8 text";
+        if (e instanceof FileAlreadyExistsException) return t("there's already one with that name");
+        if (e instanceof AccessDeniedException) return t("access to the file was denied");
+        if (e instanceof NoSuchFileException) return t("the file is no longer there");
+        if (e instanceof CharacterCodingException) return t("it isn't UTF-8 text");
         return e.getMessage() != null ? e.getMessage() : e.toString();
     }
 
     private static String count(int notes) {
-        return notes == 0 ? "no notes" : notes == 1 ? "1 note" : notes + " notes";
+        return notes == 0 ? t("no notes") : notes == 1 ? t("1 note") : t("%d notes", notes);
     }
 
     private static Button button(String text, String style, EventHandler<ActionEvent> action) {
@@ -1285,7 +1337,7 @@ public final class NotesApp extends Application {
         dots.setContent("M5 10a2 2 0 1 0 0 4a2 2 0 1 0 0-4zm7 0a2 2 0 1 0 0 4a2 2 0 1 0 0-4zm7 0a2 2 0 1 0 0 4a2 2 0 1 0 0-4z");
         dots.getStyleClass().add("icon");
         MenuButton more = new MenuButton(null, dots, items);
-        more.setTooltip(new Tooltip("More"));
+        more.setTooltip(new Tooltip(t("More")));
         more.getStyleClass().addAll("flat", "more-menu");
         return more;
     }
@@ -1327,23 +1379,23 @@ public final class NotesApp extends Application {
     /** Asks for a new problem's link and title: a known link suggests the title ("CF 4A", "Two Sum"). */
     private Optional<String[]> askProblem() {
         TextField link = new TextField(), title = new TextField();
-        link.setPromptText("https://codeforces.com/…, atcoder.jp/…, leetcode.com/… (optional)");
+        link.setPromptText(t("https://codeforces.com/…, atcoder.jp/…, leetcode.com/… (optional)"));
         link.setPrefColumnCount(36);
-        title.setPromptText("Title");
+        title.setPromptText(t("Title"));
         String[] suggested = {""};
         link.textProperty().addListener((o, was, now) -> {
             if (!title.getText().isBlank() && !title.getText().equals(suggested[0])) return;   // typed by hand: keep it
             suggested[0] = Judges.fromLink(now).map(Judges.Problem::title).orElse("");
             title.setText(suggested[0]);
         });
-        Label linkName = new Label("Link"), titleName = new Label("Title");
+        Label linkName = new Label(t("Link")), titleName = new Label(t("Title"));
         linkName.getStyleClass().add("property-name");
         titleName.getStyleClass().add("property-name");
         Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.setTitle("New problem");
-        dialog.setHeaderText("New problem");
+        dialog.setTitle(t("New problem"));
+        dialog.setHeaderText(t("New problem"));
         style(dialog);
-        ButtonType create = new ButtonType("Create", ButtonBar.ButtonData.OK_DONE);
+        ButtonType create = new ButtonType(t("Create"), ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().setAll(create, ButtonType.CANCEL);
         dialog.getDialogPane().setContent(new VBox(6, linkName, link, titleName, title));
         dialog.getDialogPane().lookupButton(create).disableProperty().bind(title.textProperty().map(String::isBlank));
@@ -1361,21 +1413,21 @@ public final class NotesApp extends Application {
         dialog.setHeaderText(title);
         style(dialog);
         TextField name = new TextField();
-        name.setPromptText("Name");
+        name.setPromptText(t("Name"));
         name.setPrefColumnCount(28);
         VBox content = new VBox(12);
         if (withName) content.getChildren().add(name);
         ToggleGroup types = new ToggleGroup();
-        for (NotebookType t : NotebookType.ALL) {
-            RadioButton option = new RadioButton(t.name());
-            option.setUserData(t);
+        for (NotebookType each : NotebookType.ALL) {
+            RadioButton option = new RadioButton(t(each.name()));
+            option.setUserData(each);
             option.setToggleGroup(types);
-            option.setSelected(t.equals(selected));
-            Label about = new Label(t.description());
+            option.setSelected(each.equals(selected));
+            Label about = new Label(t(each.description()));
             about.getStyleClass().add("type-description");
             content.getChildren().add(new VBox(2, option, about));
         }
-        ButtonType ok = new ButtonType(withName ? "Create" : "Change", ButtonBar.ButtonData.OK_DONE);
+        ButtonType ok = new ButtonType(withName ? t("Create") : t("Change"), ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().setAll(ok, ButtonType.CANCEL);
         dialog.getDialogPane().setContent(content);
         if (withName) {

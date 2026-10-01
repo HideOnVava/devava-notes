@@ -5,6 +5,19 @@ All notable changes to Devava Notes are documented here. The format follows
 [Semantic Versioning](https://semver.org/). Each release on GitHub takes its notes from
 the matching section of this file.
 
+## [1.2.0] - 2026-09-30
+
+### Added
+- **Devava Notes in Spanish**: every screen, menu, dialog and message, the dates and the
+  calendar, the editor's search panel (`Ctrl+F`) and the headings of new notes. The app speaks
+  Windows' language; *⋯ → Language* switches between English and Español at once, on the
+  same note.
+
+### Changed
+- What notes keep stays in English (`status: Solved`, `level: Medium`) whichever language the
+  app speaks, so a shared notebook works the same for everyone; only how it is shown changes.
+- General notebooks' *Pinned* view is now *Pinned notes*.
+
 ## [1.1.0] - 2026-09-30
 
 ### Added
@@ -82,6 +95,7 @@ The first version of Devava Notes, for Windows.
 - A Windows installer (per user, no administrator rights needed) and a portable ZIP; no Java
   to install.
 
+[1.2.0]: https://github.com/HideOnVava/devava-notes/releases/tag/v1.2.0
 [1.1.0]: https://github.com/HideOnVava/devava-notes/releases/tag/v1.1.0
 [1.0.1]: https://github.com/HideOnVava/devava-notes/releases/tag/v1.0.1
 [1.0.0]: https://github.com/HideOnVava/devava-notes/releases/tag/v1.0.0

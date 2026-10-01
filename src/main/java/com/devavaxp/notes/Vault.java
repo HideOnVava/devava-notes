@@ -31,6 +31,8 @@ import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
+import static com.devavaxp.notes.Text.t;
+
 /**
  * The notes on disk: under Documents/Devava Notes, one folder per notebook and one Markdown
  * file per note, whose file name is its title; the notebook's type is in its .notebook.json.
@@ -208,9 +210,9 @@ final class Vault {
     /** Moves a note or a notebook to the system trash; nothing is ever deleted for good. */
     static void trash(Path path) throws IOException {
         if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.MOVE_TO_TRASH)) {
-            throw new IOException("this system has no trash to move it to, so nothing was deleted");
+            throw new IOException(t("this system has no trash to move it to, so nothing was deleted"));
         }
-        if (!Desktop.getDesktop().moveToTrash(path.toFile())) throw new IOException("it could not be moved to the trash");
+        if (!Desktop.getDesktop().moveToTrash(path.toFile())) throw new IOException(t("it could not be moved to the trash"));
     }
 
     /** Packs a notebook (its notes, pictures and .notebook.json) into a ZIP, in a folder named after it: to share it. */
@@ -234,11 +236,11 @@ final class Vault {
         try {
             file = new ZipFile(zip.toFile());
         } catch (ZipException e) {
-            throw new IOException("it is not a ZIP file", e);
+            throw new IOException(t("it is not a ZIP file"), e);
         }
         try (file) {
             List<? extends ZipEntry> entries = file.stream().filter(e -> !e.isDirectory()).toList();
-            if (entries.isEmpty()) throw new IOException("the ZIP is empty");
+            if (entries.isEmpty()) throw new IOException(t("the ZIP is empty"));
             String first = entries.get(0).getName().replace('\\', '/');
             String top = first.indexOf('/') > 0 ? first.substring(0, first.indexOf('/') + 1) : "";
             boolean inFolder = !top.isEmpty() && entries.stream().allMatch(e -> e.getName().replace('\\', '/').startsWith(top));
@@ -250,7 +252,7 @@ final class Vault {
                     String path = entry.getName().replace('\\', '/');
                     Path target = dir.resolve(inFolder ? path.substring(top.length()) : path).normalize();
                     if (!target.startsWith(dir) || target.equals(dir)) {
-                        throw new IOException("“" + entry.getName() + "” in it points outside the notebook");
+                        throw new IOException(t("“%s” in it points outside the notebook", entry.getName()));
                     }
                     Files.createDirectories(target.getParent());
                     try (InputStream in = file.getInputStream(entry)) {

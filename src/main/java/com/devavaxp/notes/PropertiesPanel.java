@@ -10,6 +10,7 @@ import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
 import javafx.scene.control.MenuButton;
 import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
@@ -30,6 +31,8 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Consumer;
 import java.util.function.Function;
+
+import static com.devavaxp.notes.Text.t;
 
 /**
  * The properties of the open note, as the fields of its kind in two columns. A change goes into
@@ -68,7 +71,7 @@ final class PropertiesPanel {
     void show(Kind kind, Note note) {
         cells.clear();
         for (Field f : kind.fields()) {
-            Label name = new Label(f.label());
+            Label name = new Label(t(f.label()));
             name.getStyleClass().add("property-name");
             cells.add(new Node[]{name, editor(f, note)});
         }
@@ -101,7 +104,7 @@ final class PropertiesPanel {
                 if (!key.equals("url")) yield field;
                 Button open = new Button("↗");
                 open.getStyleClass().add("flat");
-                open.setTooltip(new Tooltip("Open the link"));
+                open.setTooltip(new Tooltip(t("Open the link")));
                 open.setOnAction(e -> openLink.accept(note.get("url")));
                 yield row(field, open);
             }
@@ -116,13 +119,21 @@ final class PropertiesPanel {
                 if (!current.isEmpty() && !box.getItems().contains(current)) box.getItems().add(current);
                 box.setValue(current);
                 box.setMaxWidth(Double.MAX_VALUE);
+                box.setCellFactory(list -> new ListCell<>() {   // the choice in the app's language; the note keeps it in English
+                    @Override
+                    protected void updateItem(String item, boolean empty) {
+                        super.updateItem(item, empty);
+                        setText(empty || item == null ? null : t(item));
+                    }
+                });
+                box.setButtonCell(box.getCellFactory().call(null));
                 box.setOnAction(e -> change(key, () -> note.set(key, box.getValue() == null ? "" : box.getValue())));
                 yield id(box, key);
             }
             case DATE -> {
                 DatePicker picker = new DatePicker(date(current));
                 picker.setConverter(new LocalDateStringConverter(DateTimeFormatter.ISO_LOCAL_DATE, DateTimeFormatter.ISO_LOCAL_DATE));
-                picker.setPromptText("yyyy-mm-dd");
+                picker.setPromptText(t("yyyy-mm-dd"));
                 picker.setMinWidth(130);
                 picker.setMaxWidth(Double.MAX_VALUE);
                 picker.valueProperty().addListener((o, was, now) -> change(key, () -> note.set(key, now == null ? "" : now.toString())));

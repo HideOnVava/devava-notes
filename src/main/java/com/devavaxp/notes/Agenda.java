@@ -6,7 +6,8 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
-import java.util.Locale;
+
+import static com.devavaxp.notes.Text.t;
 
 /**
  * What is coming in a course (a Class Notes or a Databases notebook): the day each note is about,
@@ -14,7 +15,6 @@ import java.util.Locale;
  */
 final class Agenda {
 
-    private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("MMM d", Locale.ENGLISH);
     private static final String LATE = "#DC2626", SOON = "#B45309", LATER = "#6E6E78", DONE = "#15803D", PAST = "#9A9AA5";
 
     private Agenda() {
@@ -49,24 +49,29 @@ final class Agenda {
         String kind = kind(note);
         LocalDate when = when(note);
         if (kind.equals("assignment")) {
-            if (done(note)) return new Badge("Done", DONE);
+            if (done(note)) return new Badge(t("Done"), DONE);
             if (when == null) return null;
             long days = ChronoUnit.DAYS.between(today, when);
-            if (days < 0) return new Badge(-days == 1 ? "1 day late" : -days + " days late", LATE);
-            if (days == 0) return new Badge("Due today", LATE);
-            if (days == 1) return new Badge("Due tomorrow", SOON);
-            return days < 7 ? new Badge("Due in " + days + " days", SOON) : new Badge("Due " + DAY.format(when), LATER);
+            if (days < 0) return new Badge(-days == 1 ? t("1 day late") : t("%d days late", -days), LATE);
+            if (days == 0) return new Badge(t("Due today"), LATE);
+            if (days == 1) return new Badge(t("Due tomorrow"), SOON);
+            return days < 7 ? new Badge(t("Due in %d days", days), SOON) : new Badge(t("Due %s", day(when)), LATER);
         }
         if (kind.equals("exam")) {
-            if (!note.get("grade").isEmpty()) return new Badge("Grade " + note.get("grade"), LATER);
+            if (!note.get("grade").isEmpty()) return new Badge(t("Grade %s", note.get("grade")), LATER);
             if (when == null) return null;
             long days = ChronoUnit.DAYS.between(today, when);
-            if (days < 0) return new Badge("Past", PAST);
-            if (days == 0) return new Badge("Today", LATE);
-            if (days == 1) return new Badge("Tomorrow", SOON);
-            return days < 7 ? new Badge("In " + days + " days", SOON) : new Badge(DAY.format(when), LATER);
+            if (days < 0) return new Badge(t("Past"), PAST);
+            if (days == 0) return new Badge(t("Today"), LATE);
+            if (days == 1) return new Badge(t("Tomorrow"), SOON);
+            return days < 7 ? new Badge(t("In %d days", days), SOON) : new Badge(day(when), LATER);
         }
         return null;
+    }
+
+    /** "Oct 9", "9 oct". */
+    private static String day(LocalDate date) {
+        return DateTimeFormatter.ofPattern(t("MMM d"), Text.locale()).format(date);
     }
 
     private static String kind(Note note) {

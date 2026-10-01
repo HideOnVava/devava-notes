@@ -129,6 +129,7 @@ final class Editor {
         ready = ours(engine.getLocation()) && "function".equals(engine.executeScript("typeof setText"));
         if (!ready) return;
         call("setTheme", dark ? "dark" : "light");
+        call("setLanguage", Text.language(), Text.t("Start writing…"), Text.t("Copy"), Text.t("Copied"), Text.t("code"));
         call("setTitles", String.join("\n", titles));
         open(text, base);
     }

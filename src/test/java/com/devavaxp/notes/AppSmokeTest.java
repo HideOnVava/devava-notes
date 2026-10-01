@@ -3,10 +3,13 @@ package com.devavaxp.notes;
 import com.devavaxp.notes.NotebookType.Kind;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
+import javafx.scene.Node;
+import javafx.scene.Parent;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.DialogPane;
+import javafx.scene.control.Labeled;
 import javafx.scene.control.TextField;
 import javafx.scene.image.PixelFormat;
 import javafx.scene.image.WritableImage;
@@ -28,6 +31,9 @@ import java.awt.image.BufferedImage;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -102,8 +108,13 @@ class AppSmokeTest {
         Platform.setImplicitExit(false);
     }
 
-    /** The window, off screen so the test does not get in anyone's way, once the editor is ready. */
+    /** The window in English, off screen so the test does not get in anyone's way, once the editor is ready. */
     private static NotesApp open(Path home, Stage[] stage) throws Exception {
+        return open(home, stage, Text.ENGLISH);
+    }
+
+    private static NotesApp open(Path home, Stage[] stage, String language) throws Exception {
+        new Vault(home).setSetting("language", language);
         NotesApp app = fx(NotesApp::new);
         stage[0] = fx(() -> {
             Stage s = new Stage();
@@ -412,6 +423,64 @@ class AppSmokeTest {
         shot(stage, "db6-dark");
         assertEquals(List.of(), fx(() -> List.copyOf(app.editor.errors)));
         fx(() -> run(stage::close));
+    }
+
+    /** The app in Spanish, as on a Windows in Spanish; what notes keep stays English. Then back to English, live. */
+    @Test
+    void speaksSpanish(@TempDir Path home) throws Exception {
+        Stage[] window = new Stage[1];
+        NotesApp app = open(home, window, Text.SPANISH);
+        Stage stage = window[0];
+        WebEngine engine = fx(() -> app.editor.view.getEngine());
+        LocalDate today = LocalDate.now();
+        shot(stage, "es1-welcome");
+        assertTrue(fx(() -> texts(stage)).contains("+ Nuevo cuaderno"));
+
+        NotebookType course = NotebookType.CLASS_NOTES;
+        Path notebook = fx(() -> app.createNotebook("Cálculo II", course));
+        Files.writeString(notebook.resolve("Tarea 2.md"), "---\nkind: assignment\ndue: " + today.plusDays(1) + "\nstatus: Pending\n---\n");
+        Files.writeString(notebook.resolve("Primer parcial.md"), "---\nkind: exam\ndate: " + today.plusDays(9) + "\n---\n");
+        fx(() -> run(app::showHome));
+        shot(stage, "es2-home");
+        assertTrue(fx(() -> texts(stage)).containsAll(List.of("Cuadernos", "PRÓXIMOS", "Vence mañana", "Apuntes de clase")));
+
+        fx(() -> run(() -> app.openNotebook(notebook)));
+        Path lecture = fx(() -> app.createNote(course.kinds().get(0), "Límites", ""));
+        assertTrue(Files.readString(lecture).contains("## Ideas clave"));   // a new note's headings, in Spanish
+        fx(() -> run(() -> ((JSObject) engine.executeScript("window")).call("insertText", "```sql\nSELECT 1 FROM dual;\n```\n")));
+        waitFor("the lecture to save itself", () -> Files.readString(lecture).contains("SELECT 1 FROM dual;"));
+        shot(stage, "es3-lecture");
+        fx(() -> run(app::toggleMode));
+        waitFor("the code block's Copy button, in Spanish", () -> fx(() ->
+                "Copiar".equals(engine.executeScript("(document.querySelector('#reading .copy') || {}).textContent"))));
+        fx(() -> run(app::toggleMode));
+        fx(() -> run(() -> app.browser.choose("Upcoming", null)));
+        shot(stage, "es4-upcoming");
+        assertTrue(fx(() -> texts(stage)).containsAll(List.of("Próximos", "Clases", "Tareas", "‹ Inicio")));
+        fx(() -> run(() -> app.setProperty(notebook.resolve("Tarea 2.md"), "status", "Done")));   // "Marcar como hecha"
+        assertTrue(Files.readString(notebook.resolve("Tarea 2.md")).contains("status: Done"));   // kept in English
+        dialogShot(stage, "es5-new-notebook", app::newNotebook, "");
+
+        // Back to English: a new window, on the same note, and the choice is remembered.
+        NotesApp english = fx(() -> app.setLanguage(Text.ENGLISH));
+        Stage next = fx(() -> Window.getWindows().stream().filter(w -> w.isShowing() && w instanceof Stage s && s != stage)
+                .map(Stage.class::cast).findFirst().orElseThrow());
+        assertTrue(fx(() -> !stage.isShowing() && lecture.equals(english.openPath())));
+        assertTrue(fx(() -> texts(next)).containsAll(List.of("‹ Home", "Lectures")));
+        assertTrue(Files.readString(home.resolve("settings.json")).contains("\"en\""));
+        fx(() -> run(next::close));
+    }
+
+    /** The texts a window shows: its labels, buttons and cells. */
+    private static List<String> texts(Window window) {
+        List<String> texts = new ArrayList<>();
+        Deque<Node> nodes = new ArrayDeque<>(List.of(window.getScene().getRoot()));
+        while (!nodes.isEmpty()) {
+            Node node = nodes.pop();
+            if (node instanceof Labeled l && l.getText() != null) texts.add(l.getText());
+            if (node instanceof Parent p) nodes.addAll(p.getChildrenUnmodifiable());
+        }
+        return texts;
     }
 
     /** Home with a notebook of each type, light and dark: the screenshots of the README. */

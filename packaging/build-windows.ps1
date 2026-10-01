@@ -120,7 +120,7 @@ try {
             --module-path ($jlinkModulePath -join ";") `
             --add-modules (($jdkModules + $javafxModules) -join ",") `
             --output $runtime `
-            --strip-debug --no-header-files --no-man-pages --compress zip-6
+            --include-locales=en,es --strip-debug --no-header-files --no-man-pages --compress zip-6
         if ($LASTEXITCODE -ne 0) { throw "jlink failed." }
 
         # --- App image: the license and the third-party notices travel with it -------

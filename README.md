@@ -13,7 +13,8 @@ LeetCode problems, sorts them by algorithm, technique and difficulty, and keeps 
 ready to reuse. A **databases** notebook is a database course with Oracle: SQL and PL/SQL
 exercises by topic, the tables you query and the queries you reuse. A **general** notebook is
 just notes with tags. Every note is a plain Markdown file on your disk: no accounts, no
-cloud, no Java to install.
+cloud, no Java to install. The app speaks **English and Spanish** (*Español*): it follows
+Windows' language, and *⋯ → Language* switches it.
 
 | Home | Competitive Programming |
 | --- | --- |
@@ -135,7 +136,9 @@ Documents\Devava Notes\
 ```
 
 A note's properties are its YAML front matter, so the files open anywhere Markdown does
-(Obsidian included), and notes written elsewhere show up in the app:
+(Obsidian included), and notes written elsewhere show up in the app. Their values stay in
+English (`status: Solved`) whichever language the app speaks, so a notebook shared between
+English and Spanish users works the same for both:
 
 ```markdown
 ---

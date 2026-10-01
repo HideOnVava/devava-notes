@@ -154,9 +154,17 @@ const clipboard = EditorView.domEventHandlers({
     }
 });
 
-const extensions = [
+// The page's words, and CodeMirror's own (its search panel), in the app's language: Java sends them.
+let words = {placeholder: "Start writing…", copy: "Copy", copied: "Copied", code: "code"}, phrases = {};
+const SPANISH = {
+    "Find": "Buscar", "Replace": "Reemplazar", "next": "siguiente", "previous": "anterior", "all": "todas",
+    "match case": "mayúsculas", "by word": "palabra completa", "regexp": "expresión regular", "replace": "reemplazar",
+    "replace all": "reemplazar todas", "close": "cerrar", "Go to line": "Ir a la línea", "go": "ir",
+};
+
+const extensions = () => [
     highlightSpecialChars(), history(), drawSelection(), dropCursor(), indentOnInput(), bracketMatching(),
-    closeBrackets(), highlightSelectionMatches(), placeholder("Start writing…"),
+    closeBrackets(), highlightSelectionMatches(), placeholder(words.placeholder), EditorState.phrases.of(phrases),
     markdown({base: markdownLanguage, codeLanguages: languages}),
     highlighters.map(h => syntaxHighlighting(h)),
     fencedCode, marking(LINK, "cm-wikilink"), marking(TAG, "cm-tag", text => /\p{L}/u.test(text)), followLinks, clipboard,
@@ -169,7 +177,7 @@ const extensions = [
 ];
 
 const editor = document.getElementById("editor"), reading = document.getElementById("reading");
-const view = new EditorView({parent: editor, state: EditorState.create({extensions})});
+const view = new EditorView({parent: editor, state: EditorState.create({extensions: extensions()})});
 
 /** Accents and case do not matter when searching, and a folded text keeps the positions of the original. */
 function fold(text) {
@@ -179,7 +187,11 @@ function fold(text) {
 }
 
 // Called by Java.
-window.setText = text => view.setState(EditorState.create({doc: text, extensions}));
+window.setText = text => view.setState(EditorState.create({doc: text, extensions: extensions()}));
+window.setLanguage = (language, placeholderText, copy, copied, code) => {
+    words = {placeholder: placeholderText, copy, copied, code};
+    phrases = language === "es" ? SPANISH : {};
+};
 window.getText = () => view.state.doc.toString();
 window.setTitles = lines => titles = lines ? lines.split("\n") : [];
 window.setTheme = theme => document.documentElement.dataset.theme = theme;
@@ -236,13 +248,13 @@ function card(code) {
     const text = code.textContent.replace(/\n$/, "");
     const head = document.createElement("div"), label = document.createElement("span"), copy = document.createElement("button");
     head.className = "code-head";
-    label.textContent = language?.name ?? (name || "code");   // "C++" for cpp, "PLSQL" for plsql
+    label.textContent = language?.name ?? (name || words.code);   // "C++" for cpp, "PLSQL" for plsql
     copy.className = "copy";
-    copy.textContent = "Copy";
+    copy.textContent = words.copy;
     copy.addEventListener("click", () => {
         tell("copy:" + text);
-        copy.textContent = "Copied";
-        setTimeout(() => copy.textContent = "Copy", 1500);
+        copy.textContent = words.copied;
+        setTimeout(() => copy.textContent = words.copy, 1500);
     });
     head.append(label, copy);
     const box = document.createElement("div"), pre = code.parentElement;

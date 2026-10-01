@@ -1,5 +1,6 @@
 # JDK modules linked into the bundled runtime (one per line; "#" starts a comment).
-# The JavaFX modules are added by build-windows.ps1 and pull in their own dependencies.
+# The JavaFX modules are added by build-windows.ps1 and pull in their own dependencies; of
+# jdk.localedata only English and Spanish are kept (--include-locales), for dates in either.
 java.base
 java.desktop
 java.logging
@@ -9,3 +10,4 @@ jdk.xml.dom
 jdk.unsupported
 jdk.charsets
 jdk.crypto.ec
+jdk.localedata
