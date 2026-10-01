@@ -9,8 +9,8 @@ import java.time.temporal.ChronoUnit;
 import java.util.Locale;
 
 /**
- * What is coming in a course (a Class Notes notebook): the day each note is about, which ones are
- * still ahead, and how near they are, said the way a student would read it.
+ * What is coming in a course (a Class Notes or a Databases notebook): the day each note is about,
+ * which ones are still ahead, and how near they are, said the way a student would read it.
  */
 final class Agenda {
 

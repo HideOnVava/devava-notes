@@ -3,14 +3,18 @@ package com.devavaxp.notes;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -59,6 +63,42 @@ class VaultTest {
         Vault.setType(cp, NotebookType.CLASS_NOTES);
         assertEquals(NotebookType.CLASS_NOTES, Vault.type(cp));
         assertTrue(Files.readString(cp.resolve(".notebook.json")).contains("\"color\": \"#4F46E5\""));
+    }
+
+    @Test
+    void aNotebookSharedAsAZipComesBackWhole(@TempDir Path home, @TempDir Path friend) throws Exception {
+        Vault mine = new Vault(home);
+        Path course = mine.createNotebook("Taller de Base de Datos", NotebookType.DATABASES);
+        Vault.write(Vault.createNote(course, "Joins", ""), "---\nkind: exercise\n---\n```plsql\nSELECT * FROM dual;\n```\n");
+        Vault.attach(course, new byte[]{1, 2, 3});
+        Path zip = home.resolve("shared.zip");
+        Vault.exportZip(course, zip);
+
+        Vault theirs = new Vault(friend.resolve("Devava Notes"));
+        Path copy = theirs.importZip(zip);
+        assertEquals("Taller de Base de Datos", copy.getFileName().toString());
+        assertEquals(NotebookType.DATABASES, Vault.type(copy));
+        assertEquals(Vault.read(course.resolve("Joins.md")), Vault.read(copy.resolve("Joins.md")));
+        try (Stream<Path> pictures = Files.list(copy.resolve("attachments"))) {
+            assertEquals(1, pictures.count());
+        }
+        assertEquals("Taller de Base de Datos 2", theirs.importZip(zip).getFileName().toString());   // never over the first
+    }
+
+    @Test
+    void aZipCannotWriteOutsideItsNotebook(@TempDir Path home) throws Exception {
+        Path zip = home.resolve("evil.zip");
+        try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(zip))) {
+            out.putNextEntry(new ZipEntry("Notes/fine.md"));
+            out.putNextEntry(new ZipEntry("Notes/../../evil.md"));
+            out.write("x".getBytes(StandardCharsets.UTF_8));
+        }
+        Vault vault = new Vault(home.resolve("Devava Notes"));
+        assertThrows(IOException.class, () -> vault.importZip(zip));
+        assertFalse(Files.exists(home.resolve("evil.md")));
+        assertEquals(List.of(), vault.notebooks());   // and no half of it left behind
+        Files.writeString(home.resolve("not a zip.zip"), "hello");
+        assertThrows(IOException.class, () -> vault.importZip(home.resolve("not a zip.zip")));
     }
 
     @Test

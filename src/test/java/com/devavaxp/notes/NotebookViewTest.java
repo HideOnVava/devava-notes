@@ -70,6 +70,29 @@ class NotebookViewTest {
     }
 
     @Test
+    void aDatabasesNotebookIsACourseWithItsSqlByTopic() {
+        NotebookType db = NotebookType.DATABASES;
+        LocalDate today = LocalDate.now();
+        List<Entry> notes = List.of(
+                entry("Joins", "date: 2026-09-01\nunit: 3. DML\ntopics: [queries/joins]"),
+                entry("Employees per department", "kind: exercise\ntopics: [queries/joins, queries/group by]\nlevel: Medium\nstatus: Solved with help"),
+                entry("Explicit cursor", "kind: snippet\ntopics: [plsql/cursors]"),
+                entry("EMPLOYEES", "kind: table"),
+                entry("Second exam", "kind: exam\ndate: " + today.plusDays(2) + "\ntopics: [plsql]"));
+
+        assertEquals(List.of("plsql", "queries"), NotebookView.rows(db, view(db, "By topic"), null, "", notes).stream()
+                .map(Group::value).filter(v -> !v.isEmpty()).toList());
+        assertEquals(List.of("plsql", "plsql/cursors", "queries", "queries/group by", "queries/joins", ""),   // "": No topics
+                List.copyOf(NotebookView.counts(db, view(db, "By topic"), notes).keySet()));
+        assertEquals(List.of("Employees per department", "Joins"), titles(NotebookView.rows(db, view(db, "By topic"), "queries/joins", "", notes).get(0)));
+        assertEquals(List.of("Employees per department"), titles(NotebookView.rows(db, view(db, "To review"), null, "", notes).get(0)));
+        assertEquals(List.of("EMPLOYEES"), titles(NotebookView.rows(db, view(db, "Tables"), null, "", notes).get(0)));
+        assertEquals(List.of("Second exam"), titles(NotebookView.rows(db, view(db, "Upcoming"), null, "", notes).get(0)));
+        assertEquals("In 2 days", db.badge(notes.get(4).note()).text());
+        assertEquals("Medium", db.badge(notes.get(1).note()).text());
+    }
+
+    @Test
     void tagsWrittenInTheTextJoinTheTagsProperty() {
         NotebookType general = NotebookType.GENERAL;
         List<Entry> notes = List.of(

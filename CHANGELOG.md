@@ -5,6 +5,30 @@ All notable changes to Devava Notes are documented here. The format follows
 [Semantic Versioning](https://semver.org/). Each release on GitHub takes its notes from
 the matching section of this file.
 
+## [1.1.0] - 2026-09-30
+
+### Added
+- **Databases notebooks**, for a database course with Oracle: lectures by date, unit and
+  topic; SQL and PL/SQL exercises with their level and status (*To review* gathers the ones
+  solved with help); the tables of the schema you work with; a Code Library of queries; and
+  assignments and exams, which show in *Upcoming* and on Home as in Class Notes. The topics
+  offered go from `queries/joins` to `plsql/triggers`, and *By topic* nests `plsql/cursors`
+  under `plsql`.
+- Code in ` ```plsql ` blocks is colored with Oracle's words (`VARCHAR2`, `SYSDATE`,
+  SQL*Plus commands); *+ Query* adds such a block at the cursor.
+- **Share a notebook**: *Export as ZIP…* in its menu, and *Import notebook…* in Home's menu
+  to add one someone shared, with its type and pictures.
+
+### Changed
+- Home's lists show each note's title over its notebook's name, so long course names no
+  longer cut the titles short.
+- A code block in the reading view is labelled with its language's name (*C++*, *PLSQL*).
+- *Insert snippet…* works in any notebook with a Code Library.
+
+### Fixed
+- One note that could not be read for a moment (OneDrive syncing it) no longer hides the
+  rest of its course from *Upcoming* on Home.
+
 ## [1.0.1] - 2026-09-30
 
 ### Fixed
@@ -58,5 +82,6 @@ The first version of Devava Notes, for Windows.
 - A Windows installer (per user, no administrator rights needed) and a portable ZIP; no Java
   to install.
 
+[1.1.0]: https://github.com/HideOnVava/devava-notes/releases/tag/v1.1.0
 [1.0.1]: https://github.com/HideOnVava/devava-notes/releases/tag/v1.0.1
 [1.0.0]: https://github.com/HideOnVava/devava-notes/releases/tag/v1.0.0

@@ -328,6 +328,92 @@ class AppSmokeTest {
         fx(() -> run(stage::close));
     }
 
+    private static final String QUERY = """
+            SELECT d.department_name, COUNT(e.employee_id) AS employees
+            FROM departments d
+            LEFT JOIN employees e ON e.department_id = d.department_id
+            GROUP BY d.department_name
+            ORDER BY employees DESC;""";
+
+    private static final String CREATE = """
+            CREATE TABLE employees (
+              employee_id   NUMBER(6) PRIMARY KEY,
+              first_name    VARCHAR2(20),
+              hire_date     DATE DEFAULT SYSDATE NOT NULL,
+              department_id NUMBER(4) REFERENCES departments
+            );""";
+
+    @Test
+    void usesADatabasesNotebook(@TempDir Path home) throws Exception {
+        Stage[] window = new Stage[1];
+        NotesApp app = open(home, window);
+        Stage stage = window[0];
+        WebEngine engine = fx(() -> app.editor.view.getEngine());
+        JSObject page = fx(() -> (JSObject) engine.executeScript("window"));
+        NotebookType db = NotebookType.DATABASES;
+        Path notebook = fx(() -> app.createNotebook("Taller de Base de Datos", db));
+        fx(() -> run(() -> app.openNotebook(notebook)));
+
+        // An exercise: its statement, its topics and level, and the query in the PL/SQL block of its template.
+        Path exercise = fx(() -> app.createNote(db.kinds().get(1), "Employees per department", ""));
+        fx(() -> run(() -> {
+            type(stage, "topics", "queries/joins, queries/group by");
+            choose(stage, "level", "Medium");
+            choose(stage, "status", "Solved");
+            page.call("selectMatch", "## Statement");
+            page.call("insertText", "## Statement\n\nHow many employees work in each department, those with none included?");
+            page.call("selectMatch", "```plsql");
+            page.call("insertText", "```plsql\n" + QUERY);
+        }));
+        waitFor("the exercise to save itself", () -> Files.readString(exercise).contains("LEFT JOIN employees e"));
+        assertTrue(Files.readString(exercise).contains("topics: [queries/joins, queries/group by]"));
+        shot(stage, "db1-exercise");
+        fx(() -> run(app::toggleMode));
+        waitFor("PL/SQL colored in the reading view", () -> fx(() ->
+                ((Number) engine.executeScript("document.querySelectorAll('#reading .tok-keyword').length")).intValue() > 5));
+        assertEquals("PLSQL", fx(() -> engine.executeScript("document.querySelector('#reading .code-head span').textContent")));
+        shot(stage, "db2-reading");
+        fx(() -> run(app::toggleMode));
+
+        // A table, written with + Query: Oracle's types (VARCHAR2, NUMBER) are colored as types.
+        Path table = fx(() -> app.createNote(db.kinds().get(2), "EMPLOYEES", ""));
+        fx(() -> run(() -> {
+            stage.getScene().getRoot().lookupAll(".button").stream().map(Button.class::cast)
+                    .filter(b -> "+ Query".equals(b.getText())).findFirst().orElseThrow().fire();
+            page.call("insertText", CREATE);
+        }));
+        waitFor("the table to save itself", () -> Files.readString(table).contains("```plsql\n" + CREATE + "\n```"));
+        fx(() -> run(app::toggleMode));
+        waitFor("VARCHAR2 colored as a type", () -> fx(() -> Boolean.TRUE.equals(engine.executeScript(
+                "[...document.querySelectorAll('#reading .tok-typeName')].some(t => t.textContent === 'VARCHAR2')"))));
+        fx(() -> run(app::toggleMode));
+
+        // An exam written elsewhere: Upcoming here and on Home, as in Class Notes.
+        LocalDate today = LocalDate.now();
+        Files.writeString(notebook.resolve("Second exam.md"), "---\nkind: exam\ndate: " + today.plusDays(2) + "\ntopics: [plsql/cursors]\n---\n");
+        fx(() -> run(app::refreshFromDisk));
+        fx(() -> run(() -> app.browser.choose("By topic", "queries")));
+        shot(stage, "db3-by-topic");
+        fx(() -> run(() -> app.browser.choose("Upcoming", null)));
+        shot(stage, "db4-upcoming");
+        fx(() -> run(app::showHome));
+        shot(stage, "db5-home");
+        assertEquals(1, fx(() -> stage.getScene().getRoot().lookupAll(".upcoming-row").size()));
+
+        fx(() -> run(() -> {
+            app.setDark(true);
+            app.openNotebook(notebook);
+            app.browser.choose("Exercises", null);
+            app.openNote(exercise);
+            app.toggleMode();
+        }));
+        waitFor("the reading view again", () -> fx(() ->
+                ((Number) engine.executeScript("document.querySelectorAll('#reading .tok-keyword').length")).intValue() > 5));
+        shot(stage, "db6-dark");
+        assertEquals(List.of(), fx(() -> List.copyOf(app.editor.errors)));
+        fx(() -> run(stage::close));
+    }
+
     /** Home with a notebook of each type, light and dark: the screenshots of the README. */
     @Test
     void showsANotebookOfEachTypeOnHome(@TempDir Path home) throws Exception {
@@ -338,6 +424,9 @@ class AppSmokeTest {
         Path ideas = fx(() -> app.createNotebook("Ideas", NotebookType.GENERAL));
         Path calculus = fx(() -> app.createNotebook("Calculus II", NotebookType.CLASS_NOTES));
         Path algorithms = fx(() -> app.createNotebook("Algorithms", NotebookType.COMPETITIVE_PROGRAMMING));
+        Path databases = fx(() -> app.createNotebook("Taller de Base de Datos", NotebookType.DATABASES));
+        Files.writeString(databases.resolve("Employees per department.md"), "---\nkind: exercise\ntopics: [queries/joins]\n---\n");
+        Files.writeString(databases.resolve("Second exam.md"), "---\nkind: exam\ndate: " + today.plusDays(9) + "\n---\n");
         Files.writeString(ideas.resolve("Reading list.md"), "---\ntags: [books]\n---\n");
         Files.writeString(ideas.resolve("Side projects.md"), "");
         Files.writeString(calculus.resolve("Limits.md"), "---\nkind: lecture\ndate: " + today + "\nunit: 1. Limits\n---\n" + LECTURE);

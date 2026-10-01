@@ -52,6 +52,7 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.FillRule;
 import javafx.scene.shape.SVGPath;
+import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 
@@ -82,6 +83,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Devava Notes. Home shows the notebooks; a notebook shows the views of its type, the notes of the
@@ -238,7 +240,8 @@ public final class NotesApp extends Application {
         Button add = button("+ New notebook", "primary", e -> newNotebook());
         add.setTooltip(new Tooltip("Ctrl+N"));
         bar.getChildren().setAll(brand(), grow(), finder(), add, more(item("Search in all notes…", this::search),
-                item("Open data folder", () -> showInFolder(vault.root)), new SeparatorMenuItem(), themeItem()));
+                item("Import notebook…", this::importNotebook), item("Open data folder", () -> showInFolder(vault.root)),
+                new SeparatorMenuItem(), themeItem()));
         root.setCenter(homeContent(true));
         stage.setTitle(NAME);
         refreshTitles();
@@ -361,6 +364,7 @@ public final class NotesApp extends Application {
         return switch (type.id()) {
             case "class-notes" -> "#0D9488";
             case "competitive-programming" -> "#EA580C";
+            case "databases" -> "#0284C7";
             default -> "#6366F1";
         };
     }
@@ -374,14 +378,20 @@ public final class NotesApp extends Application {
         LocalDate today = LocalDate.now();
         List<Upcoming> items = new ArrayList<>();
         for (Vault.Notebook nb : notebooks) {
-            if (!nb.type().equals(NotebookType.CLASS_NOTES)) continue;
+            if (!nb.type().course()) continue;
+            List<Path> notes;
             try {
-                for (Path p : Vault.notes(nb.dir())) {
+                notes = Vault.notes(nb.dir());
+            } catch (IOException e) {
+                continue;   // a course that cannot be read right now has nothing to show
+            }
+            for (Path p : notes) {
+                try {
                     Note n = Note.parse(Vault.read(p));
                     if (Agenda.upcoming(n, today)) items.add(new Upcoming(nb, p, n));
+                } catch (IOException ignored) {
+                    // Held for a moment (OneDrive syncing it, an antivirus): the others still show.
                 }
-            } catch (IOException ignored) {
-                // A course that cannot be read right now just has nothing to show.
             }
         }
         items.sort(Comparator.comparing((Upcoming u) -> Agenda.when(u.note())).thenComparing(u -> Vault.title(u.path()), Vault::compareNatural));
@@ -390,14 +400,9 @@ public final class NotesApp extends Application {
 
     private Button upcomingRow(Upcoming u) {
         Badge b = Agenda.badge(u.note(), LocalDate.now());
-        Label when = new Label(b == null ? "" : b.text()), title = new Label(Vault.title(u.path())), course = new Label(u.notebook().name());
+        Label when = new Label(b == null ? "" : b.text());
         NotebookView.colored(when, b == null ? "" : b.color());
-        when.setMinWidth(110);
-        title.getStyleClass().add("row-title");
-        course.getStyleClass().add("card-meta");
-        HBox line = new HBox(12, when, title, course);
-        line.setAlignment(Pos.CENTER_LEFT);
-        Button row = new Button(null, line);
+        Button row = new Button(null, homeRow(when, Vault.title(u.path()), u.notebook().name()));
         row.getStyleClass().add("upcoming-row");
         row.setMaxWidth(Double.MAX_VALUE);
         row.setOnAction(e -> {
@@ -408,20 +413,26 @@ public final class NotesApp extends Application {
         return row;
     }
 
+    /** A row of Home's lists: when, in a column of its own, then the note's title over its notebook's name. */
+    private static HBox homeRow(Label when, String title, String notebook) {
+        Label name = new Label(title), where = new Label(notebook);
+        name.getStyleClass().add("row-title");
+        where.getStyleClass().add("card-meta");
+        when.setMinWidth(96);
+        HBox line = new HBox(12, when, new VBox(1, name, where));
+        line.setAlignment(Pos.CENTER_LEFT);
+        return line;
+    }
+
     /** The notes changed last, in any notebook. */
     private static List<Vault.Place> recent(List<Vault.Place> all, int count) {
         return all.stream().sorted(Comparator.comparing((Vault.Place p) -> modified(p.note())).reversed()).limit(count).toList();
     }
 
     private Button recentRow(Vault.Place p) {
-        Label when = new Label(ago(modified(p.note()))), title = new Label(p.title()), where = new Label(p.notebook().getFileName().toString());
+        Label when = new Label(ago(modified(p.note())));
         when.getStyleClass().add("card-meta");
-        when.setMinWidth(110);
-        title.getStyleClass().add("row-title");
-        where.getStyleClass().add("card-meta");
-        HBox line = new HBox(12, when, title, where);
-        line.setAlignment(Pos.CENTER_LEFT);
-        Button row = new Button(null, line);
+        Button row = new Button(null, homeRow(when, p.title(), p.notebook().getFileName().toString()));
         row.getStyleClass().add("recent-row");
         row.setMaxWidth(Double.MAX_VALUE);
         row.setOnAction(e -> go(p));
@@ -478,10 +489,41 @@ public final class NotesApp extends Application {
                 item("Change type…", () -> changeType(dir))));
         if (Vault.type(dir).equals(NotebookType.COMPETITIVE_PROGRAMMING)) items.add(item("C++ template…", () -> editTemplate(dir)));
         items.addAll(List.of(
+                item("Export as ZIP…", () -> exportNotebook(dir)),
                 item("Show in folder", () -> showInFolder(dir)),
                 new SeparatorMenuItem(),
                 danger(item("Move to trash…", () -> trashNotebook(dir)))));
         return items.toArray(MenuItem[]::new);
+    }
+
+    /** Saves the notebook as one ZIP to share it; whoever gets it adds it with Import notebook… on Home. */
+    private void exportNotebook(Path dir) {
+        if (dir.equals(notebook)) save();   // the open note, as it is now
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Export “" + dir.getFileName() + "”");
+        chooser.setInitialFileName(dir.getFileName() + ".zip");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("ZIP", "*.zip"));
+        File zip = chooser.showSaveDialog(stage);
+        if (zip == null) return;
+        try {
+            Vault.exportZip(dir, zip.toPath());
+        } catch (IOException e) {
+            error("Couldn't export the notebook", reason(e));
+        }
+    }
+
+    /** Adds a notebook someone shared as a ZIP, and opens it. */
+    private void importNotebook() {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Import a notebook");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("ZIP", "*.zip"));
+        File zip = chooser.showOpenDialog(stage);
+        if (zip == null) return;
+        try {
+            openNotebook(vault.importZip(zip.toPath()));
+        } catch (IOException e) {
+            error("Couldn't import the notebook", reason(e));
+        }
     }
 
     /** The C++ that new problems and "+ Solution" start with, kept in the notebook's .notebook.json. */
@@ -670,8 +712,16 @@ public final class NotesApp extends Application {
         status.setText("");
         showBadge();
         tools.getChildren().clear();
-        if (type.equals(NotebookType.COMPETITIVE_PROGRAMMING)) {
-            if (kind.id().equals("problem")) tools.getChildren().add(button("+ Solution", "flat", e -> newSolution()));
+        if (type.equals(NotebookType.COMPETITIVE_PROGRAMMING) && kind.id().equals("problem")) {
+            tools.getChildren().add(button("+ Solution", "flat", e -> newSolution()));
+        }
+        if (type.equals(NotebookType.DATABASES)) {
+            tools.getChildren().add(button("+ Query", "flat", e -> {
+                setReading(false);
+                editor.insertCode("", "plsql");
+            }));
+        }
+        if (type.kinds().stream().anyMatch(k -> k.id().equals("snippet"))) {
             tools.getChildren().add(button("Insert snippet…", "flat", e -> insertSnippet()));
         }
         properties.show(kind, n);
@@ -804,9 +854,13 @@ public final class NotesApp extends Application {
         List<Entry> snippets = entries.stream()
                 .filter(e -> type.kindOf(e.note()).id().equals("snippet") && !e.path().equals(note)).toList();
         if (snippets.isEmpty()) {
-            error("The Code Library is empty", "Add a snippet with + New ▾ → Snippet, with its code in a ```cpp block.");
+            error("The Code Library is empty", "Add a snippet with + New ▾ → Snippet, with its code in a block of code.");
             return;
         }
+        // What a snippet is filed under (algorithms and techniques, or topics): shown and searched with its title.
+        Kind kind = type.kinds().stream().filter(k -> k.id().equals("snippet")).findFirst().orElseThrow();
+        Function<Entry, String> filed = e -> kind.fields().stream().filter(f -> f.input() == NotebookType.Input.LIST)
+                .flatMap(f -> e.note().list(f.key()).stream()).collect(Collectors.joining(", "));
         TextField filter = new TextField();
         filter.setPromptText("Filter");
         ListView<Entry> list = new ListView<>();
@@ -814,14 +868,13 @@ public final class NotesApp extends Application {
             @Override
             protected void updateItem(Entry e, boolean empty) {
                 super.updateItem(e, empty);
-                String topics = e == null ? "" : String.join(", ", e.note().list("algorithms"));
-                setText(empty || e == null ? null : topics.isEmpty() ? e.title() : e.title() + "  ·  " + topics);
+                String under = e == null ? "" : filed.apply(e);
+                setText(empty || e == null ? null : under.isEmpty() ? e.title() : e.title() + "  ·  " + under);
             }
         });
         Runnable narrow = () -> {
             String wanted = NotebookView.fold(filter.getText().strip());
-            list.getItems().setAll(snippets.stream().filter(e -> NotebookView.fold(e.title() + " "
-                    + String.join(" ", e.note().list("algorithms")) + " " + String.join(" ", e.note().list("techniques"))).contains(wanted)).toList());
+            list.getItems().setAll(snippets.stream().filter(e -> NotebookView.fold(e.title() + " " + filed.apply(e)).contains(wanted)).toList());
             list.getSelectionModel().selectFirst();
         };
         filter.textProperty().addListener((o, was, now) -> narrow.run());
@@ -1060,7 +1113,7 @@ public final class NotesApp extends Application {
     ContextMenu noteMenu(Path p) {
         ContextMenu menu = new ContextMenu(item("Rename…", () -> renameNote(p)));
         Note n = entries.stream().filter(e -> e.path().equals(p)).map(Entry::note).findFirst().orElse(null);
-        if (n != null && type.equals(NotebookType.CLASS_NOTES) && type.kindOf(n).id().equals("assignment")) {
+        if (n != null && type.course() && type.kindOf(n).id().equals("assignment")) {
             boolean done = n.get("status").equalsIgnoreCase("Done");
             menu.getItems().add(item(done ? "Mark as pending" : "Mark as done", () -> setProperty(p, "status", done ? "Pending" : "Done")));
         }

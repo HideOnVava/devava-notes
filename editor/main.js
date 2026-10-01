@@ -189,7 +189,9 @@ window.insertCode = (code, language) => {
     for (let node = syntaxTree(view.state).resolveInner(view.state.selection.main.head, -1); node; node = node.parent) {
         if (node.name === "FencedCode") inBlock = true;
     }
+    const from = view.state.selection.main.from;
     view.dispatch(view.state.replaceSelection(inBlock ? code : "\n```" + language + "\n" + code + "\n```\n"), {scrollIntoView: true});
+    if (!inBlock && !code) view.dispatch({selection: {anchor: from + language.length + 5}});   // into the new, empty block
     view.focus();
 };
 window.selectMatch = text => {
@@ -230,10 +232,11 @@ tell("ready");
 // and the same colors as in the editor.
 function card(code) {
     const name = code.className.startsWith("language-") ? code.className.slice("language-".length) : "";
+    const language = name ? LanguageDescription.matchLanguageName(languages, name, true) : null;
     const text = code.textContent.replace(/\n$/, "");
     const head = document.createElement("div"), label = document.createElement("span"), copy = document.createElement("button");
     head.className = "code-head";
-    label.textContent = name || "code";
+    label.textContent = language?.name ?? (name || "code");   // "C++" for cpp, "PLSQL" for plsql
     copy.className = "copy";
     copy.textContent = "Copy";
     copy.addEventListener("click", () => {
@@ -247,8 +250,7 @@ function card(code) {
     pre.replaceWith(box);
     box.append(head, pre);
     lines(code, text, null);
-    (name ? LanguageDescription.matchLanguageName(languages, name, true) : null)?.load()
-        .then(support => lines(code, text, support.language.parser.parse(text)));
+    language?.load().then(support => lines(code, text, support.language.parser.parse(text)));
 }
 
 function lines(code, text, tree) {

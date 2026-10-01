@@ -10,16 +10,18 @@ A desktop notes app whose notebooks know what they hold, built by **devava XP St
 A notebook of **class notes** knows about lectures, assignments and exams, and tells you what
 is due next. A notebook of **competitive programming** knows about Codeforces, AtCoder and
 LeetCode problems, sorts them by algorithm, technique and difficulty, and keeps your C++
-ready to reuse. A **general** notebook is just notes with tags. Every note is a plain
-Markdown file on your disk: no accounts, no cloud, no Java to install.
+ready to reuse. A **databases** notebook is a database course with Oracle: SQL and PL/SQL
+exercises by topic, the tables you query and the queries you reuse. A **general** notebook is
+just notes with tags. Every note is a plain Markdown file on your disk: no accounts, no
+cloud, no Java to install.
 
 | Home | Competitive Programming |
 | --- | --- |
 | ![Home: notebooks, upcoming work and recent notes](docs/screenshots/home.png) | ![A Codeforces problem with its properties and C++ code](docs/screenshots/competitive-programming.png) |
 
-| Class Notes, reading view | Dark theme |
+| Class Notes, reading view | Databases, dark theme |
 | --- | --- |
-| ![A lecture with math drawn by KaTeX](docs/screenshots/class-notes.png) | ![The reading view in the dark theme](docs/screenshots/dark.png) |
+| ![A lecture with math drawn by KaTeX](docs/screenshots/class-notes.png) | ![An SQL exercise with its Oracle query, in the dark theme](docs/screenshots/databases.png) |
 
 ## Download
 
@@ -36,7 +38,7 @@ macOS and Linux versions are planned.
 ### First steps
 
 1. **Create a notebook** with *+ New notebook* and pick its type: *General*, *Class Notes*
-   (one per course) or *Competitive Programming*.
+   (one per course), *Competitive Programming* or *Databases*.
 2. **Write a note** with *+ New* (`Ctrl+N`). In a Competitive Programming notebook, paste
    the problem's link: the judge, the problem's ID and a solution block with your C++
    template are filled in.
@@ -76,6 +78,15 @@ Each type brings its own properties (shown above the note), templates for new no
   colors. *+ Solution* adds another solution block; *Insert snippet…* copies code from the
   library into the note; each notebook has its own C++ template (notebook menu → *C++
   template…*).
+- **Databases**: a database course, written for Oracle's SQL and PL/SQL. *Lectures* (date,
+  unit, topics), *exercises* (topics, level, status, date), *tables* of the schema you work
+  with, *snippets* for the **Code Library**, and *assignments* and *exams* as in Class Notes.
+  Views: lectures, by unit, exercises, **To review**, **by topic** (`plsql/cursors` nests
+  under `plsql`; the topics offered go from `queries/joins` to `plsql/triggers`), tables, the
+  Code Library, **Upcoming**, assignments, exams and all notes. Its templates write code in
+  ` ```plsql ` blocks, colored with Oracle's words (`VARCHAR2`, `SYSDATE`, SQL*Plus
+  commands); *+ Query* adds one at the cursor and *Insert snippet…* copies one from the
+  library.
 
 ## Writing
 
@@ -143,6 +154,9 @@ Two even parts only if w is even and greater than 2.
   crash never leaves half a note.
 - Deleting a note or a notebook moves it to the Recycle Bin.
 - Folders you create by hand become General notebooks.
+- **To share a notebook** (your class notes with your classmates, say): its menu → *Export as
+  ZIP…*. Whoever gets the ZIP adds it with *Import notebook…* in Home's menu; it opens as it
+  was, type, pictures and all, next to their own notebooks.
 - To keep the notes somewhere else, start the app with `-Dnotes.home=<folder>` (from source)
   or set the environment variable `JAVA_TOOL_OPTIONS=-Dnotes.home=<folder>` (installed app).
 

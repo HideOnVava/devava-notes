@@ -9,6 +9,7 @@ import javax.swing.filechooser.FileSystemView;
 import java.awt.Desktop;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.FileAlreadyExistsException;
@@ -25,6 +26,10 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipException;
+import java.util.zip.ZipFile;
+import java.util.zip.ZipOutputStream;
 
 /**
  * The notes on disk: under Documents/Devava Notes, one folder per notebook and one Markdown
@@ -206,6 +211,60 @@ final class Vault {
             throw new IOException("this system has no trash to move it to, so nothing was deleted");
         }
         if (!Desktop.getDesktop().moveToTrash(path.toFile())) throw new IOException("it could not be moved to the trash");
+    }
+
+    /** Packs a notebook (its notes, pictures and .notebook.json) into a ZIP, in a folder named after it: to share it. */
+    static void exportZip(Path notebook, Path zip) throws IOException {
+        try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(zip)); Stream<Path> files = Files.walk(notebook)) {
+            for (Path file : files.filter(Files::isRegularFile).toList()) {
+                out.putNextEntry(new ZipEntry(notebook.getFileName() + "/" + notebook.relativize(file).toString().replace('\\', '/')));
+                Files.copy(file, out);
+                out.closeEntry();
+            }
+        }
+    }
+
+    /**
+     * Unpacks a notebook shared as a ZIP (exportZip's, or its folder zipped by hand) into the notes
+     * folder, under another name if its own is taken, and returns its folder. Nothing in the ZIP may
+     * land outside that folder, and if anything fails no half of the notebook stays.
+     */
+    Path importZip(Path zip) throws IOException {
+        ZipFile file;
+        try {
+            file = new ZipFile(zip.toFile());
+        } catch (ZipException e) {
+            throw new IOException("it is not a ZIP file", e);
+        }
+        try (file) {
+            List<? extends ZipEntry> entries = file.stream().filter(e -> !e.isDirectory()).toList();
+            if (entries.isEmpty()) throw new IOException("the ZIP is empty");
+            String first = entries.get(0).getName().replace('\\', '/');
+            String top = first.indexOf('/') > 0 ? first.substring(0, first.indexOf('/') + 1) : "";
+            boolean inFolder = !top.isEmpty() && entries.stream().allMatch(e -> e.getName().replace('\\', '/').startsWith(top));
+            String name = inFolder ? top.substring(0, top.length() - 1) : zip.getFileName().toString().replaceFirst("(?i)\\.zip$", "");
+            Files.createDirectories(root);
+            Path dir = Files.createDirectory(unique(root, fileName(name), ""));
+            try {
+                for (ZipEntry entry : entries) {
+                    String path = entry.getName().replace('\\', '/');
+                    Path target = dir.resolve(inFolder ? path.substring(top.length()) : path).normalize();
+                    if (!target.startsWith(dir) || target.equals(dir)) {
+                        throw new IOException("“" + entry.getName() + "” in it points outside the notebook");
+                    }
+                    Files.createDirectories(target.getParent());
+                    try (InputStream in = file.getInputStream(entry)) {
+                        Files.copy(in, target);
+                    }
+                }
+            } catch (IOException | RuntimeException e) {
+                try (Stream<Path> made = Files.walk(dir)) {
+                    for (Path p : made.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(p);
+                }
+                throw e instanceof IOException io ? io : new IOException(e.getMessage(), e);
+            }
+            return dir;
+        }
     }
 
     static String read(Path note) throws IOException {
