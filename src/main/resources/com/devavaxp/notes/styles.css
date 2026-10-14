@@ -758,6 +758,131 @@
     -fx-text-fill: -text-muted;
 }
 
+.empty-title, .empty-text {
+    -fx-text-alignment: center;
+}
+
+/* ---------- Nueva materia and the first use: the curriculum of ISC ---------- */
+
+.list-view.subjects {
+    -fx-background-color: -surface;
+    -fx-background-radius: 10;
+    -fx-border-color: -border;
+    -fx-border-radius: 10;
+    -fx-padding: 4;
+}
+
+.list-view.subjects .list-cell {
+    -fx-background-color: transparent;
+    -fx-background-radius: 8;
+    -fx-padding: 5 9;
+}
+
+.list-view.subjects .list-cell:filled:hover {
+    -fx-background-color: -surface-hover;
+}
+
+.list-view.subjects .list-cell:filled:selected {
+    -fx-background-color: -accent-soft;
+}
+
+.list-view.subjects .list-cell.heading, .list-view.subjects .list-cell.heading:hover {
+    -fx-background-color: transparent;
+    -fx-text-fill: -text-faint;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-padding: 8 9 2 9;
+}
+
+.subject-name {
+    -fx-font-size: 13.5px;
+}
+
+.list-cell:filled:selected .subject-name {
+    -fx-text-fill: -accent-text;
+    -fx-font-weight: bold;
+}
+
+.subject-kind {
+    -fx-font-size: 12px;
+}
+
+/* The five types, side by side: the one chosen in the accent */
+.toggle-button.type-option {
+    -fx-background-color: -surface;
+    -fx-background-radius: 10;
+    -fx-border-color: -border;
+    -fx-border-radius: 10;
+    -fx-border-width: 1;
+    -fx-padding: 8 9;
+    -fx-alignment: top-left;
+}
+
+.toggle-button.type-option:hover {
+    -fx-border-color: -border-strong;
+}
+
+.toggle-button.type-option:selected {
+    -fx-background-color: -accent-soft;
+    -fx-border-color: -accent;
+    -fx-border-width: 2;
+    -fx-padding: 7 8;
+}
+
+.option-name {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+}
+
+.option-about {
+    -fx-font-size: 11.5px;
+    -fx-text-fill: -text-muted;
+}
+
+.first-use {
+    -fx-background-color: -surface;
+    -fx-background-radius: 16;
+    -fx-border-color: -border;
+    -fx-border-radius: 16;
+    -fx-padding: 26 30;
+}
+
+.welcome-title {
+    -fx-font-size: 22px;
+    -fx-font-weight: bold;
+}
+
+.welcome-text {
+    -fx-font-size: 14px;
+    -fx-text-fill: -text-muted;
+}
+
+.scroll-pane.first-use-scroll, .scroll-pane.first-use-scroll > .viewport {
+    -fx-background-color: -surface;
+    -fx-background: -surface;
+}
+
+.scroll-pane.first-use-scroll {
+    -fx-background-radius: 10;
+    -fx-border-color: -border;
+    -fx-border-radius: 10;
+    -fx-padding: 10 14;
+}
+
+.subject-row {
+    -fx-padding: 3 6;
+    -fx-background-radius: 7;
+}
+
+.subject-row:hover {
+    -fx-background-color: -surface-hover;
+}
+
+.button.small {
+    -fx-padding: 2 8;
+    -fx-font-size: 12px;
+}
+
 /* ---------- A notebook: views, notes, the open note ---------- */
 
 .split-pane {

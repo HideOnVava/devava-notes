@@ -65,7 +65,7 @@ class NotebookViewTest {
                 entry("Quiz", "kind: exam\ndate: " + today.minusDays(1)),
                 entry("Limits", "date: " + today));
         assertEquals(List.of("Homework 2", "Homework 3", "Midterm"), titles(NotebookView.rows(course, view(course, "Lo que se acerca"), null, "", notes).get(0)));
-        assertEquals(List.of("Limits"), titles(NotebookView.rows(course, view(course, "Clases"), null, "", notes).get(0)));
+        assertEquals(List.of("Limits"), titles(NotebookView.rows(course, view(course, "Apuntes"), null, "", notes).get(0)));
         assertEquals("3 días de retraso", course.badge(notes.get(1).note()).text());
     }
 

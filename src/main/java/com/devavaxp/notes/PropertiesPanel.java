@@ -1,6 +1,7 @@
 package com.devavaxp.notes;
 
 import com.devavaxp.notes.NotebookType.Field;
+import com.devavaxp.notes.NotebookType.Input;
 import com.devavaxp.notes.NotebookType.Kind;
 import javafx.application.Platform;
 import javafx.scene.Node;
@@ -99,6 +100,7 @@ final class PropertiesPanel {
         return switch (f.input()) {
             case TEXT -> {
                 TextField field = text(key, current, s -> note.set(key, s));
+                if (key.equals("topic") && !used.apply(key).isEmpty()) yield row(field, picker(f, note, field));   // the subject's topics
                 if (!key.equals("url")) yield field;
                 Button open = new Button("↗");
                 open.getStyleClass().add("flat");
@@ -146,8 +148,12 @@ final class PropertiesPanel {
         };
     }
 
-    /** The ▾ menu of a list: its suggestions and the notebook's own values, ticked when the note has them. */
+    /**
+     * The ▾ menu of a list: its suggestions and the notebook's own values, ticked when the note has
+     * them. For a text (a lecture's topic), the one chosen replaces it.
+     */
     private MenuButton picker(Field f, Note note, TextField field) {
+        boolean one = f.input() == Input.TEXT;
         MenuButton pick = new MenuButton("▾");
         pick.getStyleClass().add("picker");
         pick.setOnShowing(e -> {
@@ -161,11 +167,14 @@ final class PropertiesPanel {
                 CheckMenuItem item = new CheckMenuItem(value);
                 item.setSelected(chosen.stream().anyMatch(value::equalsIgnoreCase));
                 item.setOnAction(a -> {
-                    List<String> now = new ArrayList<>(note.list(f.key()));
-                    if (!now.removeIf(value::equalsIgnoreCase)) now.add(value);
+                    List<String> now = new ArrayList<>(one ? List.of() : note.list(f.key()));
+                    if (one || !now.removeIf(value::equalsIgnoreCase)) now.add(value);
                     field.setText(String.join(", ", now));
                     field.getProperties().put("saved", field.getText());
-                    change(f.key(), () -> note.setList(f.key(), now));
+                    change(f.key(), () -> {
+                        if (one) note.set(f.key(), value);
+                        else note.setList(f.key(), now);
+                    });
                 });
                 pick.getItems().add(item);
             }

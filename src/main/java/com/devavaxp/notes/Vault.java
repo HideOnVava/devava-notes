@@ -254,7 +254,7 @@ final class Vault {
                     String path = entry.getName().replace('\\', '/');
                     Path target = dir.resolve(inFolder ? path.substring(top.length()) : path).normalize();
                     if (!target.startsWith(dir) || target.equals(dir)) {
-                        throw new IOException(String.format("“%s” apunta fuera del cuaderno", entry.getName()));
+                        throw new IOException(String.format("“%s” apunta fuera de su carpeta", entry.getName()));
                     }
                     Files.createDirectories(target.getParent());
                     try (InputStream in = file.getInputStream(entry)) {

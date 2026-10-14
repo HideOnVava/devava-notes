@@ -6,10 +6,13 @@ import javafx.event.ActionEvent;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.DialogPane;
 import javafx.scene.control.Labeled;
+import javafx.scene.control.MenuButton;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.TextField;
 import javafx.scene.image.PixelFormat;
 import javafx.scene.image.WritableImage;
@@ -378,7 +381,7 @@ class AppSmokeTest {
         fx(() -> run(() -> app.openNotebook(notebook)));
 
         // An exercise: its statement, its topics and level, and the query in the PL/SQL block of its template.
-        Path exercise = fx(() -> app.createNote(db.kinds().get(1), "Empleados por departamento", ""));
+        Path exercise = fx(() -> app.createNote(kind(db, "exercise"), "Empleados por departamento", ""));
         fx(() -> run(() -> {
             type(stage, "topics", "consultas/joins, consultas/group by");
             choose(stage, "level", "Medium");
@@ -400,7 +403,7 @@ class AppSmokeTest {
 
         // A table, its CREATE in a block of the bar's button, in the notebook's PL/SQL: Oracle's types
         // (VARCHAR2, NUMBER) are colored as types.
-        Path table = fx(() -> app.createNote(db.kinds().get(2), "EMPLOYEES", ""));
+        Path table = fx(() -> app.createNote(kind(db, "table"), "EMPLOYEES", ""));
         fx(() -> run(() -> {
             button(stage, "Bloque de código").fire();
             page.call("insertText", CREATE);
@@ -559,6 +562,85 @@ class AppSmokeTest {
         fx(() -> run(window[0]::close));
     }
 
+    /** Nueva materia: a subject found in the curriculum, with its type, language and topics; its empty views say how to start. */
+    @Test
+    void createsASubjectFromTheCurriculum(@TempDir Path home) throws Exception {
+        Stage[] window = new Stage[1];
+        NotesApp app = open(home, window);
+        Stage stage = window[0];
+        fx(() -> app.createNotebook("Ideas", NotebookType.GENERAL));   // Home, not the first use
+        fx(() -> run(app::showHome));
+        Platform.runLater(app::newNotebook);   // it stays in showAndWait() until the dialog closes
+        waitFor("the dialog of Nueva materia", () -> fx(() -> dialog(stage) != null));
+        Stage dialog = fx(() -> dialog(stage));
+        fx(() -> run(() -> ((TextField) dialog.getScene().lookup(".text-field")).setText("estruc")));
+        shot(dialog, "d5-new-subject");
+        List<String> shown = fx(() -> texts(dialog));
+        assertTrue(shown.containsAll(List.of("3ER SEMESTRE", "Estructura de Datos", "Programación · Java", "Crear “estruc” con otro nombre")),
+                shown.toString());
+        fx(() -> run(() -> button(dialog, "Crear materia").fire()));
+        Path ed = home.resolve("Estructura de Datos");
+        waitFor("the notebook of Estructura de Datos", () -> Files.isDirectory(ed) && Vault.type(ed) == NotebookType.PROGRAMMING);
+        assertEquals("java", Vault.meta(ed, "language"));
+        assertEquals("B13", Vault.meta(ed, "subject"));
+        assertEquals(Period.of(LocalDate.now()).toString(), Vault.meta(ed, "period"));
+
+        // Its views, empty, say what goes in them, with the button for the first one.
+        waitFor("its first view, empty", () -> fx(() -> texts(stage)).contains("Aún no tienes apuntes en Estructura de Datos"));
+        fx(() -> run(() -> app.browser.choose("Sesiones de código", null)));
+        shot(stage, "e1-empty-sessions");
+        assertTrue(fx(() -> texts(stage)).containsAll(List.of("Aún no tienes sesiones de código en Estructura de Datos", "Nueva sesión de código")));
+
+        // A session starts with a block in Java and one for its output; its topics suggest the subject's.
+        Path session = fx(() -> app.createNote(kind(NotebookType.PROGRAMMING, "session"), "Sesión 1 · Pilas", ""));
+        assertTrue(Files.readString(session).contains("## Código\n\n```java\n\n```\n\n## Salida\n\n```output\n\n```"), Files.readString(session));
+        MenuButton topics = fx(() -> (MenuButton) stage.getScene().lookup(".picker"));
+        fx(() -> run(topics::show));
+        List<String> offered = fx(() -> topics.getItems().stream().map(MenuItem::getText).toList());
+        fx(() -> run(topics::hide));
+        assertTrue(offered.containsAll(List.of("pilas", "colas", "listas enlazadas")), offered.toString());
+        shot(stage, "e2-session");
+        assertEquals(List.of(), fx(() -> List.copyOf(app.editor.errors)));
+        fx(() -> run(stage::close));
+    }
+
+    /** The first time: the subjects of the semester, ticked in the curriculum, and a note on how the app works. */
+    @Test
+    void startsWithTheSubjectsOfTheSemester(@TempDir Path home) throws Exception {
+        Stage[] window = new Stage[1];
+        NotesApp app = open(home, window);
+        Stage stage = window[0];
+        WebEngine engine = fx(() -> app.editor.view.getEngine());
+        assertTrue(fx(() -> texts(stage)).contains("Te damos la bienvenida a Devava Notes"));
+        fx(() -> run(() -> ((TextField) stage.getScene().lookup(".first-use .text-field")).setText("programación")));
+        fx(() -> run(() -> {
+            checkBox(stage, "Fundamentos de Programación").setSelected(true);
+            checkBox(stage, "Programación Orientada a Objetos").setSelected(true);
+        }));
+        shot(stage, "f1-first-use");
+        fx(() -> run(() -> button(stage, "Crear 2 materias").fire()));
+        Path poo = home.resolve("Programación Orientada a Objetos");
+        assertEquals(NotebookType.PROGRAMMING, Vault.type(poo));
+        assertEquals("java", Vault.meta(poo, "language"));
+        assertEquals("cpp", Vault.meta(home.resolve("Fundamentos de Programación"), "language"));
+        Path guide = home.resolve("Primeros pasos").resolve("Cómo usar Devava Notes.md");
+        assertTrue(Files.readString(guide).contains("```java"));
+        shot(stage, "f2-home");
+        assertTrue(fx(() -> texts(stage)).containsAll(List.of("Programación Orientada a Objetos", "Programación · Java", "Primeros pasos")));
+
+        // The guide, as it reads: its formula, its code and its output.
+        fx(() -> run(() -> {
+            app.openNotebook(home.resolve("Primeros pasos"));
+            app.openNote(guide);
+            app.toggleMode();
+        }));
+        waitFor("the guide's two blocks", () -> fx(() -> ((Number) engine.executeScript("document.querySelectorAll('#reading .code-card').length")).intValue() == 2));
+        waitFor("its formula", () -> fx(() -> ((Number) engine.executeScript("document.querySelectorAll('#reading .katex').length")).intValue() == 1));
+        shot(stage, "f3-guide");
+        assertEquals(List.of(), fx(() -> List.copyOf(app.editor.errors)));
+        fx(() -> run(stage::close));
+    }
+
     /** Home shows this school period's notebooks; the earlier ones fold away until asked for. */
     @Test
     void homeGroupsNotebooksBySchoolPeriod(@TempDir Path home) throws Exception {
@@ -572,7 +654,7 @@ class AppSmokeTest {
         fx(() -> run(app::showHome));
         shot(stage, "p1-home-periods");
         List<String> shown = fx(() -> texts(stage));
-        assertTrue(shown.containsAll(List.of(now.toString(), "Programación Orientada a Objetos", "Semestres anteriores · 1 cuaderno")), shown.toString());
+        assertTrue(shown.containsAll(List.of(now.toString(), "Programación Orientada a Objetos", "Semestres anteriores · 1 materia")), shown.toString());
         assertFalse(shown.contains("Fundamentos de Programación"));
 
         fx(() -> run(() -> stage.getScene().getRoot().lookupAll(".button").stream().map(Button.class::cast)
@@ -593,6 +675,11 @@ class AppSmokeTest {
         Path calculus = fx(() -> app.createNotebook("Cálculo Vectorial", NotebookType.CLASS_NOTES));
         Path algorithms = fx(() -> app.createNotebook("Algoritmos", NotebookType.COMPETITIVE_PROGRAMMING));
         Path databases = fx(() -> app.createNotebook("Taller de Base de Datos", NotebookType.DATABASES));
+        Path poo = fx(() -> app.createNotebook("Programación Orientada a Objetos", NotebookType.PROGRAMMING));
+        Vault.setMeta(poo, "language", "java");
+        Files.writeString(poo.resolve("Sesión 7 · Herencia.md"), "---\nkind: session\ndate: " + today + "\nunit: 3. Herencia\n---\n## Código\n\n```java\n"
+                + ANIMAL + "\n```\n");
+        Files.writeString(poo.resolve("Práctica 4 · Herencia.md"), "---\nkind: assignment\ndue: " + today.plusDays(2) + "\nstatus: Pending\n---\n");
         Files.writeString(databases.resolve("Empleados por departamento.md"), "---\nkind: exercise\ntopics: [consultas/joins]\n---\n");
         Files.writeString(databases.resolve("Segundo examen.md"), "---\nkind: exam\ndate: " + today.plusDays(9) + "\n---\n");
         Files.writeString(ideas.resolve("Lista de lectura.md"), "---\ntags: [libros]\n---\n");
@@ -630,6 +717,15 @@ class AppSmokeTest {
         TextField field = (TextField) stage.getScene().lookup("#property-" + key);
         field.setText(text);
         field.fireEvent(new ActionEvent());
+    }
+
+    private static Kind kind(NotebookType type, String id) {
+        return type.kinds().stream().filter(k -> k.id().equals(id)).findFirst().orElseThrow();
+    }
+
+    private static CheckBox checkBox(Stage stage, String text) {
+        return stage.getScene().getRoot().lookupAll(".check-box").stream().map(CheckBox.class::cast)
+                .filter(b -> text.equals(b.getText())).findFirst().orElseThrow();
     }
 
     /** The button of the window that says this. */

@@ -3,6 +3,7 @@ package com.devavaxp.notes;
 import com.devavaxp.notes.NotebookType.Badge;
 import com.devavaxp.notes.NotebookType.Field;
 import com.devavaxp.notes.NotebookType.Input;
+import com.devavaxp.notes.NotebookType.Kind;
 import com.devavaxp.notes.NotebookType.View;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ReadOnlyObjectWrapper;
@@ -10,6 +11,7 @@ import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.css.PseudoClass;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.control.Button;
 import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Label;
 import javafx.scene.control.Labeled;
@@ -304,7 +306,8 @@ final class NotebookView {
             case "exam" -> "exam";
             case "problem" -> "trophy";
             case "snippet" -> "snippet";
-            case "exercise" -> "code";
+            case "session" -> "code";
+            case "exercise" -> "pen";
             case "table" -> "table";
             default -> "note";
         };
@@ -351,10 +354,31 @@ final class NotebookView {
             this.table.getStyleClass().remove("as-list");
             if (!table) this.table.getStyleClass().add("as-list");
             this.table.getRoot().getChildren().setAll(items);
+            this.table.setPlaceholder(empty());
         } finally {
             updating = false;
         }
         select(open);
+    }
+
+    /** What an empty view says, with the button that makes its first note: "Aún no tienes sesiones de código en POO". */
+    private Node empty() {
+        String typed = filter.getText().strip(), where = app.notebookName();
+        if (!typed.isEmpty()) return NotesApp.placeholder("Ninguna nota coincide con “" + typed + "”", "Prueba con otra palabra, o borra el filtro.");
+        if ("upcoming".equals(view.only())) return NotesApp.placeholder("Nada se acerca en " + where,
+                "Aquí aparecen las tareas por entregar y los exámenes que vienen.");
+        if ("pinned".equals(view.only())) return NotesApp.placeholder("Aún no tienes notas fijadas", "Marca la casilla Fijada de una nota para tenerla aquí.");
+        if (view.only() != null) return NotesApp.placeholder("Nada por repasar", "Aquí aparece lo que resolviste con ayuda, para volver a intentarlo.");
+        Kind kind = type.kinds().stream().filter(k -> k.id().equals(view.kind())).findFirst().orElse(null);
+        Kind make = kind != null ? kind : type.kinds().get(0);
+        VBox empty = NotesApp.placeholder(kind != null ? "Aún no tienes " + kind.plural() + " en " + where : "Aún no hay notas en " + where,
+                make.about());
+        Button first = new Button(make.create(), Icons.of("plus", 16));
+        first.getStyleClass().add("primary");
+        first.setMinWidth(Region.USE_PREF_SIZE);
+        first.setOnAction(e -> app.newNote(make));
+        empty.getChildren().add(first);
+        return empty;
     }
 
     /** A group's name: its value (a choice in the app's language), or "No status" for the notes without one. */

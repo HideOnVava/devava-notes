@@ -23,10 +23,11 @@ record NotebookType(String id, String name, String description, List<Kind> kinds
     }
 
     /**
-     * A kind of note: its name, what makes one ("Nueva clase") and what it is for, its properties,
-     * and the text a new one starts with ({today} becomes the date).
+     * A kind of note: its name, and in plural ("sesiones de código"), what makes one ("Nuevo apunte")
+     * and what it is for, its properties, and the text a new one starts with ({today} becomes the
+     * date, {language} the notebook's language for code).
      */
-    record Kind(String id, String name, String create, String about, List<Field> fields, String template) {
+    record Kind(String id, String name, String plural, String create, String about, List<Field> fields, String template) {
     }
 
     /**
@@ -71,7 +72,22 @@ record NotebookType(String id, String name, String description, List<Kind> kinds
             "plsql/excepciones", "plsql/procedimientos", "plsql/funciones", "plsql/paquetes", "plsql/disparadores",
             "diseño/modelo entidad-relación", "diseño/normalización", "diccionario de datos"));
 
-    private static final Kind ASSIGNMENT = new Kind("assignment", "Tarea", "Nueva tarea", "Con fecha de entrega", List.of(DUE, TASK), """
+    private static final Kind LECTURE = new Kind("lecture", "Apunte", "apuntes", "Nuevo apunte", "Lo que se vio en clase",
+            List.of(DATE, UNIT, TOPIC), """
+            ---
+            date: {today}
+            ---
+            ## Ideas clave
+
+            ## Notas
+
+            ## Preguntas
+
+            ## Resumen
+            """);
+
+    private static final Kind ASSIGNMENT = new Kind("assignment", "Tarea", "tareas", "Nueva tarea",
+            "Tareas, prácticas y proyectos, con fecha de entrega", List.of(DUE, TASK), """
             ---
             kind: assignment
             status: Pending
@@ -81,16 +97,85 @@ record NotebookType(String id, String name, String description, List<Kind> kinds
             ## Notas
             """);
 
-    static final NotebookType GENERAL = new NotebookType("general", "General",
-            "Notas libres, organizadas con etiquetas.",
-            List.of(new Kind("note", "Nota", "Nueva nota", "Una nota libre", List.of(TAGS, PINNED), "")),
-            List.of(new View("Todas las notas", null, null, "-modified", null),
-                    new View("Notas fijadas", null, "pinned", "-modified", null),
-                    new View("Por etiqueta", null, null, "title", "tags")));
+    private static Kind exam(Field topics) {
+        return new Kind("exam", "Examen", "exámenes", "Nuevo examen", "Parciales y finales: fecha, temas y calificación",
+                List.of(DATE, topics, GRADE), """
+                ---
+                kind: exam
+                ---
+                ## Temas
 
-    static final NotebookType CLASS_NOTES = new NotebookType("class-notes", "Apuntes de clase",
-            "Una materia: sus clases, tareas y exámenes.",
-            List.of(new Kind("lecture", "Clase", "Nueva clase", "Lo que se vio en una clase", List.of(DATE, UNIT, TOPIC), """
+                ## Notas
+                """);
+    }
+
+    /** A class with code (the lab, the practice): what was programmed, in the notebook's language, and what it printed. */
+    private static Kind session(Field topics) {
+        return new Kind("session", "Sesión de código", "sesiones de código", "Nueva sesión de código",
+                "Una clase con código: lo que se programó y lo que imprimió", List.of(DATE, UNIT, topics), """
+                ---
+                kind: session
+                date: {today}
+                ---
+                ## Objetivo
+
+                ## Código
+
+                ```{language}
+
+                ```
+
+                ## Salida
+
+                ```output
+
+                ```
+
+                ## Notas
+                """);
+    }
+
+    private static Kind snippet(String about, List<Field> fields) {
+        return new Kind("snippet", "Fragmento", "fragmentos", "Nuevo fragmento", about, fields, """
+                ---
+                kind: snippet
+                ---
+                ## Cuándo usarlo
+
+                ## Código
+
+                ```{language}
+
+                ```
+                """);
+    }
+
+    private static final View UPCOMING = new View("Lo que se acerca", null, "upcoming", "when", null);
+    private static final View ASSIGNMENTS = new View("Tareas y prácticas", "assignment", null, "-due", null);
+    private static final View EXAMS = new View("Exámenes", "exam", null, "-date", null);
+    private static final View ALL_NOTES = new View("Todas las notas", null, null, "-when", null);
+
+    /** A subject of the Tec: Cálculo, Física, Contabilidad… (until 2.0, "Apuntes de clase"). */
+    static final NotebookType CLASS_NOTES = new NotebookType("class-notes", "Materia",
+            "Apuntes, tareas y exámenes",
+            List.of(LECTURE, ASSIGNMENT, exam(TOPICS)),
+            List.of(new View("Apuntes", "lecture", null, "-date", null),
+                    new View("Por unidad", "lecture", null, "date", "unit"),
+                    UPCOMING, ASSIGNMENTS, EXAMS, ALL_NOTES));
+
+    /** A subject with code: Fundamentos de Programación, POO, Estructura de Datos… */
+    static final NotebookType PROGRAMMING = new NotebookType("programming", "Programación",
+            "Lo de Materia, y sesiones de código",
+            List.of(LECTURE, session(TOPICS), snippet("Código para reutilizar", List.of(TOPICS)), ASSIGNMENT, exam(TOPICS)),
+            List.of(new View("Apuntes", "lecture", null, "-date", null),
+                    new View("Por unidad", "lecture", null, "date", "unit"),
+                    new View("Sesiones de código", "session", null, "-date", null),
+                    new View("Mis fragmentos", "snippet", null, "title", null),
+                    UPCOMING, ASSIGNMENTS, EXAMS, ALL_NOTES));
+
+    static final NotebookType DATABASES = new NotebookType("databases", "Bases de datos",
+            "Sesiones de SQL, ejercicios y tus tablas",
+            List.of(new Kind("lecture", "Apunte", "apuntes", "Nuevo apunte", "Lo que se vio en clase", List.of(DATE, UNIT, SQL_TOPICS), """
                             ---
                             date: {today}
                             ---
@@ -98,29 +183,68 @@ record NotebookType(String id, String name, String description, List<Kind> kinds
 
                             ## Notas
 
-                            ## Preguntas
+                            ## Ejemplos
 
-                            ## Resumen
+                            ```{language}
+
+                            ```
+
+                            ## Preguntas
                             """),
-                    ASSIGNMENT,
-                    new Kind("exam", "Examen", "Nuevo examen", "Con fecha, temas y calificación", List.of(DATE, TOPICS, GRADE), """
+                    session(SQL_TOPICS),
+                    new Kind("exercise", "Ejercicio", "ejercicios", "Nuevo ejercicio", "Un ejercicio de SQL con su consulta",
+                            List.of(SQL_TOPICS, LEVEL, PROBLEM, DATE), """
                             ---
-                            kind: exam
+                            kind: exercise
+                            status: To do
+                            date: {today}
                             ---
-                            ## Temas
+                            ## Enunciado
+
+                            ## Consulta
+
+                            ```{language}
+
+                            ```
+
+                            ## Resultado
 
                             ## Notas
-                            """)),
-            List.of(new View("Clases", "lecture", null, "-date", null),
+                            """),
+                    new Kind("table", "Tabla", "tablas", "Nueva tabla", "Una tabla del esquema y su CREATE TABLE", List.of(), """
+                            ---
+                            kind: table
+                            ---
+                            ## Columnas
+
+                            | Columna | Tipo | Restricciones |
+                            | --- | --- | --- |
+                            |  |  |  |
+
+                            ## Creación
+
+                            ```{language}
+
+                            ```
+
+                            ## Notas
+                            """),
+                    snippet("Una consulta para reutilizar", List.of(SQL_TOPICS)),
+                    ASSIGNMENT,
+                    exam(SQL_TOPICS)),
+            List.of(new View("Apuntes", "lecture", null, "-date", null),
                     new View("Por unidad", "lecture", null, "date", "unit"),
-                    new View("Lo que se acerca", null, "upcoming", "when", null),
-                    new View("Tareas", "assignment", null, "-due", null),
-                    new View("Exámenes", "exam", null, "-date", null),
-                    new View("Todas las notas", null, null, "-when", null)));
+                    new View("Sesiones de código", "session", null, "-date", null),
+                    new View("Ejercicios", "exercise", null, "-date", null),
+                    new View("Por repasar", "exercise", "status=Solved with help", "date", null),
+                    new View("Por tema", null, null, "title", "topics"),
+                    new View("Tablas", "table", null, "title", null),
+                    new View("Mis fragmentos", "snippet", null, "title", null),
+                    UPCOMING, ASSIGNMENTS, EXAMS, ALL_NOTES));
 
     static final NotebookType COMPETITIVE_PROGRAMMING = new NotebookType("competitive-programming", "Programación competitiva",
-            "Los problemas que resuelves, por tema y dificultad, y el código que reutilizas.",
-            List.of(new Kind("problem", "Problema", "Nuevo problema", "De Codeforces, AtCoder o LeetCode",
+            "Problemas de Codeforces, AtCoder y LeetCode",
+            List.of(new Kind("problem", "Problema", "problemas", "Nuevo problema", "De Codeforces, AtCoder o LeetCode",
                             List.of(URL, JUDGE, ID, DIFFICULTY, LEVEL, PROBLEM, ALGORITHMS, TECHNIQUES, DATE), """
                             ---
                             status: To do
@@ -138,7 +262,7 @@ record NotebookType(String id, String name, String description, List<Kind> kinds
 
                             ## Errores
                             """),
-                    new Kind("snippet", "Fragmento", "Nuevo fragmento", "Código para reutilizar", List.of(ALGORITHMS, TECHNIQUES), """
+                    new Kind("snippet", "Fragmento", "fragmentos", "Nuevo fragmento", "Código para reutilizar", List.of(ALGORITHMS, TECHNIQUES), """
                             ---
                             kind: snippet
                             ---
@@ -161,104 +285,29 @@ record NotebookType(String id, String name, String description, List<Kind> kinds
                     new View("Por estado", "problem", null, "title", "status"),
                     new View("Biblioteca de código", "snippet", null, "title", null)));
 
-    static final NotebookType DATABASES = new NotebookType("databases", "Bases de datos",
-            "Una materia de bases de datos: clases, ejercicios de SQL y PL/SQL, tablas y exámenes.",
-            List.of(new Kind("lecture", "Clase", "Nueva clase", "Lo que se vio en una clase", List.of(DATE, UNIT, SQL_TOPICS), """
-                            ---
-                            date: {today}
-                            ---
-                            ## Ideas clave
+    /** What is not a subject: ideas, the residency, projects (until 2.0, "General"). */
+    static final NotebookType GENERAL = new NotebookType("general", "Libre",
+            "Notas con etiquetas: ideas, la residencia…",
+            List.of(new Kind("note", "Nota", "notas", "Nueva nota", "Una nota libre", List.of(TAGS, PINNED), "")),
+            List.of(new View("Todas las notas", null, null, "-modified", null),
+                    new View("Notas fijadas", null, "pinned", "-modified", null),
+                    new View("Por etiqueta", null, null, "title", "tags")));
 
-                            ## Notas
-
-                            ## Ejemplos
-
-                            ```plsql
-
-                            ```
-
-                            ## Preguntas
-                            """),
-                    new Kind("exercise", "Ejercicio", "Nuevo ejercicio", "Un ejercicio de SQL con su consulta",
-                            List.of(SQL_TOPICS, LEVEL, PROBLEM, DATE), """
-                            ---
-                            kind: exercise
-                            status: To do
-                            date: {today}
-                            ---
-                            ## Enunciado
-
-                            ## Consulta
-
-                            ```plsql
-
-                            ```
-
-                            ## Resultado
-
-                            ## Notas
-                            """),
-                    new Kind("table", "Tabla", "Nueva tabla", "Una tabla del esquema y su CREATE TABLE", List.of(), """
-                            ---
-                            kind: table
-                            ---
-                            ## Columnas
-
-                            | Columna | Tipo | Restricciones |
-                            | --- | --- | --- |
-                            |  |  |  |
-
-                            ## Creación
-
-                            ```plsql
-
-                            ```
-
-                            ## Notas
-                            """),
-                    new Kind("snippet", "Fragmento", "Nuevo fragmento", "Una consulta para reutilizar", List.of(SQL_TOPICS), """
-                            ---
-                            kind: snippet
-                            ---
-                            ## Cuándo usarlo
-
-                            ## Código
-
-                            ```plsql
-
-                            ```
-                            """),
-                    ASSIGNMENT,
-                    new Kind("exam", "Examen", "Nuevo examen", "Con fecha, temas y calificación", List.of(DATE, SQL_TOPICS, GRADE), """
-                            ---
-                            kind: exam
-                            ---
-                            ## Temas
-
-                            ## Notas
-                            """)),
-            List.of(new View("Clases", "lecture", null, "-date", null),
-                    new View("Por unidad", "lecture", null, "date", "unit"),
-                    new View("Ejercicios", "exercise", null, "-date", null),
-                    new View("Por repasar", "exercise", "status=Solved with help", "date", null),
-                    new View("Por tema", null, null, "title", "topics"),
-                    new View("Tablas", "table", null, "title", null),
-                    new View("Biblioteca de código", "snippet", null, "title", null),
-                    new View("Lo que se acerca", null, "upcoming", "when", null),
-                    new View("Tareas", "assignment", null, "-due", null),
-                    new View("Exámenes", "exam", null, "-date", null),
-                    new View("Todas las notas", null, null, "-when", null)));
-
-    static final List<NotebookType> ALL = List.of(GENERAL, CLASS_NOTES, COMPETITIVE_PROGRAMMING, DATABASES);
+    static final List<NotebookType> ALL = List.of(CLASS_NOTES, PROGRAMMING, DATABASES, COMPETITIVE_PROGRAMMING, GENERAL);
 
     static NotebookType byId(String id) {
         for (NotebookType t : ALL) if (t.id.equals(id)) return t;
         return GENERAL;
     }
 
-    /** A course (Class Notes, Databases): its assignments and exams go to "Lo que se acerca", here and on Home. */
+    /** A course (Materia, Programación, Bases de datos): its assignments and exams go to "Lo que se acerca", here and on Home. */
     boolean course() {
         return kinds.contains(ASSIGNMENT);
+    }
+
+    /** Whether its notes are about code, so its notebooks have a language for their code blocks. */
+    boolean code() {
+        return this == PROGRAMMING || this == DATABASES || this == COMPETITIVE_PROGRAMMING;
     }
 
     /** A note's kind: its "kind" property, or else the first kind. */

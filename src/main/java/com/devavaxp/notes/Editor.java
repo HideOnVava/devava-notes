@@ -218,9 +218,22 @@ final class Editor {
         if (ready && !reading) call("format", kind);
     }
 
-    /** How a language written after ``` shows: "PL/SQL (Oracle)" for plsql; one the app does not offer, as written. */
+    /** Names of other languages the curriculum proposes (as main.js shows them too). */
+    private static final Map<String, String> OTHERS = Map.ofEntries(Map.entry("kotlin", "Kotlin"), Map.entry("swift", "Swift"),
+            Map.entry("haskell", "Haskell"), Map.entry("bash", "Bash"), Map.entry("asm", "Ensamblador"),
+            Map.entry("typescript", "TypeScript"), Map.entry("php", "PHP"), Map.entry("html", "HTML"), Map.entry("css", "CSS"),
+            Map.entry("tsql", "T-SQL"), Map.entry("mysql", "MySQL"), Map.entry("go", "Go"), Map.entry("rust", "Rust"));
+
+    /** How a language written after ``` shows: "PL/SQL (Oracle)" for plsql, "Kotlin" for kotlin. */
     static String languageName(String id) {
-        return LANGUAGES.getOrDefault(id.toLowerCase(Locale.ROOT), id);
+        String key = id.toLowerCase(Locale.ROOT);
+        String name = LANGUAGES.getOrDefault(key, OTHERS.get(key));
+        return name != null ? name : id.isEmpty() ? "" : Character.toUpperCase(id.charAt(0)) + id.substring(1);
+    }
+
+    /** Its name without what the menus add ("PL/SQL", not "PL/SQL (Oracle)"), for chips and cards. */
+    static String shortName(String id) {
+        return languageName(id).replaceFirst(" \\(.*\\)$", "");
     }
 
     private static Map<String, String> languages(String... idsAndNames) {

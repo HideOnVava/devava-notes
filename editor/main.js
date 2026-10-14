@@ -67,7 +67,9 @@ const FIRST = [
     {id: "plsql", name: "PL/SQL", color: "#C74634", hint: "Oracle"},
 ].map(l => ({...l, data: LanguageDescription.matchLanguageName(languages, l.id, false)}));
 const OUTPUT = "output";
-const ALSO = {tsql: "MS SQL", mssql: "MS SQL", mariadb: "MariaDB SQL"};
+const ALSO = {tsql: "MS SQL", mssql: "MS SQL", mariadb: "MariaDB SQL", asm: "Gas", masm: "Gas", nasm: "Gas"};
+// language-data's names the app shows otherwise, as Java does (Editor.languageName).
+const NAMES = {"Gas": "Ensamblador", "Shell": "Bash", "MS SQL": "T-SQL"};
 
 /** The language word of a block's info: "java" in ```java. */
 const idIn = info => info.trim().split(/\s/)[0];
@@ -84,7 +86,7 @@ function describe(info) {
     if (!id) return {id, name: words.choose, unset: true};
     if (id.toLowerCase() === OUTPUT) return {id: OUTPUT, name: words.output, output: true};
     const data = language(info);
-    return FIRST.find(l => data && l.data === data) ?? {id, name: data?.name ?? id};
+    return FIRST.find(l => data && l.data === data) ?? {id, name: NAMES[data?.name] ?? data?.name ?? id};
 }
 
 /** What to write after ``` for a language of language-data: a word CodeMirror reads back as that language. */
@@ -390,7 +392,7 @@ function more(view, chip, pick) {
     const show = () => {
         const typed = find.value.trim(), wanted = fold(typed);
         const found = all.filter(l => fold(l.name).includes(wanted) || l.id.includes(wanted));
-        list.replaceChildren(...found.map(l => option(null, l.name, l.id, () => pick(l.id))));
+        list.replaceChildren(...found.map(l => option(null, NAMES[l.name] ?? l.name, l.id, () => pick(l.id))));
         if (typed && !found.some(l => l.id === wanted)) list.append(option(null, `${words.use} «${idIn(typed)}»`, "", () => pick(idIn(typed))));
     };
     find.addEventListener("input", show);
