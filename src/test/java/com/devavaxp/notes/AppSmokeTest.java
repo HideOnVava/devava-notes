@@ -109,6 +109,16 @@ class AppSmokeTest {
             GROUP BY d.department_name
             ORDER BY empleados DESC;""";
 
+    private static final String ANIMAL = """
+            class Animal {
+                protected String nombre;
+                String sonido() { return "..."; }
+            }
+
+            class Perro extends Animal {
+                @Override String sonido() { return "¡Guau!"; }
+            }""";
+
     private static final String CREATE = """
             CREATE TABLE employees (
               employee_id   NUMBER(6) PRIMARY KEY,
@@ -384,15 +394,15 @@ class AppSmokeTest {
         fx(() -> run(app::toggleMode));
         waitFor("PL/SQL colored in the reading view", () -> fx(() ->
                 ((Number) engine.executeScript("document.querySelectorAll('#reading .tok-keyword').length")).intValue() > 5));
-        assertEquals("PLSQL", fx(() -> engine.executeScript("document.querySelector('#reading .code-head span').textContent")));
+        assertEquals("PL/SQL", fx(() -> engine.executeScript("document.querySelector('#reading .code-head .lang').textContent")));
         shot(stage, "db2-reading");
         fx(() -> run(app::toggleMode));
 
-        // A table, written with the Consulta button: Oracle's types (VARCHAR2, NUMBER) are colored as types.
+        // A table, its CREATE in a block of the bar's button, in the notebook's PL/SQL: Oracle's types
+        // (VARCHAR2, NUMBER) are colored as types.
         Path table = fx(() -> app.createNote(db.kinds().get(2), "EMPLOYEES", ""));
         fx(() -> run(() -> {
-            stage.getScene().getRoot().lookupAll(".button").stream().map(Button.class::cast)
-                    .filter(b -> "Consulta".equals(b.getText())).findFirst().orElseThrow().fire();
+            button(stage, "Bloque de código").fire();
             page.call("insertText", CREATE);
         }));
         waitFor("the table to save itself", () -> Files.readString(table).contains("```plsql\n" + CREATE + "\n```"));
@@ -425,6 +435,128 @@ class AppSmokeTest {
         shot(stage, "db6-dark");
         assertEquals(List.of(), fx(() -> List.copyOf(app.editor.errors)));
         fx(() -> run(stage::close));
+    }
+
+    /** A class of POO with its code: blocks added, given a language, written, copied, guarded and removed. */
+    @Test
+    void writesACodeSession(@TempDir Path home) throws Exception {
+        Stage[] window = new Stage[1];
+        NotesApp app = open(home, window);
+        Stage stage = window[0];
+        WebEngine engine = fx(() -> app.editor.view.getEngine());
+        JSObject page = fx(() -> (JSObject) engine.executeScript("window"));
+        NotebookType course = NotebookType.CLASS_NOTES;
+        Path notebook = fx(() -> app.createNotebook("Programación Orientada a Objetos", course));
+        fx(() -> run(() -> app.openNotebook(notebook)));
+        Path session = fx(() -> app.createNote(course.kinds().get(0), "Sesión 7 · Herencia", ""));
+
+        // The notebook has no language yet: its first block asks for one, which the notebook keeps.
+        fx(() -> run(() -> {
+            page.call("selectMatch", "## Notas");
+            page.call("insertText", "## Notas\n\nUna clase hija hereda los atributos y métodos de su clase padre con **extends**.");
+            button(stage, "Lista").fire();
+            button(stage, "Bloque de código").fire();
+        }));
+        waitFor("the menu of languages", () -> fx(() -> Boolean.TRUE.equals(engine.executeScript("!!document.querySelector('.lang-menu')"))));
+        shot(stage, "s1-language-menu");
+        fx(() -> engine.executeScript("[...document.querySelectorAll('.lang-menu .option')].find(o => o.textContent.startsWith('Java')).click()"));
+        waitFor("a Java block", () -> Files.readString(session).contains("- Una clase hija") && Files.readString(session).contains("```java\n\n```"));
+        waitFor("the notebook's language", () -> Vault.meta(notebook, "language").equals("java"));
+        assertTrue(fx(() -> texts(stage)).contains("Java"));   // its chip, in the bar
+        fx(() -> run(() -> page.call("insertText", ANIMAL)));
+        waitFor("the code saved", () -> Files.readString(session).contains("```java\n" + ANIMAL + "\n```"));
+
+        // Another block at the end, in Java now, turned into the output of the program.
+        fx(() -> engine.executeScript("document.querySelector('.cm-add-block').click()"));
+        waitFor("a second block", () -> fx(() -> ((Number) engine.executeScript("document.querySelectorAll('.cm-card-head').length")).intValue() == 2));
+        fx(() -> engine.executeScript("[...document.querySelectorAll('.cm-card-head .chip')].at(-1).click()"));
+        fx(() -> engine.executeScript("[...document.querySelectorAll('.lang-menu .option')].find(o => o.textContent.startsWith('Salida')).click()"));
+        fx(() -> run(() -> page.call("insertText", "¡Guau!")));
+        waitFor("the output saved", () -> Files.readString(session).contains("```output\n¡Guau!\n```"));
+        assertEquals("Java,Salida", fx(() -> engine.executeScript(
+                "[...document.querySelectorAll('.cm-card-head .chip')].map(c => c.textContent).join()")));
+        shot(stage, "s2-session-edit");
+
+        // Copiar puts the code on the clipboard, as it is.
+        Map<DataFormat, Object> saved = fx(AppSmokeTest::clipboard);
+        try {
+            fx(() -> engine.executeScript("document.querySelector('.cm-card-head .act').click()"));
+            waitFor("the code on the clipboard", () -> fx(() -> ANIMAL.equals(Clipboard.getSystemClipboard().getString())));
+        } finally {
+            fx(() -> Clipboard.getSystemClipboard().setContent(saved));
+        }
+
+        // A Backspace at the start of the code leaves the block whole.
+        fx(() -> run(() -> page.call("selectMatch", "class Animal")));
+        key(app, KeyCode.LEFT);
+        key(app, KeyCode.BACK_SPACE);
+        Thread.sleep(900);   // past the autosave
+        assertTrue(Files.readString(session).contains("```java\nclass Animal {"), Files.readString(session));
+
+        // Quitar asks once more for a block with code in it.
+        fx(() -> engine.executeScript("[...document.querySelectorAll('.cm-card-head')].at(-1).querySelectorAll('.act')[1].click()"));
+        assertTrue(Files.readString(session).contains("```output"));
+        fx(() -> engine.executeScript("[...document.querySelectorAll('.cm-card-head')].at(-1).querySelectorAll('.act')[1].click()"));
+        waitFor("the output removed", () -> !Files.readString(session).contains("```output"));
+
+        fx(() -> run(app::toggleMode));
+        waitFor("Java colored in the reading view", () -> fx(() ->
+                ((Number) engine.executeScript("document.querySelectorAll('#reading .tok-keyword').length")).intValue() > 3));
+        assertEquals("Java", fx(() -> engine.executeScript("document.querySelector('#reading .code-head .lang').textContent")));
+        shot(stage, "s3-session-read");
+        fx(() -> run(() -> {
+            app.setDark(true);
+            app.toggleMode();
+        }));
+        waitFor("the editor's page in dark", () -> fx(() -> "dark".equals(engine.executeScript("document.documentElement.dataset.theme"))));
+        shot(stage, "s4-session-dark");
+        assertEquals(List.of(), fx(() -> List.copyOf(app.editor.errors)));
+        fx(() -> run(stage::close));
+    }
+
+    /** The ``` lines of a card are out of sight, and typing next to a card never breaks them. */
+    @Test
+    void keepsCodeBlocksWhole(@TempDir Path home) throws Exception {
+        Stage[] window = new Stage[1];
+        NotesApp app = open(home, window);
+        WebEngine engine = fx(() -> app.editor.view.getEngine());
+        JSObject page = fx(() -> (JSObject) engine.executeScript("window"));
+        Path notebook = fx(() -> app.createNotebook("Estructura de Datos", NotebookType.CLASS_NOTES));
+        Path note = notebook.resolve("Pilas.md");
+        Files.writeString(note, "Una pila:\n\n```java\nStack<Integer> pila = new Stack<>();\n```");
+        fx(() -> run(() -> {
+            app.openNotebook(notebook);
+            app.openNote(note);
+        }));
+        waitFor("the card", () -> fx(() -> ((Number) engine.executeScript("document.querySelectorAll('.cm-card-head').length")).intValue() == 1));
+
+        // Typed right after the card (at the end of the note), the text goes on a line of its own.
+        fx(() -> run(app.editor::focus));
+        press(app, KeyCode.END);
+        fx(() -> run(() -> page.call("insertText", "Y una cola.")));
+        waitFor("the text below the card", () -> Files.readString(note).endsWith("pila = new Stack<>();\n```\nY una cola."));
+
+        // Enter after ```python closes the block; Backspace in it, still empty, removes it.
+        fx(() -> run(() -> page.call("insertText", "\n```python")));
+        key(app, KeyCode.ENTER);
+        waitFor("a closed block", () -> Files.readString(note).endsWith("Y una cola.\n```python\n\n```"));
+        key(app, KeyCode.BACK_SPACE);
+        waitFor("the empty block removed", () -> Files.readString(note).endsWith("Y una cola."));
+
+        // Ctrl+B: bold.
+        fx(() -> run(() -> page.call("selectMatch", "una cola")));
+        press(app, KeyCode.B);
+        waitFor("bold", () -> Files.readString(note).endsWith("Y **una cola**."));
+
+        // Más lenguajes…: any language CodeMirror knows, found by typing part of its name.
+        fx(() -> engine.executeScript("document.querySelector('.cm-card-head .chip').click()"));
+        fx(() -> engine.executeScript("[...document.querySelectorAll('.lang-menu .option')].at(-1).click()"));
+        fx(() -> engine.executeScript("const f = document.querySelector('.lang-menu .find'); f.value = 'kot'; f.dispatchEvent(new Event('input'))"));
+        shot(window[0], "s5-more-languages");
+        fx(() -> engine.executeScript("document.querySelector('.lang-menu .list .option').click()"));
+        waitFor("a Kotlin block", () -> Files.readString(note).contains("```kotlin\nStack<Integer> pila = new Stack<>();\n```\n"));
+        assertEquals(List.of(), fx(() -> List.copyOf(app.editor.errors)));
+        fx(() -> run(window[0]::close));
     }
 
     /** Home shows this school period's notebooks; the earlier ones fold away until asked for. */
@@ -498,6 +630,21 @@ class AppSmokeTest {
         TextField field = (TextField) stage.getScene().lookup("#property-" + key);
         field.setText(text);
         field.fireEvent(new ActionEvent());
+    }
+
+    /** The button of the window that says this. */
+    private static Button button(Stage stage, String text) {
+        return stage.getScene().getRoot().lookupAll(".button").stream().filter(Button.class::isInstance).map(Button.class::cast)
+                .filter(b -> text.equals(b.getText())).findFirst().orElseThrow();
+    }
+
+    /** A key, alone, as the keyboard sends it to the editor. */
+    private static void key(NotesApp app, KeyCode key) throws Exception {
+        fx(() -> run(() -> {
+            app.editor.view.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED, "", "", key, false, false, false, false));
+            app.editor.view.fireEvent(new KeyEvent(KeyEvent.KEY_RELEASED, "", "", key, false, false, false, false));
+        }));
+        Thread.sleep(150);
     }
 
     /** Ctrl + the key, as the keyboard sends it to the editor. */

@@ -39,7 +39,12 @@ final class Icons {
             Map.entry("down", "M6 9l6 6 6-6"),
             Map.entry("help", "M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0z M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7 M12 17h.01"),
             Map.entry("options", "M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4"),
-            Map.entry("folder", "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"));
+            Map.entry("folder", "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"),
+            Map.entry("heading", "M6 5v14M18 5v14M6 12h12"),
+            Map.entry("link", "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1 M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"),
+            Map.entry("image", "M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"
+                    + " M7.4 10a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0-3.2 0z M21 16l-5-5-8 8"),
+            Map.entry("sigma", "M18 5H6l6 7-6 7h12"));
 
     private Icons() {
     }

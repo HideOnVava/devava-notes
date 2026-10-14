@@ -9,6 +9,7 @@ import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
 import javafx.geometry.Insets;
+import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
 import javafx.geometry.VPos;
 import javafx.scene.Node;
@@ -29,6 +30,7 @@ import javafx.scene.control.MenuButton;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.RadioButton;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.Separator;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.TextArea;
@@ -58,6 +60,7 @@ import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import javafx.util.Duration;
+import javafx.util.StringConverter;
 
 import javax.imageio.ImageIO;
 import java.awt.Desktop;
@@ -115,6 +118,12 @@ public final class NotesApp extends Application {
     private final HBox actions = new HBox(10), actionsRow = new HBox();
     private final Label noteTitle = new Label(), kindName = new Label(), badge = new Label(), status = new Label();
     private final HBox tools = new HBox(4);
+    /** Bold, lists, links, formulas and code blocks with a click, above the note while it is written. */
+    private final HBox formatBar = new HBox(2);
+    private final List<Button> formatButtons = new ArrayList<>();
+    private Button blockButton;
+    /** The notebook's language for new code blocks, in its bar; a click changes it. */
+    private final Button languageChip = new Button();
     /** Editar or Vista previa: one is always pressed, and Ctrl+E switches. */
     private final ToggleButton editTab = new ToggleButton("Editar"), readTab = new ToggleButton("Vista previa");
     private final PauseTransition autosave = new PauseTransition(Duration.millis(600));
@@ -150,7 +159,8 @@ public final class NotesApp extends Application {
         Locale.setDefault(Text.SPANISH);   // the stock dialogs' "Cancelar" and the calendars too
         this.stage = stage;
         this.vault = vault;
-        editor = new Editor(this::edited, this::openLink, this::openTitle, tag -> browser.showTag(tag), this::paste);
+        editor = new Editor(this::edited, this::openLink, this::openTitle, tag -> browser.showTag(tag), this::paste,
+                this::languageChosen);
         browser = new NotebookView(this);
         properties = new PropertiesPanel(this::propertiesChanged, this::openLink, this::usedValues);
         autosave.setOnFinished(e -> save());
@@ -195,6 +205,12 @@ public final class NotesApp extends Application {
         noteHeader.getStyleClass().add("note-header");
         noteHeader.setAlignment(Pos.CENTER_LEFT);
         noteHeader.widthProperty().addListener((o, was, width) -> fitHeader());
+        buildFormatBar();
+        languageChip.getStyleClass().addAll("flat", "language-chip");
+        languageChip.setMinWidth(Region.USE_PREF_SIZE);
+        languageChip.setGraphic(Icons.of("code", 14));
+        languageChip.setTooltip(new Tooltip("El lenguaje de los bloques de código nuevos; clic para cambiarlo"));
+        languageChip.setOnAction(e -> chooseLanguage(notebook));
         actionsRow.getStyleClass().add("note-actions");
         actionsRow.setAlignment(Pos.CENTER_RIGHT);
         actionsRow.setManaged(false);
@@ -303,6 +319,8 @@ public final class NotesApp extends Application {
                 {"Ctrl+Shift+F", "Buscar en el texto de todas las notas"},
                 {"Ctrl+E", "Pasar entre Editar y Vista previa"},
                 {"Ctrl+F", "Buscar y reemplazar dentro de la nota"},
+                {"Ctrl+B, Ctrl+I", "Negrita y cursiva; la barra sobre la nota tiene lo demás"},
+                {"```java", "Un bloque de código al escribir ``` y su lenguaje, y luego Enter"},
                 {"Ctrl+V", "Pegar texto, o una imagen como una captura de pantalla"},
                 {"[[", "Enlazar otra nota: escribe [[ y elige su título"},
                 {"Ctrl+clic", "Abrir el [[enlace]] que está bajo el ratón"},
@@ -596,7 +614,8 @@ public final class NotesApp extends Application {
         List<MenuItem> items = new ArrayList<>(List.of(
                 item("Cambiar nombre…", () -> renameNotebook(dir)),
                 item("Cambiar tipo…", () -> changeType(dir)),
-                item("Cambiar periodo…", () -> changePeriod(dir))));
+                item("Cambiar periodo…", () -> changePeriod(dir)),
+                item("Lenguaje del código…", () -> chooseLanguage(dir))));
         if (Vault.type(dir).equals(NotebookType.COMPETITIVE_PROGRAMMING)) items.add(item("Plantilla de C++…", () -> editTemplate(dir)));
         items.addAll(List.of(
                 item("Exportar como ZIP…", () -> exportNotebook(dir)),
@@ -636,6 +655,74 @@ public final class NotesApp extends Application {
         if (!box.getItems().contains(selected)) box.getItems().add(selected);
         box.setValue(selected);
         return box;
+    }
+
+    /** The language of a notebook's new code blocks: its own, else its type's (C++, PL/SQL), else none. */
+    private static String codeLanguage(Path dir) {
+        String own = Vault.meta(dir, "language");
+        if (!own.isEmpty()) return own;
+        NotebookType type = Vault.type(dir);
+        return type.equals(NotebookType.COMPETITIVE_PROGRAMMING) ? "cpp" : type.equals(NotebookType.DATABASES) ? "plsql" : "";
+    }
+
+    /** The open notebook's language in its bar, when it has one. */
+    private void showLanguage() {
+        String id = notebook == null ? "" : codeLanguage(notebook);
+        languageChip.setText(Editor.languageName(id).replaceFirst(" \\(.*\\)$", ""));
+        languageChip.setVisible(!id.isEmpty());
+        languageChip.setManaged(!id.isEmpty());
+    }
+
+    /** The language a notebook's new code blocks start with; each block can still change its own. */
+    private void chooseLanguage(Path dir) {
+        String now = codeLanguage(dir);
+        ComboBox<String> languages = new ComboBox<>();
+        languages.getItems().setAll(Editor.LANGUAGES.keySet());
+        if (!now.isEmpty() && !languages.getItems().contains(now)) languages.getItems().add(now);
+        languages.setConverter(new StringConverter<>() {
+            @Override
+            public String toString(String id) {
+                return id == null ? "" : Editor.languageName(id);
+            }
+
+            @Override
+            public String fromString(String name) {
+                return name;
+            }
+        });
+        languages.setValue(now.isEmpty() ? "java" : now);
+        Label about = new Label("Los bloques de código nuevos empiezan en este lenguaje; cada bloque puede cambiar el suyo.");
+        about.getStyleClass().add("hint");
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Lenguaje del código");
+        dialog.setHeaderText("Lenguaje del código de “" + dir.getFileName() + "”");
+        style(dialog);
+        ButtonType ok = new ButtonType("Cambiar", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().setAll(ok, ButtonType.CANCEL);
+        dialog.getDialogPane().setContent(new VBox(12, languages, about));
+        if (dialog.showAndWait().filter(b -> b == ok).isEmpty()) return;
+        try {
+            Vault.setMeta(dir, "language", languages.getValue());
+        } catch (IOException e) {
+            error("No se pudo cambiar el lenguaje", reason(e));
+            return;
+        }
+        if (dir.equals(notebook)) {
+            editor.setCodeLanguage(languages.getValue());
+            showLanguage();
+        }
+    }
+
+    /** The first language chosen in a block of a notebook without one becomes the notebook's, for its next blocks. */
+    private void languageChosen(String id) {
+        if (notebook == null || !codeLanguage(notebook).isEmpty()) return;
+        try {
+            Vault.setMeta(notebook, "language", id);
+        } catch (IOException e) {
+            return;   // the block keeps its language; the next ones ask again
+        }
+        editor.setCodeLanguage(id);
+        showLanguage();
     }
 
     /** Saves the notebook as one ZIP to share it; whoever gets it adds it with Import notebook… on Home. */
@@ -778,11 +865,14 @@ public final class NotesApp extends Application {
         name.getStyleClass().add("crumb");
         Label typeName = new Label(type.name());
         typeName.getStyleClass().add("type-chip");
+        typeName.setMinWidth(Region.USE_PREF_SIZE);
         NotebookView.colored(typeName, color(type));
         List<MenuItem> menu = new ArrayList<>(List.of(notebookItems(dir)));
         menu.addAll(List.of(new SeparatorMenuItem(), themeItem()));
-        HBox title = new HBox(10, tile(type, 26), name, typeName);
+        HBox title = new HBox(10, tile(type, 26), name, typeName, languageChip);
         title.setAlignment(Pos.CENTER_LEFT);
+        editor.setCodeLanguage(codeLanguage(dir));
+        showLanguage();
         bar.getChildren().setAll(button("Inicio", "back", "flat", e -> showHome()), title, grow(), finder(), newButton(), help(),
                 options(menu.toArray(MenuItem[]::new)));
         loadEntries(true);
@@ -809,6 +899,7 @@ public final class NotesApp extends Application {
             add.getItems().add(item);
         }
         add.getStyleClass().add("primary");
+        add.setMinWidth(Region.USE_PREF_SIZE);
         add.setTooltip(new Tooltip("Ctrl+N: " + first.name().toLowerCase(Text.SPANISH)));
         return add;
     }
@@ -869,21 +960,97 @@ public final class NotesApp extends Application {
         if (type.equals(NotebookType.COMPETITIVE_PROGRAMMING) && kind.id().equals("problem")) {
             tools.getChildren().add(button("Solución", "plus", "flat", e -> newSolution()));
         }
-        if (type.equals(NotebookType.DATABASES)) {
-            tools.getChildren().add(button("Consulta", "plus", "flat", e -> {
-                setReading(false);
-                editor.insertCode("", "plsql");
-            }));
-        }
         if (type.kinds().stream().anyMatch(k -> k.id().equals("snippet"))) {
             tools.getChildren().add(button("Insertar fragmento…", "snippet", "flat", e -> insertSnippet()));
         }
         properties.show(kind, n);
         editor.open(n.body, p.getParent());
-        notePane.setTop(new VBox(noteHeader, actionsRow, properties.node));
+        notePane.setTop(new VBox(noteHeader, actionsRow, properties.node, formatBar));
+        showFormatBar();
         notePane.setCenter(editor.view);
         browser.select(p);
         fitHeader();
+    }
+
+    /** The formatting bar: what Markdown would need typing, a click away; code blocks in the notebook's language. */
+    private void buildFormatBar() {
+        Button block = formatButton("Bloque de código", Icons.of("code", 15), "Agrega un bloque de código, en el lenguaje del cuaderno",
+                editor::newBlock);
+        block.getStyleClass().add("format-code");
+        blockButton = block;
+        formatBar.getChildren().setAll(
+                formatButton(null, glyph("B", "bold"), "Negrita (Ctrl+B)", () -> editor.format("bold")),
+                formatButton(null, glyph("I", "italic"), "Cursiva (Ctrl+I)", () -> editor.format("italic")),
+                formatButton("Título", Icons.of("heading", 15), "Título de una sección", () -> editor.format("heading")),
+                formatSeparator(),
+                formatButton("Lista", Icons.of("list", 15), "Lista con viñetas", () -> editor.format("list")),
+                formatButton("Casilla", Icons.of("task", 15), "Lista de pendientes, con casillas para marcar", () -> editor.format("check")),
+                formatSeparator(),
+                formatButton("Enlace", Icons.of("link", 15), "Enlace a otra nota: elige su título", () -> editor.format("link")),
+                formatButton("Imagen", Icons.of("image", 15), "Agrega una imagen desde un archivo", this::chooseImages),
+                formatButton("Fórmula", Icons.of("sigma", 15), "Fórmula matemática, como en LaTeX", () -> editor.format("math")),
+                formatSeparator(),
+                block);
+        formatBar.getStyleClass().add("format-bar");
+        formatBar.setAlignment(Pos.CENTER_LEFT);
+        formatBar.widthProperty().addListener((o, was, width) -> fitFormatBar());
+    }
+
+    private Button formatButton(String text, Node graphic, String tip, Runnable action) {
+        Button b = new Button(text, graphic);
+        b.getStyleClass().add("format");
+        b.setTooltip(new Tooltip(tip));
+        b.setOnAction(e -> {
+            action.run();
+            editor.focus();
+        });
+        formatButtons.add(b);
+        return b;
+    }
+
+    private static Label glyph(String letter, String style) {
+        Label glyph = new Label(letter);
+        glyph.getStyleClass().addAll("glyph", style);
+        return glyph;
+    }
+
+    private static Separator formatSeparator() {
+        Separator separator = new Separator(Orientation.VERTICAL);
+        separator.getStyleClass().add("format-separator");
+        return separator;
+    }
+
+    /** The formatting bar while writing, not in Vista previa. */
+    private void showFormatBar() {
+        formatBar.setVisible(!reading);
+        formatBar.setManaged(!reading);
+    }
+
+    /**
+     * When the bar does not fit, its buttons keep only their icons (and say what they do on hover):
+     * the small ones first, "Bloque de código" only when even that is not enough.
+     */
+    private void fitFormatBar() {
+        formatButtons.forEach(b -> b.setContentDisplay(ContentDisplay.LEFT));
+        formatBar.applyCss();
+        double room = formatBar.getWidth();
+        if (room <= 0 || formatBar.prefWidth(-1) <= room) return;
+        formatButtons.stream().filter(b -> b != blockButton).forEach(b -> b.setContentDisplay(ContentDisplay.GRAPHIC_ONLY));
+        if (formatBar.prefWidth(-1) > room) blockButton.setContentDisplay(ContentDisplay.GRAPHIC_ONLY);
+    }
+
+    /** Pictures from files, saved in attachments/ and put in the note at the cursor. */
+    private void chooseImages() {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Agregar una imagen");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Imágenes", "*.png", "*.jpg", "*.jpeg", "*.gif", "*.bmp", "*.svg"));
+        List<File> files = chooser.showOpenMultipleDialog(stage);
+        if (files == null) return;
+        try {
+            attachImages(files);
+        } catch (IOException e) {
+            error("No se pudo agregar la imagen", reason(e));
+        }
     }
 
     /**
@@ -1020,7 +1187,7 @@ public final class NotesApp extends Application {
         List<Entry> snippets = entries.stream()
                 .filter(e -> type.kindOf(e.note()).id().equals("snippet") && !e.path().equals(note)).toList();
         if (snippets.isEmpty()) {
-            error("La biblioteca de código está vacía", "Agrega un fragmento con + Nuevo ▾ → Fragmento, con su código en un bloque de código.");
+            error("La biblioteca de código está vacía", "Agrega uno con Nueva nota → Fragmento, con su código en un bloque de código.");
             return;
         }
         // What a snippet is filed under (algorithms and techniques, or topics): shown and searched with its title.
@@ -1316,6 +1483,7 @@ public final class NotesApp extends Application {
         editTab.setSelected(!on);
         readTab.setSelected(on);
         editor.setReading(on);
+        showFormatBar();
     }
 
     // ------------------------------------------------------------------
@@ -1435,10 +1603,12 @@ public final class NotesApp extends Application {
         return b;
     }
 
+    /** A button that keeps its words: when a bar is short of room, what gives way is a name, never "Ay…". */
     private static Button button(String text, String style, EventHandler<ActionEvent> action) {
         Button b = new Button(text);
         b.getStyleClass().add(style);
         b.setOnAction(action);
+        b.setMinWidth(Region.USE_PREF_SIZE);
         return b;
     }
 
@@ -1457,6 +1627,7 @@ public final class NotesApp extends Application {
     private static MenuButton options(MenuItem... items) {
         MenuButton options = new MenuButton("Opciones", Icons.of("options", 16), items);
         options.getStyleClass().add("flat");
+        options.setMinWidth(Region.USE_PREF_SIZE);
         return options;
     }
 

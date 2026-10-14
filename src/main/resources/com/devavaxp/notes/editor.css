@@ -12,6 +12,7 @@
     --selection: #D4DDFF;
     --code-bg: #F6F7FB;
     --code-head: #EEF0F6;
+    --danger: #C8312B;
     --font: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
     --mono: "Cascadia Mono", Consolas, "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
     /* Code colors, the same in the editor and in the reading view */
@@ -36,6 +37,7 @@
     --selection: #2C3A7A;
     --code-bg: #12141C;
     --code-head: #1C2030;
+    --danger: #E5534B;
     --keyword: #9DABFF;
     --string: #6EE7A0;
     --number: #FDBA74;
@@ -108,6 +110,209 @@ html, body {
     font-size: 13.5px;
     line-height: 1.55;
     background: var(--code-bg);
+}
+
+/* A code block while writing: a card, with its language, Copiar and Quitar above numbered lines */
+#editor .cm-card-head {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 10px;
+    padding: 5px 6px;
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: 10px 10px 0 0;
+    background: var(--code-head);
+    font: 12.5px/1.4 var(--font);
+    user-select: none;
+}
+
+#editor .cm-card-head .grow {
+    flex: 1;
+}
+
+#editor .cm-line.cm-card-line, #editor .cm-line.cm-output {
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    padding: 0 14px 0 50px;
+}
+
+#editor .cm-line.cm-card-line {
+    position: relative;
+}
+
+#editor .cm-line.cm-card-line::before {
+    content: attr(data-n);
+    position: absolute;
+    left: 0;
+    width: 32px;
+    text-align: right;
+    color: var(--faint);
+    user-select: none;
+}
+
+#editor .cm-line.cm-output {
+    padding-left: 16px;
+    color: var(--muted);
+}
+
+#editor .cm-card-foot {
+    height: 8px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+    background: var(--code-bg);
+}
+
+.chip, .act, .cm-add-block {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 7px;
+    font: 600 12.5px/1.4 var(--font);
+    cursor: pointer;
+}
+
+.chip {
+    padding: 3px 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+}
+
+.chip:hover {
+    border-color: var(--accent);
+}
+
+.chip.unset {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+
+.dot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--faint);
+}
+
+.act {
+    padding: 3px 8px;
+    border: 1px solid transparent;
+    background: none;
+    color: var(--muted);
+    font-weight: 400;
+}
+
+.act:hover {
+    border-color: var(--border);
+    background: var(--bg);
+    color: var(--text);
+}
+
+.act.sure, .act.sure:hover {
+    border-color: var(--danger);
+    background: var(--danger);
+    color: #FFFFFF;
+    font-weight: 600;
+}
+
+.icon {
+    flex: none;
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* After the last block of a note: another one */
+#editor .cm-add-block {
+    justify-content: center;
+    gap: 8px;
+    box-sizing: border-box;
+    width: 100%;
+    margin-top: 14px;
+    padding: 9px;
+    border: 1.5px dashed var(--border);
+    background: none;
+    color: var(--accent);
+    font-size: 13px;
+}
+
+#editor .cm-add-block:hover {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+
+/* The menu of a block's language */
+.lang-menu {
+    position: fixed;
+    z-index: 20;
+    box-sizing: border-box;
+    width: 236px;
+    max-height: 340px;
+    overflow: auto;
+    padding: 5px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg);
+    color: var(--text);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+    font: 13px/1.4 var(--font);
+}
+
+.lang-menu .option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 9px;
+    border-radius: 7px;
+    cursor: pointer;
+}
+
+.lang-menu .option:hover {
+    background: var(--accent-soft);
+}
+
+.lang-menu .option.current {
+    color: var(--accent);
+    font-weight: 700;
+}
+
+.lang-menu .hint {
+    margin-left: auto;
+    color: var(--faint);
+    font-size: 12px;
+    font-weight: 400;
+}
+
+.lang-menu hr {
+    margin: 4px 6px;
+    border: none;
+    border-top: 1px solid var(--border);
+}
+
+.lang-menu .find {
+    box-sizing: border-box;
+    width: 100%;
+    margin-bottom: 4px;
+    padding: 6px 9px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    outline: none;
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+}
+
+.lang-menu .find:focus {
+    border-color: var(--accent);
 }
 
 #editor .cm-wikilink {
@@ -328,10 +533,18 @@ html, body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 4px 8px 4px 14px;
+    padding: 5px 8px 5px 14px;
     background: var(--code-head);
     color: var(--muted);
-    font-size: 12px;
+    font-size: 12.5px;
+}
+
+#reading .code-head .lang {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--text);
+    font-weight: 600;
 }
 
 #reading .copy {
@@ -350,6 +563,10 @@ html, body {
 
 #reading pre code {
     counter-reset: line;
+}
+
+#reading .code-card.output pre {
+    color: var(--muted);
 }
 
 #reading pre code .line::before {

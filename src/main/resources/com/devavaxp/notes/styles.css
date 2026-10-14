@@ -21,6 +21,7 @@
     -accent: #2B4FD8;
     -accent-hover: #2341B8;
     -accent-soft: #E7ECFF;
+    -accent-soft-hover: #D9E1FF;
     -accent-text: #1E3AA8;
     -on-accent: #FFFFFF;
     -danger: #C8312B;
@@ -56,6 +57,7 @@
     -accent: #7F95FF;
     -accent-hover: #98A9FF;
     -accent-soft: #232B52;
+    -accent-soft-hover: #2C3768;
     -accent-text: #C9D2FF;
     -on-accent: #0E1016;
     -danger: #FF7A72;
@@ -933,6 +935,84 @@
 }
 
 /* ---------- Icons: line drawings, colored by where they are ---------- */
+
+/* The formatting bar above the note while writing: Markdown a click away */
+.format-bar {
+    -fx-background-color: -surface;
+    -fx-border-color: transparent transparent -border transparent;
+    -fx-padding: 5 20 5 20;
+}
+
+.button.format {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-text-fill: -text-muted;
+    -fx-padding: 5 9;
+    -fx-graphic-text-gap: 6;
+}
+
+.button.format:hover {
+    -fx-background-color: -surface-hover;
+    -fx-text-fill: -text;
+}
+
+.button.format:focus-visible {
+    -fx-border-color: -accent;
+}
+
+.button.format.format-code {
+    -fx-background-color: -accent-soft;
+    -fx-text-fill: -accent-text;
+    -fx-font-weight: bold;
+}
+
+.button.format.format-code:hover {
+    -fx-background-color: -accent-soft-hover;
+}
+
+.button.format.format-code .icon {
+    -fx-stroke: -accent-text;
+}
+
+.glyph {
+    -fx-font-size: 15px;
+    -fx-text-fill: -text-muted;
+    -fx-min-width: 15;
+    -fx-alignment: center;
+}
+
+.glyph.bold {
+    -fx-font-weight: bold;
+}
+
+.glyph.italic {
+    -fx-font-family: "Georgia";
+    -fx-font-style: italic;
+}
+
+.button.format:hover .glyph {
+    -fx-text-fill: -text;
+}
+
+.format-separator {
+    -fx-padding: 4 5;
+}
+
+.format-separator > .line {
+    -fx-border-color: -border;
+    -fx-border-width: 0 1 0 0;
+}
+
+/* The notebook's language for new code blocks, next to its type */
+.button.language-chip {
+    -fx-padding: 2 10 2 8;
+    -fx-background-radius: 99;
+    -fx-border-radius: 99;
+    -fx-border-color: -border;
+    -fx-text-fill: -text;
+    -fx-font-size: 12.5px;
+    -fx-graphic-text-gap: 6;
+}
 
 .icon {
     -fx-fill: transparent;

@@ -21,7 +21,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -34,8 +36,8 @@ import java.util.regex.Pattern;
 /**
  * The open note, in one WebView page (editor.html): CodeMirror 6 to write it, or the note
  * rendered to read it. The page reports to Java only as alert() text ("ready", "changed",
- * "link:url", "open:title", "tag:name", "copy:text", "error:message"), so no Java object is ever
- * within reach of JavaScript.
+ * "link:url", "open:title", "tag:name", "copy:text", "language:id", "error:message"), so no Java
+ * object is ever within reach of JavaScript.
  */
 final class Editor {
 
@@ -45,6 +47,10 @@ final class Editor {
     /** HTML written in a note shows as text and javascript: links are dropped: a note never runs code. */
     private static final HtmlRenderer RENDERER = HtmlRenderer.builder().extensions(MARKDOWN)
             .escapeHtml(true).sanitizeUrls(true).build();
+
+    /** The languages code blocks offer first, as written after ``` and as shown (the same as in main.js). */
+    static final Map<String, String> LANGUAGES = languages("java", "Java", "cpp", "C++", "c", "C", "python", "Python",
+            "csharp", "C#", "javascript", "JavaScript", "sql", "SQL", "plsql", "PL/SQL (Oracle)");
 
     final WebView view = new WebView();
     /** What editor.js reported as failing (also printed to stderr). */
@@ -59,13 +65,17 @@ final class Editor {
     private Path base;
     private List<String> titles = List.of();
     private Set<String> known = Set.of();
+    /** The language of new code blocks ("java"); "" lets each block ask for one. */
+    private String language = "";
 
     /**
      * {@code onChange}: the text was edited. {@code onLink}: a link was followed (the page itself
      * never leaves). {@code onOpen}: a [[link]] to a note. {@code onTag}: a #tag. {@code onPaste}:
      * a paste in which the page found no text on the clipboard (a picture may be there).
+     * {@code onLanguage}: a language was chosen in a code block's menu.
      */
-    Editor(Runnable onChange, Consumer<String> onLink, Consumer<String> onOpen, Consumer<String> onTag, Runnable onPaste) {
+    Editor(Runnable onChange, Consumer<String> onLink, Consumer<String> onOpen, Consumer<String> onTag, Runnable onPaste,
+           Consumer<String> onLanguage) {
         engine.setOnAlert(e -> {
             String message = e.getData();
             if (message.equals("changed")) {
@@ -80,6 +90,8 @@ final class Editor {
                 Platform.runLater(() -> onTag.accept(message.substring(4)));
             } else if (message.equals("paste")) {
                 Platform.runLater(onPaste);
+            } else if (message.startsWith("language:")) {
+                Platform.runLater(() -> onLanguage.accept(message.substring(9)));
             } else if (message.startsWith("copy:")) {   // copy, cut and the Copy button of a code block (see main.js)
                 Clipboard.getSystemClipboard().setContent(Map.of(DataFormat.PLAIN_TEXT, message.substring(5)));
             } else if (message.startsWith("error:")) {
@@ -130,6 +142,7 @@ final class Editor {
         if (!ready) return;
         call("setTheme", dark ? "dark" : "light");
         call("setTitles", String.join("\n", titles));
+        call("setCodeLanguage", language);
         open(text, base);
     }
 
@@ -187,6 +200,33 @@ final class Editor {
     /** Puts code at the cursor: as it is inside a code block, in a new ```language block outside one. */
     void insertCode(String code, String language) {
         if (ready && !reading) call("insertCode", code, language);
+    }
+
+    /** The language new code blocks start with, from the notebook. */
+    void setCodeLanguage(String language) {
+        this.language = language;
+        if (ready) call("setCodeLanguage", language);
+    }
+
+    /** A new, empty code block: where the cursor is, or after the block it is in. */
+    void newBlock() {
+        if (ready && !reading) call("newBlock");
+    }
+
+    /** One of the formatting bar's buttons: bold, italic, heading, list, check, link or math. */
+    void format(String kind) {
+        if (ready && !reading) call("format", kind);
+    }
+
+    /** How a language written after ``` shows: "PL/SQL (Oracle)" for plsql; one the app does not offer, as written. */
+    static String languageName(String id) {
+        return LANGUAGES.getOrDefault(id.toLowerCase(Locale.ROOT), id);
+    }
+
+    private static Map<String, String> languages(String... idsAndNames) {
+        Map<String, String> map = new LinkedHashMap<>();
+        for (int i = 0; i < idsAndNames.length; i += 2) map.put(idsAndNames[i], idsAndNames[i + 1]);
+        return Collections.unmodifiableMap(map);
     }
 
     /** Selects the first place with the text (accents and case aside), as Search found it. */
