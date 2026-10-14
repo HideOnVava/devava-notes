@@ -33,6 +33,9 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -43,6 +46,7 @@ import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -612,7 +616,18 @@ class AppSmokeTest {
         Stage stage = window[0];
         WebEngine engine = fx(() -> app.editor.view.getEngine());
         assertTrue(fx(() -> texts(stage)).contains("Te damos la bienvenida a Devava Notes"));
-        fx(() -> run(() -> ((TextField) stage.getScene().lookup(".first-use .text-field")).setText("programación")));
+        TextField find = fx(() -> (TextField) stage.getScene().lookup(".first-use .text-field"));
+        fx(() -> run(() -> {
+            find.setText("datos");
+            checkBox(stage, "Estructura de Datos").setSelected(true);
+            checkBox(stage, "Fundamentos de Bases de Datos").setSelected(true);
+        }));
+        shot(stage, "readme-primer-uso");
+        fx(() -> run(() -> {
+            checkBox(stage, "Estructura de Datos").setSelected(false);
+            checkBox(stage, "Fundamentos de Bases de Datos").setSelected(false);
+            find.setText("programación");
+        }));
         fx(() -> run(() -> {
             checkBox(stage, "Fundamentos de Programación").setSelected(true);
             checkBox(stage, "Programación Orientada a Objetos").setSelected(true);
@@ -637,6 +652,163 @@ class AppSmokeTest {
         waitFor("the guide's two blocks", () -> fx(() -> ((Number) engine.executeScript("document.querySelectorAll('#reading .code-card').length")).intValue() == 2));
         waitFor("its formula", () -> fx(() -> ((Number) engine.executeScript("document.querySelectorAll('#reading .katex').length")).intValue() == 1));
         shot(stage, "f3-guide");
+        assertEquals(List.of(), fx(() -> List.copyOf(app.editor.errors)));
+        fx(() -> run(stage::close));
+    }
+
+    /** A session of Estructura de Datos, as a student writes it. */
+    private static final String STACK = """
+            ---
+            kind: session
+            date: %s
+            unit: 3. Estructuras lineales
+            topics: [pilas]
+            ---
+            ## Objetivo
+
+            Usar una pila para invertir una palabra: el último en entrar es el primero en salir.
+
+            ## Código
+
+            ```java
+            import java.util.ArrayDeque;
+            import java.util.Deque;
+
+            public class Pila {
+                public static void main(String[] args) {
+                    Deque<Character> pila = new ArrayDeque<>();
+                    for (char c : "Tec".toCharArray()) pila.push(c);
+                    StringBuilder invertida = new StringBuilder();
+                    while (!pila.isEmpty()) invertida.append(pila.pop());
+                    System.out.println(invertida);
+                }
+            }
+            ```
+
+            ## Salida
+
+            ```output
+            ceT
+            ```
+
+            ## Notas
+
+            `push` mete arriba y `pop` saca de arriba, los dos en O(1).
+            """;
+
+    private static final String PARTIAL = """
+            ---
+            date: %s
+            unit: 2. Funciones de varias variables
+            topic: derivadas parciales
+            ---
+            ## Ideas clave
+
+            Para derivar respecto a $x$, las demás variables se quedan fijas:
+
+            $$
+            \\frac{\\partial f}{\\partial x} = \\lim_{h \\to 0} \\frac{f(x + h, y) - f(x, y)}{h}
+            $$
+
+            Con $f(x, y) = x^2 y + \\sin y$ queda $f_x = 2xy$ y $f_y = x^2 + \\cos y$.
+
+            ## El gradiente
+
+            $$
+            \\nabla f = \\left( \\frac{\\partial f}{\\partial x}, \\frac{\\partial f}{\\partial y} \\right)
+            $$
+
+            Apunta hacia donde $f$ crece más rápido.
+            """;
+
+    /**
+     * The screenshots of the README, a semester of ISC in the app (target/smoke/readme-*.png), and
+     * the dialogs that go with them, light and dark, to look over.
+     */
+    @Test
+    void takesTheReadmeScreenshots(@TempDir Path home) throws Exception {
+        Stage[] window = new Stage[1];
+        NotesApp app = open(home, window);
+        Stage stage = window[0];
+        WebEngine engine = fx(() -> app.editor.view.getEngine());
+        LocalDate today = LocalDate.now();
+        String now = Period.of(today).toString(), before = Period.of(today).previous().previous().toString();
+        Path ed = subject(app, "Estructura de Datos", NotebookType.PROGRAMMING, "java", now);
+        Path db = subject(app, "Taller de Bases de Datos", NotebookType.DATABASES, "plsql", now);
+        Path calculus = subject(app, "Cálculo Vectorial", NotebookType.CLASS_NOTES, "", now);
+        Path physics = subject(app, "Física General", NotebookType.CLASS_NOTES, "", now);
+        Path cp = subject(app, "Algoritmos", NotebookType.COMPETITIVE_PROGRAMMING, "", null);
+        subject(app, "Programación Orientada a Objetos", NotebookType.PROGRAMMING, "java", before);
+        subject(app, "Cálculo Integral", NotebookType.CLASS_NOTES, "", before);
+        Path stack = ed.resolve("Sesión 5 · Pilas.md");
+        Files.writeString(stack, STACK.formatted(today.minusDays(2)));
+        Files.writeString(ed.resolve("Sesión 6 · Colas.md"), "---\nkind: session\ndate: " + today + "\nunit: 3. Estructuras lineales\ntopics: [colas]\n---\n");
+        Files.writeString(ed.resolve("Recursividad.md"), "---\ndate: " + today.minusDays(9) + "\nunit: 2. Recursividad\n---\n");
+        Files.writeString(ed.resolve("Práctica 3 · Listas enlazadas.md"), "---\nkind: assignment\ndue: " + today.plusDays(2) + "\nstatus: Pending\n---\n");
+        Files.writeString(ed.resolve("Primer parcial.md"), "---\nkind: exam\ndate: " + today.plusDays(6) + "\ntopics: [pilas, colas]\n---\n");
+        Path exercise = db.resolve("Empleados por departamento.md");
+        Files.writeString(exercise, "---\nkind: exercise\ntopics: [consultas/joins, consultas/group by]\nlevel: Medium\nstatus: Solved\ndate: "
+                + today + "\n---\n## Enunciado\n\n¿Cuántos empleados trabajan en cada departamento, incluidos los que no tienen ninguno?\n\n"
+                + "## Consulta\n\n```plsql\n" + QUERY + "\n```\n");
+        Files.writeString(db.resolve("EMPLOYEES.md"), "---\nkind: table\n---\n## Creación\n\n```plsql\n" + CREATE + "\n```\n");
+        Files.writeString(db.resolve("Segundo examen.md"), "---\nkind: exam\ndate: " + today.plusDays(9) + "\ntopics: [plsql/cursores]\n---\n");
+        Path partial = calculus.resolve("Derivadas parciales.md");
+        Files.writeString(partial, PARTIAL.formatted(today.minusDays(1)));
+        Files.writeString(calculus.resolve("Tarea 3.md"), "---\nkind: assignment\ndue: " + today.plusDays(1) + "\nstatus: Pending\n---\n");
+        Files.writeString(physics.resolve("Leyes de Newton.md"), "---\ndate: " + today.minusDays(3) + "\nunit: 2. Dinámica\n---\n");
+        Files.writeString(cp.resolve("CF 4A - Watermelon.md"), WATERMELON);
+        Files.writeString(cp.resolve("DSU.md"), DSU);
+        age(home, Map.of(ed.resolve("Sesión 6 · Colas.md"), 25L, partial, 190L, stack, 1560L, exercise, 2900L,
+                physics.resolve("Leyes de Newton.md"), 4400L, calculus.resolve("Tarea 3.md"), 5800L));
+
+        fx(() -> run(app::showHome));
+        shot(stage, "readme-inicio");
+        dialogShot(stage, "readme-nueva-materia", app::newNotebook, "bases de datos");
+        fx(() -> run(() -> {
+            app.openNotebook(ed);
+            app.browser.choose("Sesiones de código", null);
+            app.openNote(stack);
+        }));
+        waitFor("the session's cards", () -> fx(() -> ((Number) engine.executeScript("document.querySelectorAll('.cm-card-head').length")).intValue() == 2));
+        shot(stage, "readme-sesion-de-codigo");
+        fx(() -> run(() -> {
+            app.openNotebook(calculus);
+            app.openNote(partial);
+            app.toggleMode();
+        }));
+        waitFor("the formulas", () -> fx(() -> ((Number) engine.executeScript("document.querySelectorAll('#reading .katex').length")).intValue() >= 4));
+        waitFor("KaTeX's fonts", () -> fx(() -> Boolean.TRUE.equals(engine.executeScript(
+                "[...document.fonts].some(f => f.family.replace(/\"/g, '') === 'KaTeX_Main' && f.status === 'loaded')"))));
+        shot(stage, "readme-materia");
+        fx(() -> run(app::toggleMode));
+
+        // The dialogs of a notebook, in light, then everything new in dark.
+        dialogShot(stage, "r1-change-type", () -> menuItem(stage, "Cambiar tipo…").fire(), "");
+        dialogShot(stage, "r2-language", () -> menuItem(stage, "Lenguaje del código…").fire(), "");
+        dialogShot(stage, "r3-period", () -> menuItem(stage, "Cambiar periodo…").fire(), "");
+        fx(() -> run(() -> {
+            app.setDark(true);
+            app.openNotebook(db);
+            app.browser.choose("Ejercicios", null);
+            app.openNote(exercise);
+        }));
+        waitFor("the editor's page in dark", () -> fx(() -> "dark".equals(engine.executeScript("document.documentElement.dataset.theme"))));
+        waitFor("the exercise's card", () -> fx(() -> ((Number) engine.executeScript("document.querySelectorAll('.cm-card-head').length")).intValue() == 1));
+        shot(stage, "readme-bases-de-datos-oscuro");
+        fx(() -> run(() -> app.browser.choose("Sesiones de código", null)));
+        shot(stage, "r4-dark-empty");
+        fx(() -> run(() -> {
+            app.openNotebook(ed);
+            app.openNote(stack);
+            app.toggleMode();
+        }));
+        waitFor("the session read in dark", () -> fx(() -> ((Number) engine.executeScript("document.querySelectorAll('#reading .code-card').length")).intValue() == 2));
+        shot(stage, "r5-dark-session");
+        fx(() -> run(app::toggleMode));
+        dialogShot(stage, "r6-dark-change-type", () -> menuItem(stage, "Cambiar tipo…").fire(), "");
+        fx(() -> run(app::showHome));
+        shot(stage, "r7-dark-home");
+        dialogShot(stage, "r8-dark-new-subject", app::newNotebook, "estruc");
         assertEquals(List.of(), fx(() -> List.copyOf(app.editor.errors)));
         fx(() -> run(stage::close));
     }
@@ -717,6 +889,31 @@ class AppSmokeTest {
         TextField field = (TextField) stage.getScene().lookup("#property-" + key);
         field.setText(text);
         field.fireEvent(new ActionEvent());
+    }
+
+    /** Every file written days ago, but for these notes, edited so many minutes ago: what Home lists as recent. */
+    private static void age(Path home, Map<Path, Long> minutesAgo) throws Exception {
+        FileTime old = FileTime.from(Instant.now().minus(Duration.ofDays(12)));
+        try (Stream<Path> all = Files.walk(home)) {
+            for (Path p : all.toList()) if (!p.equals(home)) Files.setLastModifiedTime(p, old);
+        }
+        for (Map.Entry<Path, Long> e : minutesAgo.entrySet()) {
+            Files.setLastModifiedTime(e.getKey(), FileTime.from(Instant.now().minus(Duration.ofMinutes(e.getValue()))));
+        }
+    }
+
+    /** A notebook of a subject, with its language and period. */
+    private static Path subject(NotesApp app, String name, NotebookType type, String language, String period) throws Exception {
+        Path dir = fx(() -> app.createNotebook(name, type));
+        if (!language.isEmpty()) Vault.setMeta(dir, "language", language);
+        if (period != null) Vault.setMeta(dir, "period", period);
+        return dir;
+    }
+
+    /** An item of one of the window's menus (Opciones). */
+    private static MenuItem menuItem(Stage stage, String text) {
+        return stage.getScene().getRoot().lookupAll(".menu-button").stream().map(MenuButton.class::cast)
+                .flatMap(m -> m.getItems().stream()).filter(i -> text.equals(i.getText())).findFirst().orElseThrow();
     }
 
     private static Kind kind(NotebookType type, String id) {

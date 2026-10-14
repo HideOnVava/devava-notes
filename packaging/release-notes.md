@@ -1,28 +1,30 @@
-## Download
+## Descarga
 
 {{DOWNLOADS}}
 
-64-bit Windows 10 or 11. **Java is not required**: a trimmed runtime is bundled. All files are
-built automatically by GitHub Actions from this tag, so the build log shows exactly what went
-into them. macOS and Linux versions are planned.
+Windows 10 u 11 de 64 bits. **No necesitas Java**: la app trae el suyo. GitHub Actions compila
+todos los archivos desde esta etiqueta, así que el registro de la compilación muestra
+exactamente qué lleva cada uno. Las versiones para macOS y Linux vienen después.
 
 <details>
-<summary><b>"Windows protected your PC"</b></summary>
+<summary><b>«Windows protegió su PC»</b></summary>
 
-The files are not code-signed (that needs a paid certificate), so SmartScreen may show this
-warning the first time. Click **More info → Run anyway**.
+Los archivos no están firmados (para eso hace falta un certificado de pago), así que SmartScreen
+puede mostrar esta advertencia la primera vez. Haz clic en **Más información → Ejecutar de todas
+formas**.
 </details>
 
-Your notes are plain Markdown files in your Documents folder (`Devava Notes`). They are kept
-when you update or uninstall, and any Markdown editor (Obsidian included) can open them.
+Tus notas son archivos Markdown en tu carpeta Documentos (`Devava Notes`). Se quedan cuando
+actualizas o desinstalas la app, y cualquier editor de Markdown (Obsidian incluido) las abre.
 
-## What's new in {{VERSION}}
+## Qué hay de nuevo en la {{VERSION}}
 
 {{CHANGES}}
 
-## Verify the download (optional)
+## Verificar la descarga (opcional)
 
-Compare the SHA-256 of the file (`certutil -hashfile <file> SHA256` in a command prompt) with:
+Compara el SHA-256 del archivo (`certutil -hashfile <archivo> SHA256` en una ventana de
+comandos) con:
 
 ```
 {{CHECKSUMS}}

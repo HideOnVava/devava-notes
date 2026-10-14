@@ -572,12 +572,8 @@ public final class NotesApp extends Application {
         if (minutes < 60) return minutes == 1 ? "Hace 1 minuto" : String.format("Hace %d minutos", minutes);
         if (minutes < 60 * 24) return minutes < 120 ? "Hace 1 hora" : String.format("Hace %d horas", minutes / 60);
         LocalDate day = LocalDate.ofInstant(time.toInstant(), ZoneId.systemDefault());
-        return day.equals(LocalDate.now().minusDays(1)) ? "Ayer" : day().format(time.toInstant());
-    }
-
-    /** "Sep 28, 2026", "28 sept 2026". */
-    private static DateTimeFormatter day() {
-        return DateTimeFormatter.ofPattern("d MMM yyyy", Text.SPANISH).withZone(ZoneId.systemDefault());
+        if (day.equals(LocalDate.now().minusDays(1))) return "Ayer";
+        return DateTimeFormatter.ofPattern(day.getYear() == LocalDate.now().getYear() ? "d MMM" : "d MMM yyyy", Text.SPANISH).format(day);
     }
 
     private static Label sectionTitle(String text) {

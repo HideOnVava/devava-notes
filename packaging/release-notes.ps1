@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Assembles the text of a GitHub release from the built files.
 
@@ -32,8 +32,8 @@ $changes = $section.Groups[1].Value.Trim()
 
 # --- Files: what each one is, in the order the table shows them ------------------
 $kinds = @(
-    @{ Suffix = '-windows-x64-setup.exe';    Text = '**Recommended.** Installer: double-click, keep or change the folder, done. No administrator rights needed; uninstall from *Settings > Apps*.' },
-    @{ Suffix = '-windows-x64-portable.zip'; Text = 'No installation: unzip anywhere and run `Devava Notes.exe`.' }
+    @{ Suffix = '-windows-x64-setup.exe';    Text = '**Recomendado.** El instalador: ábrelo, deja o cambia la carpeta, y listo. No necesita permisos de administrador; se desinstala desde *Configuración > Aplicaciones*.' },
+    @{ Suffix = '-windows-x64-portable.zip'; Text = 'Sin instalar: descomprímelo donde quieras y abre `Devava Notes.exe`.' }
 )
 $found = Get-ChildItem $Dir -Recurse -File -Filter "Devava-Notes-$Version-*"
 if (-not $found) { throw "No Devava-Notes-$Version-* files under $Dir." }
@@ -50,7 +50,7 @@ $known = $kinds | ForEach-Object { "Devava-Notes-$Version$($_.Suffix)" }
 $unknown = $found | Where-Object { $known -notcontains $_.Name }
 if ($unknown) { throw "Unexpected release files: $($unknown.Name -join ', ')" }
 
-$table = @("| File | Notes |", "| --- | --- |") + $rows
+$table = @("| Archivo | Para qué |", "| --- | --- |") + $rows
 
 # --- Output ---------------------------------------------------------------------
 $utf8 = New-Object System.Text.UTF8Encoding $false   # no BOM, whichever PowerShell runs this

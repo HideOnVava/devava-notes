@@ -6,9 +6,9 @@
 
     <groupId>com.devavaxp</groupId>
     <artifactId>devava-notes</artifactId>
-    <version>1.2.0</version>
+    <version>2.0.0</version>
     <name>Devava Notes</name>
-    <description>Desktop notes app whose notebooks specialize in what they hold, by devava XP Studios.</description>
+    <description>La app de apuntes de los estudiantes de Ingeniería en Sistemas Computacionales del Tecnológico de La Laguna, por devava XP Studios.</description>
 
     <organization>
         <name>devava XP Studios</name>
