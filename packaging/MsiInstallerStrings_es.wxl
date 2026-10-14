@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  jpackage's own texts of the installer (its MsiInstallerStrings_en.wxl), in Spanish. With this
+  file in the resource folder the installer is built for the es-es culture, so the dialogs of the
+  WiX Toolset come in Spanish too. They address the user as "usted", and so do these.
+-->
+<WixLocalization Culture="es-es" xmlns="http://schemas.microsoft.com/wix/2006/localization" Codepage="1252">
+  <String Id="message.install.dir.exist">La carpeta [INSTALLDIR] ya existe. ¿Desea instalar en ella de todos modos?</String>
+  <String Id="MainFeatureTitle">Programa</String>
+  <String Id="DowngradeErrorMessage">Ya hay instalada una versión más reciente de [ProductName]. El programa de instalación se cerrará.</String>
+  <String Id="DisallowUpgradeErrorMessage">Ya hay instalada una versión anterior de [ProductName] que no se puede actualizar. El programa de instalación se cerrará.</String>
+
+  <String Id="ShortcutPromptDlg_Title">Instalación de [ProductName]</String>
+  <String Id="ShortcutPromptDlgTitle">{\WixUI_Font_Title}Accesos directos</String>
+  <String Id="ShortcutPromptDlgBannerBitmap">WixUI_Bmp_Banner</String>
+  <String Id="ShortcutPromptDlgDescription">Seleccione los accesos directos que desea crear.</String>
+  <String Id="ShortcutPromptDlgDesktopShortcutControlLabel">Crear un acceso directo en el escritorio</String>
+  <String Id="ShortcutPromptDlgStartMenuShortcutControlLabel">Crear un acceso directo en el menú Inicio</String>
+  <String Id="InstallDirNotEmptyDlg_Title">Instalación de [ProductName]</String>
+  <String Id="ContextMenuCommandLabel">Abrir con [ProductName]</String>
+</WixLocalization>

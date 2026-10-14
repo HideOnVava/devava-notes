@@ -6,11 +6,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import static com.devavaxp.notes.Text.t;
-
 /**
  * What a notebook specializes in: the kinds of notes it holds, with their properties and the text a
  * new one starts with, and the views to browse them. A notebook keeps its type in .notebook.json.
+ * What a note keeps is in English ("status: Solved"), as notes of earlier versions have it; the app
+ * shows it in Spanish (Text.shown).
  */
 record NotebookType(String id, String name, String description, List<Kind> kinds, List<View> views) {
 
@@ -22,8 +22,11 @@ record NotebookType(String id, String name, String description, List<Kind> kinds
         }
     }
 
-    /** A kind of note: its properties, and the text a new one starts with ({today} becomes the date). */
-    record Kind(String id, String name, List<Field> fields, String template) {
+    /**
+     * A kind of note: its name, what makes one ("Nueva clase") and what it is for, its properties,
+     * and the text a new one starts with ({today} becomes the date).
+     */
+    record Kind(String id, String name, String create, String about, List<Field> fields, String template) {
     }
 
     /**
@@ -39,210 +42,212 @@ record NotebookType(String id, String name, String description, List<Kind> kinds
     record Badge(String text, String color) {
     }
 
-    private static final Field TAGS = new Field("tags", "Tags", Input.LIST);
-    private static final Field PINNED = new Field("pinned", "Pinned", Input.CHECK);
-    private static final Field DATE = new Field("date", "Date", Input.DATE);
-    private static final Field UNIT = new Field("unit", "Unit", Input.TEXT);
-    private static final Field TOPIC = new Field("topic", "Topic", Input.TEXT);
-    private static final Field DUE = new Field("due", "Due", Input.DATE);
-    private static final Field TASK = new Field("status", "Status", Input.CHOICE, List.of("Pending", "Done"));
-    private static final Field TOPICS = new Field("topics", "Topics", Input.LIST);
-    private static final Field GRADE = new Field("grade", "Grade", Input.TEXT);
-    private static final Field JUDGE = new Field("judge", "Judge", Input.CHOICE, List.of("Codeforces", "AtCoder", "LeetCode", "Other"));
+    private static final Field TAGS = new Field("tags", "Etiquetas", Input.LIST);
+    private static final Field PINNED = new Field("pinned", "Fijada", Input.CHECK);
+    private static final Field DATE = new Field("date", "Fecha", Input.DATE);
+    private static final Field UNIT = new Field("unit", "Unidad", Input.TEXT);
+    private static final Field TOPIC = new Field("topic", "Tema", Input.TEXT);
+    private static final Field DUE = new Field("due", "Entrega", Input.DATE);
+    private static final Field TASK = new Field("status", "Estado", Input.CHOICE, List.of("Pending", "Done"));
+    private static final Field TOPICS = new Field("topics", "Temas", Input.LIST);
+    private static final Field GRADE = new Field("grade", "Calificación", Input.TEXT);
+    private static final Field JUDGE = new Field("judge", "Juez", Input.CHOICE, List.of("Codeforces", "AtCoder", "LeetCode", "Other"));
     private static final Field ID = new Field("id", "ID", Input.TEXT);
-    private static final Field URL = new Field("url", "Link", Input.TEXT);
-    private static final Field DIFFICULTY = new Field("difficulty", "Difficulty", Input.TEXT);
+    private static final Field URL = new Field("url", "Enlace", Input.TEXT);
+    private static final Field DIFFICULTY = new Field("difficulty", "Dificultad", Input.TEXT);
     /** Empty: worked out from the difficulty (Judges.level); set: the note's own word. */
-    private static final Field LEVEL = new Field("level", "Level", Input.CHOICE, Judges.LEVELS);
-    private static final Field ALGORITHMS = new Field("algorithms", "Algorithms", Input.LIST, Judges.ALGORITHMS);
-    private static final Field TECHNIQUES = new Field("techniques", "Techniques", Input.LIST, Judges.TECHNIQUES);
-    private static final Field PROBLEM = new Field("status", "Status", Input.CHOICE,
+    private static final Field LEVEL = new Field("level", "Nivel", Input.CHOICE, Judges.LEVELS);
+    private static final Field ALGORITHMS = new Field("algorithms", "Algoritmos", Input.LIST, Judges.ALGORITHMS);
+    private static final Field TECHNIQUES = new Field("techniques", "Técnicas", Input.LIST, Judges.TECHNIQUES);
+    private static final Field PROBLEM = new Field("status", "Estado", Input.CHOICE,
             List.of("To do", "Attempted", "Solved with help", "Solved"));
-    /** What a database course covers, Oracle's SQL and PL/SQL; "plsql/cursors" groups under "plsql". */
-    private static final Field SQL_TOPICS = new Field("topics", "Topics", Input.LIST, List.of(
-            "queries/select", "queries/where", "queries/order by", "queries/functions", "queries/group by",
-            "queries/joins", "queries/subqueries", "queries/set operators", "queries/analytic functions",
-            "queries/hierarchical", "ddl/tables", "ddl/constraints", "ddl/views", "ddl/sequences", "ddl/indexes",
-            "ddl/synonyms", "dml/insert", "dml/update", "dml/delete", "dml/merge", "transactions",
-            "security/users", "security/privileges", "security/roles", "plsql/blocks", "plsql/cursors",
-            "plsql/exceptions", "plsql/procedures", "plsql/functions", "plsql/packages", "plsql/triggers",
-            "design/er model", "design/normalization", "data dictionary"));
+    /** What a database course covers, Oracle's SQL and PL/SQL; "plsql/cursores" groups under "plsql". */
+    private static final Field SQL_TOPICS = new Field("topics", "Temas", Input.LIST, List.of(
+            "consultas/select", "consultas/where", "consultas/order by", "consultas/funciones", "consultas/group by",
+            "consultas/joins", "consultas/subconsultas", "consultas/operadores de conjuntos", "consultas/funciones analíticas",
+            "consultas/jerárquicas", "ddl/tablas", "ddl/restricciones", "ddl/vistas", "ddl/secuencias", "ddl/índices",
+            "ddl/sinónimos", "dml/insert", "dml/update", "dml/delete", "dml/merge", "transacciones",
+            "seguridad/usuarios", "seguridad/privilegios", "seguridad/roles", "plsql/bloques", "plsql/cursores",
+            "plsql/excepciones", "plsql/procedimientos", "plsql/funciones", "plsql/paquetes", "plsql/disparadores",
+            "diseño/modelo entidad-relación", "diseño/normalización", "diccionario de datos"));
 
-    private static final Kind ASSIGNMENT = new Kind("assignment", "Assignment", List.of(DUE, TASK), """
+    private static final Kind ASSIGNMENT = new Kind("assignment", "Tarea", "Nueva tarea", "Con fecha de entrega", List.of(DUE, TASK), """
             ---
             kind: assignment
             status: Pending
             ---
-            ## Instructions
+            ## Instrucciones
 
-            ## Notes
+            ## Notas
             """);
 
     static final NotebookType GENERAL = new NotebookType("general", "General",
-            "Free-form notes, organized with tags.",
-            List.of(new Kind("note", "Note", List.of(TAGS, PINNED), "")),
-            List.of(new View("All notes", null, null, "-modified", null),
-                    new View("Pinned notes", null, "pinned", "-modified", null),
-                    new View("By tag", null, null, "title", "tags")));
+            "Notas libres, organizadas con etiquetas.",
+            List.of(new Kind("note", "Nota", "Nueva nota", "Una nota libre", List.of(TAGS, PINNED), "")),
+            List.of(new View("Todas las notas", null, null, "-modified", null),
+                    new View("Notas fijadas", null, "pinned", "-modified", null),
+                    new View("Por etiqueta", null, null, "title", "tags")));
 
-    static final NotebookType CLASS_NOTES = new NotebookType("class-notes", "Class Notes",
-            "One course: its lectures, assignments and exams.",
-            List.of(new Kind("lecture", "Lecture", List.of(DATE, UNIT, TOPIC), """
+    static final NotebookType CLASS_NOTES = new NotebookType("class-notes", "Apuntes de clase",
+            "Una materia: sus clases, tareas y exámenes.",
+            List.of(new Kind("lecture", "Clase", "Nueva clase", "Lo que se vio en una clase", List.of(DATE, UNIT, TOPIC), """
                             ---
                             date: {today}
                             ---
-                            ## Key ideas
+                            ## Ideas clave
 
-                            ## Notes
+                            ## Notas
 
-                            ## Questions
+                            ## Preguntas
 
-                            ## Summary
+                            ## Resumen
                             """),
                     ASSIGNMENT,
-                    new Kind("exam", "Exam", List.of(DATE, TOPICS, GRADE), """
+                    new Kind("exam", "Examen", "Nuevo examen", "Con fecha, temas y calificación", List.of(DATE, TOPICS, GRADE), """
                             ---
                             kind: exam
                             ---
-                            ## Topics
+                            ## Temas
 
-                            ## Notes
+                            ## Notas
                             """)),
-            List.of(new View("Lectures", "lecture", null, "-date", null),
-                    new View("By unit", "lecture", null, "date", "unit"),
-                    new View("Upcoming", null, "upcoming", "when", null),
-                    new View("Assignments", "assignment", null, "-due", null),
-                    new View("Exams", "exam", null, "-date", null),
-                    new View("All notes", null, null, "-when", null)));
+            List.of(new View("Clases", "lecture", null, "-date", null),
+                    new View("Por unidad", "lecture", null, "date", "unit"),
+                    new View("Lo que se acerca", null, "upcoming", "when", null),
+                    new View("Tareas", "assignment", null, "-due", null),
+                    new View("Exámenes", "exam", null, "-date", null),
+                    new View("Todas las notas", null, null, "-when", null)));
 
-    static final NotebookType COMPETITIVE_PROGRAMMING = new NotebookType("competitive-programming", "Competitive Programming",
-            "Problems you solve, by topic and difficulty, and the code you reuse.",
-            List.of(new Kind("problem", "Problem", List.of(URL, JUDGE, ID, DIFFICULTY, LEVEL, PROBLEM, ALGORITHMS, TECHNIQUES, DATE), """
+    static final NotebookType COMPETITIVE_PROGRAMMING = new NotebookType("competitive-programming", "Programación competitiva",
+            "Los problemas que resuelves, por tema y dificultad, y el código que reutilizas.",
+            List.of(new Kind("problem", "Problema", "Nuevo problema", "De Codeforces, AtCoder o LeetCode",
+                            List.of(URL, JUDGE, ID, DIFFICULTY, LEVEL, PROBLEM, ALGORITHMS, TECHNIQUES, DATE), """
                             ---
                             status: To do
                             date: {today}
                             ---
                             ## Idea
 
-                            ## Complexity
+                            ## Complejidad
 
-                            ## Solution
+                            ## Solución
 
                             ```cpp
 
                             ```
 
-                            ## Mistakes
+                            ## Errores
                             """),
-                    new Kind("snippet", "Snippet", List.of(ALGORITHMS, TECHNIQUES), """
+                    new Kind("snippet", "Fragmento", "Nuevo fragmento", "Código para reutilizar", List.of(ALGORITHMS, TECHNIQUES), """
                             ---
                             kind: snippet
                             ---
-                            ## When to use
+                            ## Cuándo usarlo
 
-                            ## Complexity
+                            ## Complejidad
 
-                            ## Code
+                            ## Código
 
                             ```cpp
 
                             ```
                             """)),
-            List.of(new View("All problems", "problem", null, "-date", null),
-                    new View("To review", "problem", "status=Solved with help", "date", null),
-                    new View("By algorithm", "problem", null, "title", "algorithms"),
-                    new View("By technique", "problem", null, "title", "techniques"),
-                    new View("By difficulty", "problem", null, "title", "level"),
-                    new View("By judge", "problem", null, "title", "judge"),
-                    new View("By status", "problem", null, "title", "status"),
-                    new View("Code Library", "snippet", null, "title", null)));
+            List.of(new View("Todos los problemas", "problem", null, "-date", null),
+                    new View("Por repasar", "problem", "status=Solved with help", "date", null),
+                    new View("Por algoritmo", "problem", null, "title", "algorithms"),
+                    new View("Por técnica", "problem", null, "title", "techniques"),
+                    new View("Por dificultad", "problem", null, "title", "level"),
+                    new View("Por juez", "problem", null, "title", "judge"),
+                    new View("Por estado", "problem", null, "title", "status"),
+                    new View("Biblioteca de código", "snippet", null, "title", null)));
 
-    static final NotebookType DATABASES = new NotebookType("databases", "Databases",
-            "A database course: lectures, SQL and PL/SQL exercises, tables and exams.",
-            List.of(new Kind("lecture", "Lecture", List.of(DATE, UNIT, SQL_TOPICS), """
+    static final NotebookType DATABASES = new NotebookType("databases", "Bases de datos",
+            "Una materia de bases de datos: clases, ejercicios de SQL y PL/SQL, tablas y exámenes.",
+            List.of(new Kind("lecture", "Clase", "Nueva clase", "Lo que se vio en una clase", List.of(DATE, UNIT, SQL_TOPICS), """
                             ---
                             date: {today}
                             ---
-                            ## Key ideas
+                            ## Ideas clave
 
-                            ## Notes
+                            ## Notas
 
-                            ## Examples
+                            ## Ejemplos
 
                             ```plsql
 
                             ```
 
-                            ## Questions
+                            ## Preguntas
                             """),
-                    new Kind("exercise", "Exercise", List.of(SQL_TOPICS, LEVEL, PROBLEM, DATE), """
+                    new Kind("exercise", "Ejercicio", "Nuevo ejercicio", "Un ejercicio de SQL con su consulta",
+                            List.of(SQL_TOPICS, LEVEL, PROBLEM, DATE), """
                             ---
                             kind: exercise
                             status: To do
                             date: {today}
                             ---
-                            ## Statement
+                            ## Enunciado
 
-                            ## Query
+                            ## Consulta
 
                             ```plsql
 
                             ```
 
-                            ## Result
+                            ## Resultado
 
-                            ## Notes
+                            ## Notas
                             """),
-                    new Kind("table", "Table", List.of(), """
+                    new Kind("table", "Tabla", "Nueva tabla", "Una tabla del esquema y su CREATE TABLE", List.of(), """
                             ---
                             kind: table
                             ---
-                            ## Columns
+                            ## Columnas
 
-                            | Column | Type | Constraints |
+                            | Columna | Tipo | Restricciones |
                             | --- | --- | --- |
                             |  |  |  |
 
-                            ## Create
+                            ## Creación
 
                             ```plsql
 
                             ```
 
-                            ## Notes
+                            ## Notas
                             """),
-                    new Kind("snippet", "Snippet", List.of(SQL_TOPICS), """
+                    new Kind("snippet", "Fragmento", "Nuevo fragmento", "Una consulta para reutilizar", List.of(SQL_TOPICS), """
                             ---
                             kind: snippet
                             ---
-                            ## When to use
+                            ## Cuándo usarlo
 
-                            ## Code
+                            ## Código
 
                             ```plsql
 
                             ```
                             """),
                     ASSIGNMENT,
-                    new Kind("exam", "Exam", List.of(DATE, SQL_TOPICS, GRADE), """
+                    new Kind("exam", "Examen", "Nuevo examen", "Con fecha, temas y calificación", List.of(DATE, SQL_TOPICS, GRADE), """
                             ---
                             kind: exam
                             ---
-                            ## Topics
+                            ## Temas
 
-                            ## Notes
+                            ## Notas
                             """)),
-            List.of(new View("Lectures", "lecture", null, "-date", null),
-                    new View("By unit", "lecture", null, "date", "unit"),
-                    new View("Exercises", "exercise", null, "-date", null),
-                    new View("To review", "exercise", "status=Solved with help", "date", null),
-                    new View("By topic", null, null, "title", "topics"),
-                    new View("Tables", "table", null, "title", null),
-                    new View("Code Library", "snippet", null, "title", null),
-                    new View("Upcoming", null, "upcoming", "when", null),
-                    new View("Assignments", "assignment", null, "-due", null),
-                    new View("Exams", "exam", null, "-date", null),
-                    new View("All notes", null, null, "-when", null)));
+            List.of(new View("Clases", "lecture", null, "-date", null),
+                    new View("Por unidad", "lecture", null, "date", "unit"),
+                    new View("Ejercicios", "exercise", null, "-date", null),
+                    new View("Por repasar", "exercise", "status=Solved with help", "date", null),
+                    new View("Por tema", null, null, "title", "topics"),
+                    new View("Tablas", "table", null, "title", null),
+                    new View("Biblioteca de código", "snippet", null, "title", null),
+                    new View("Lo que se acerca", null, "upcoming", "when", null),
+                    new View("Tareas", "assignment", null, "-due", null),
+                    new View("Exámenes", "exam", null, "-date", null),
+                    new View("Todas las notas", null, null, "-when", null)));
 
     static final List<NotebookType> ALL = List.of(GENERAL, CLASS_NOTES, COMPETITIVE_PROGRAMMING, DATABASES);
 
@@ -251,7 +256,7 @@ record NotebookType(String id, String name, String description, List<Kind> kinds
         return GENERAL;
     }
 
-    /** A course (Class Notes, Databases): its assignments and exams go to Upcoming, here and on Home. */
+    /** A course (Class Notes, Databases): its assignments and exams go to "Lo que se acerca", here and on Home. */
     boolean course() {
         return kinds.contains(ASSIGNMENT);
     }
@@ -304,11 +309,11 @@ record NotebookType(String id, String name, String description, List<Kind> kinds
         if (course() && (kind.equals("assignment") || kind.equals("exam"))) return Agenda.badge(note, LocalDate.now());
         if (kind.equals("exercise")) {
             String level = note.get("level");
-            return level.isEmpty() ? null : new Badge(t(level), Judges.levelColor(level));
+            return level.isEmpty() ? null : new Badge(Text.shown(level), Judges.levelColor(level));
         }
         if (this != COMPETITIVE_PROGRAMMING || !kind.equals("problem")) return null;
         String text = note.get("difficulty").isEmpty() ? Judges.level(note) : note.get("difficulty");
-        return text.isEmpty() ? null : new Badge(t(text), Judges.color(note));
+        return text.isEmpty() ? null : new Badge(Text.shown(text), Judges.color(note));
     }
 
     /** The properties of a view's notes: those of its kind, or of every kind once. */

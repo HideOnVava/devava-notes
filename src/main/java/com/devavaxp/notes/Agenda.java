@@ -7,8 +7,6 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 
-import static com.devavaxp.notes.Text.t;
-
 /**
  * What is coming in a course (a Class Notes or a Databases notebook): the day each note is about,
  * which ones are still ahead, and how near they are, said the way a student would read it.
@@ -44,34 +42,34 @@ final class Agenda {
         return kind(note).equals("assignment") && !done(note) && when(note) != null && when(note).isBefore(today);
     }
 
-    /** "Due in 2 days", "3 days late", "Done", "In 5 days", "Grade 95"… in red, amber or grey; null for a lecture. */
+    /** "Vence en 2 días", "3 días de retraso", "Hecha", "En 5 días", "Calificación 95"… in red, amber or grey; null for a lecture. */
     static Badge badge(Note note, LocalDate today) {
         String kind = kind(note);
         LocalDate when = when(note);
         if (kind.equals("assignment")) {
-            if (done(note)) return new Badge(t("Done"), DONE);
+            if (done(note)) return new Badge("Hecha", DONE);
             if (when == null) return null;
             long days = ChronoUnit.DAYS.between(today, when);
-            if (days < 0) return new Badge(-days == 1 ? t("1 day late") : t("%d days late", -days), LATE);
-            if (days == 0) return new Badge(t("Due today"), LATE);
-            if (days == 1) return new Badge(t("Due tomorrow"), SOON);
-            return days < 7 ? new Badge(t("Due in %d days", days), SOON) : new Badge(t("Due %s", day(when)), LATER);
+            if (days < 0) return new Badge(-days == 1 ? "1 día de retraso" : String.format("%d días de retraso", -days), LATE);
+            if (days == 0) return new Badge("Vence hoy", LATE);
+            if (days == 1) return new Badge("Vence mañana", SOON);
+            return days < 7 ? new Badge(String.format("Vence en %d días", days), SOON) : new Badge(String.format("Vence el %s", day(when)), LATER);
         }
         if (kind.equals("exam")) {
-            if (!note.get("grade").isEmpty()) return new Badge(t("Grade %s", note.get("grade")), LATER);
+            if (!note.get("grade").isEmpty()) return new Badge(String.format("Calificación %s", note.get("grade")), LATER);
             if (when == null) return null;
             long days = ChronoUnit.DAYS.between(today, when);
-            if (days < 0) return new Badge(t("Past"), PAST);
-            if (days == 0) return new Badge(t("Today"), LATE);
-            if (days == 1) return new Badge(t("Tomorrow"), SOON);
-            return days < 7 ? new Badge(t("In %d days", days), SOON) : new Badge(day(when), LATER);
+            if (days < 0) return new Badge("Pasado", PAST);
+            if (days == 0) return new Badge("Hoy", LATE);
+            if (days == 1) return new Badge("Mañana", SOON);
+            return days < 7 ? new Badge(String.format("En %d días", days), SOON) : new Badge(day(when), LATER);
         }
         return null;
     }
 
     /** "Oct 9", "9 oct". */
     private static String day(LocalDate date) {
-        return DateTimeFormatter.ofPattern(t("MMM d"), Text.locale()).format(date);
+        return DateTimeFormatter.ofPattern("d MMM", Text.SPANISH).format(date);
     }
 
     private static String kind(Note note) {

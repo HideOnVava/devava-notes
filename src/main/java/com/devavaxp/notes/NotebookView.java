@@ -8,6 +8,7 @@ import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.css.PseudoClass;
+import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Label;
@@ -25,6 +26,7 @@ import javafx.scene.control.TreeView;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 
@@ -43,8 +45,6 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-
-import static com.devavaxp.notes.Text.t;
 
 /**
  * How a notebook is browsed. On the left, the views of its type; a view that groups by a property
@@ -79,7 +79,7 @@ final class NotebookView {
     private final TreeView<Choice> views = new TreeView<>(new TreeItem<>());
     private final TreeTableView<Row> table = new TreeTableView<>(new TreeItem<>());
     private final TextField filter = new TextField();
-    private final ToggleButton asList = new ToggleButton(t("List")), asTable = new ToggleButton(t("Table"));
+    private final ToggleButton asList = new ToggleButton("Lista"), asTable = new ToggleButton("Tabla");
     private final Set<String> expanded = new HashSet<>();
     private NotebookType type = NotebookType.GENERAL;
     private List<Entry> entries = List.of();
@@ -96,11 +96,20 @@ final class NotebookView {
             @Override
             protected void updateItem(Choice c, boolean empty) {
                 super.updateItem(c, empty);
-                Label count = empty || c == null ? null : new Label(Integer.toString(c.count()));
-                if (count != null) count.getStyleClass().add("count");
-                setText(empty || c == null ? null : c.label());
-                setGraphic(count);
-                setContentDisplay(ContentDisplay.RIGHT);
+                setText(null);
+                if (empty || c == null) {
+                    setGraphic(null);
+                    return;
+                }
+                // A view with its icon and how many notes it shows; a value under it, without the icon.
+                Label name = new Label(c.label()), count = new Label(Integer.toString(c.count()));
+                name.getStyleClass().add("view-name");
+                count.getStyleClass().add("count");
+                count.setMinWidth(Region.USE_PREF_SIZE);   // a long name is cut short, not its count
+                HBox line = c.value() == null ? new HBox(9, Icons.of(icon(c.view()), 16), name, count) : new HBox(9, name, count);
+                line.setAlignment(Pos.CENTER_LEFT);
+                setGraphic(line);
+                setContentDisplay(ContentDisplay.GRAPHIC_ONLY);
             }
         });
         views.getSelectionModel().selectedItemProperty().addListener((o, old, item) -> {
@@ -111,7 +120,7 @@ final class NotebookView {
         });
 
         table.setShowRoot(false);
-        table.setPlaceholder(new Label(t("No notes here")));
+        table.setPlaceholder(new Label("No hay notas aquí"));
         table.setColumnResizePolicy(TreeTableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         table.getSelectionModel().selectedItemProperty().addListener((o, old, item) -> {
             Entry e = item == null ? null : item.getValue().entry();
@@ -134,12 +143,14 @@ final class NotebookView {
             else if (e.getCode() == KeyCode.DELETE) app.trashNote(entry.path());
         });
 
-        filter.setPromptText(t("Filter"));
+        filter.setPromptText("Filtrar");
         filter.textProperty().addListener((o, was, now) -> showNotes());
         ToggleGroup mode = new ToggleGroup();
         asList.setToggleGroup(mode);
         asTable.setToggleGroup(mode);
         asList.setSelected(true);
+        asList.setGraphic(Icons.of("list", 15));
+        asTable.setGraphic(Icons.of("table", 15));
         asList.getStyleClass().add("first");
         asTable.getStyleClass().add("last");
         mode.selectedToggleProperty().addListener((o, was, now) -> {
@@ -148,6 +159,7 @@ final class NotebookView {
         });
         HBox segmented = new HBox(asList, asTable);
         segmented.getStyleClass().add("segmented");
+        segmented.setMinWidth(Region.USE_PREF_SIZE);   // the filter gives way, not "Lista" and "Tabla"
         HBox tools = new HBox(8, filter, segmented);
         tools.getStyleClass().add("notes-tools");
         HBox.setHgrow(filter, Priority.ALWAYS);
@@ -252,7 +264,7 @@ final class NotebookView {
         for (View v : type.views()) {
             List<Group> groups = rows(type, v, null, "", entries);
             long count = groups.stream().flatMap(g -> g.notes().stream()).distinct().count();
-            TreeItem<Choice> item = new TreeItem<>(new Choice(v, null, t(v.name()), (int) count));
+            TreeItem<Choice> item = new TreeItem<>(new Choice(v, null, v.name(), (int) count));
             remember(item, v.name());
             if (v.groupBy() != null) {
                 // Each value under its view, and "graphs/dijkstra" under "graphs".
@@ -277,6 +289,25 @@ final class NotebookView {
         view = chosen.getValue().view();
         value = chosen.getValue().value();
         views.getSelectionModel().select(chosen);
+    }
+
+    /** A view's icon in the sidebar: what its notes are, or how it groups them. */
+    private static String icon(View v) {
+        if ("upcoming".equals(v.only())) return "calendar";
+        if ("pinned".equals(v.only())) return "star";
+        if (v.only() != null) return "eye";   // "Por repasar": what was solved with help
+        if (v.groupBy() != null) return v.groupBy().equals("tags") || v.groupBy().equals("topics") ? "tag" : "layers";
+        if (v.kind() == null) return "list";
+        return switch (v.kind()) {
+            case "lecture" -> "book";
+            case "assignment" -> "task";
+            case "exam" -> "exam";
+            case "problem" -> "trophy";
+            case "snippet" -> "snippet";
+            case "exercise" -> "code";
+            case "table" -> "table";
+            default -> "note";
+        };
     }
 
     /** Keeps a branch open or closed as the user left it, across rebuilds. */
@@ -329,13 +360,13 @@ final class NotebookView {
     /** A group's name: its value (a choice in the app's language), or "No status" for the notes without one. */
     private String label(View v, String value) {
         Field field = type.fields(v).stream().filter(f -> f.key().equals(v.groupBy())).findFirst().orElse(null);
-        if (!value.isEmpty()) return field != null && field.input() == Input.CHOICE ? t(value) : value;
-        return t("No %s", (field == null ? v.groupBy() : t(field.label())).toLowerCase(Text.locale()));
+        if (!value.isEmpty()) return field != null && field.input() == Input.CHOICE ? Text.shown(value) : value;
+        return String.format("Sin %s", (field == null ? v.groupBy() : field.label()).toLowerCase(Text.SPANISH));
     }
 
     /** The title, with (in the list) a second line: the note's badge, dates and choices. */
     private TreeTableColumn<Row, Row> titleColumn(List<Field> subtitle) {
-        TreeTableColumn<Row, Row> c = new TreeTableColumn<>(t("Title"));
+        TreeTableColumn<Row, Row> c = new TreeTableColumn<>("Título");
         c.setCellValueFactory(cell -> new ReadOnlyObjectWrapper<>(cell.getValue().getValue()));
         c.setComparator(Comparator.comparing((Row r) -> r.entry() != null ? r.entry().title() : r.label(), Vault::compareNatural));
         c.setPrefWidth(240);
@@ -354,7 +385,7 @@ final class NotebookView {
                 }
                 Note note = row.entry().note();
                 String line = subtitle.stream().filter(f -> f.input() == Input.CHOICE && !f.key().equals("level") || f.input() == Input.DATE)
-                        .map(f -> f.input() == Input.CHOICE ? t(note.get(f.key())) : note.get(f.key())).filter(s -> !s.isEmpty())
+                        .map(f -> f.input() == Input.CHOICE ? Text.shown(note.get(f.key())) : note.get(f.key())).filter(s -> !s.isEmpty())
                         .collect(Collectors.joining(" · "));
                 Badge badge = subtitle.isEmpty() ? null : type.badge(note);
                 HBox second = new HBox(6);
@@ -369,7 +400,7 @@ final class NotebookView {
     }
 
     private TreeTableColumn<Row, String> column(Field f) {
-        TreeTableColumn<Row, String> c = new TreeTableColumn<>(t(f.label()));
+        TreeTableColumn<Row, String> c = new TreeTableColumn<>(f.label());
         c.setCellValueFactory(cell -> {
             Entry e = cell.getValue().getValue().entry();
             return new ReadOnlyStringWrapper(e == null ? "" : String.join(", ", type.values(e.note(), f.key())));
@@ -380,7 +411,7 @@ final class NotebookView {
                 @Override
                 protected void updateItem(String text, boolean empty) {
                     super.updateItem(text, empty);
-                    setText(empty || text == null ? null : f.input() == Input.CHOICE ? t(text) : text);
+                    setText(empty || text == null ? null : Text.shown(text));
                     if (!f.key().equals("difficulty") && !f.key().equals("level")) return;
                     Row row = getTableRow() == null ? null : getTableRow().getItem();
                     Badge badge = empty || row == null || row.entry() == null ? null : type.badge(row.entry().note());
@@ -439,7 +470,7 @@ final class NotebookView {
             if (view.only() != null && !type.matches(e.note(), view.only())) continue;
             if (value != null && !has(type.values(e.note(), view.groupBy()), value)) continue;
             if (!wanted.isEmpty() && !fold(e.title() + " " + fields.stream().map(f -> String.join(" ", type.values(e.note(), f.key()))
-                    + (f.input() == Input.CHOICE ? " " + t(e.note().get(f.key())) : ""))   // "resuelto" finds "Solved" too
+                    + (f.input() == Input.CHOICE ? " " + Text.shown(e.note().get(f.key())) : ""))   // "resuelto" finds "Solved" too
                     .collect(Collectors.joining(" ")) + " " + String.join(" ", type.values(e.note(), "tags"))).contains(wanted)) continue;
             notes.add(e);
         }

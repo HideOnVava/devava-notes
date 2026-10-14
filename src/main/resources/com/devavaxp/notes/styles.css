@@ -1,29 +1,31 @@
 /* =====================================================================
-   Devava Notes — the devava palette (Reader, Kardex), light and dark.
-   Every control is styled here, so nothing keeps JavaFX's stock look.
+   Devava Notes — cobalt on cool neutrals, light and dark, for the ISC
+   students of the ITL. Every control is styled here, so nothing keeps
+   JavaFX's stock look. Icons are line drawings (.icon): stroke, no fill.
    ===================================================================== */
 
 .root {
     -fx-font-family: "System";
-    -fx-font-size: 13px;
+    -fx-font-size: 14px;
     -fx-background-color: -bg;
 
-    -bg: #F6F6F8;
+    -bg: #F4F5F9;
     -surface: #FFFFFF;
-    -sidebar: #F3F3F6;
-    -surface-hover: #EDEDF2;
-    -border: #E4E4EA;
-    -border-strong: #D0D0D9;
-    -text: #1B1B1F;
-    -text-muted: #6B6B76;
-    -text-faint: #9A9AA6;
-    -accent: #4F46E5;
-    -accent-hover: #4338CA;
-    -accent-soft: #EEF0FF;
-    -accent-text: #3730A3;
-    -danger: #DC2626;
-    -danger-soft: #FEE2E2;
-    -shadow: rgba(24, 24, 40, 0.10);
+    -sidebar: #EEF0F6;
+    -surface-hover: #E9ECF4;
+    -border: #DFE2EC;
+    -border-strong: #C9CEDD;
+    -text: #161A27;
+    -text-muted: #596074;
+    -text-faint: #8A90A2;
+    -accent: #2B4FD8;
+    -accent-hover: #2341B8;
+    -accent-soft: #E7ECFF;
+    -accent-text: #1E3AA8;
+    -on-accent: #FFFFFF;
+    -danger: #C8312B;
+    -danger-soft: #FDE8E7;
+    -shadow: rgba(20, 24, 40, 0.10);
 
     /* What the stock skins derive their colors from (popups, calendars, lists) */
     -fx-base: -surface;
@@ -42,20 +44,21 @@
 }
 
 .root.dark {
-    -bg: #111115;
-    -surface: #19191F;
-    -sidebar: #15151A;
-    -surface-hover: #24242C;
-    -border: #2A2A33;
-    -border-strong: #3B3B47;
-    -text: #E8E8EE;
-    -text-muted: #A2A2AE;
-    -text-faint: #6F6F7B;
-    -accent: #7C74FF;
-    -accent-hover: #948DFF;
-    -accent-soft: #272450;
-    -accent-text: #D0CCFF;
-    -danger: #F87171;
+    -bg: #0E1016;
+    -surface: #171A23;
+    -sidebar: #12141C;
+    -surface-hover: #212532;
+    -border: #282C39;
+    -border-strong: #3A3F50;
+    -text: #E8EAF2;
+    -text-muted: #A1A8BB;
+    -text-faint: #6E7588;
+    -accent: #7F95FF;
+    -accent-hover: #98A9FF;
+    -accent-soft: #232B52;
+    -accent-text: #C9D2FF;
+    -on-accent: #0E1016;
+    -danger: #FF7A72;
     -danger-soft: #3A1C1C;
     -shadow: rgba(0, 0, 0, 0.45);
 }
@@ -68,15 +71,16 @@
 
 .button, .menu-button, .toggle-button {
     -fx-background-color: -surface;
-    -fx-background-radius: 8;
+    -fx-background-radius: 9;
     -fx-background-insets: 0;
     -fx-border-color: -border;
-    -fx-border-radius: 8;
+    -fx-border-radius: 9;
     -fx-border-width: 1;
     -fx-text-fill: -text;
-    -fx-padding: 6 13;
+    -fx-padding: 7 14;
+    -fx-graphic-text-gap: 7;
     -fx-cursor: hand;
-    -fx-font-size: 13px;
+    -fx-font-size: 14px;
 }
 
 .button:hover, .menu-button:hover, .toggle-button:hover {
@@ -87,7 +91,7 @@
     -fx-background-color: -border;
 }
 
-.button:focused, .menu-button:focused, .toggle-button:focused {
+.button:focus-visible, .menu-button:focus-visible, .toggle-button:focus-visible {
     -fx-border-color: -accent;
 }
 
@@ -98,26 +102,26 @@
 .button.primary, .menu-button.primary {
     -fx-background-color: -accent;
     -fx-border-color: transparent;
-    -fx-text-fill: white;
+    -fx-text-fill: -on-accent;
     -fx-font-weight: bold;
 }
 
 .menu-button.primary > .label {
-    -fx-text-fill: white;
+    -fx-text-fill: -on-accent;
 }
 
 .button.primary:hover, .menu-button.primary:hover, .menu-button.primary:showing {
     -fx-background-color: -accent-hover;
 }
 
-.button.primary:focused, .menu-button.primary:focused {
+.button.primary:focus-visible, .menu-button.primary:focus-visible {
     -fx-border-color: -accent-hover;
 }
 
 .button.danger {
     -fx-background-color: -danger;
     -fx-border-color: transparent;
-    -fx-text-fill: white;
+    -fx-text-fill: -on-accent;
     -fx-font-weight: bold;
 }
 
@@ -136,7 +140,7 @@
     -fx-text-fill: -text;
 }
 
-.button.flat:focused, .menu-button.flat:focused {
+.button.flat:focus-visible, .menu-button.flat:focus-visible {
     -fx-border-color: -accent;
 }
 
@@ -150,26 +154,25 @@
     -fx-background-color: transparent;
 }
 
-.menu-button.more-menu {
-    -fx-padding: 8 8;
+.menu-button.flat > .label {
+    -fx-text-fill: -text-muted;
 }
 
-.menu-button.more-menu > .label, .menu-button.flat > .label {
-    -fx-text-fill: -text-muted;
+.menu-button.flat:hover > .label, .menu-button.flat:showing > .label {
+    -fx-text-fill: -text;
 }
 
 /* The bar's field-like button that opens Quick open */
 .button.finder {
     -fx-background-color: -sidebar;
-    -fx-padding: 6 8 6 10;
+    -fx-padding: 7 9 7 11;
 }
 
 .button.finder:hover {
     -fx-background-color: -surface-hover;
 }
 
-.finder .icon, .finder-text {
-    -fx-fill: -text-faint;
+.finder-text {
     -fx-text-fill: -text-faint;
 }
 
@@ -185,18 +188,18 @@
 .segmented .toggle-button {
     -fx-background-radius: 0;
     -fx-border-radius: 0;
-    -fx-padding: 5 12;
+    -fx-padding: 6 12;
     -fx-text-fill: -text-muted;
 }
 
 .segmented .toggle-button.first {
-    -fx-background-radius: 8 0 0 8;
-    -fx-border-radius: 8 0 0 8;
+    -fx-background-radius: 9 0 0 9;
+    -fx-border-radius: 9 0 0 9;
 }
 
 .segmented .toggle-button.last {
-    -fx-background-radius: 0 8 8 0;
-    -fx-border-radius: 0 8 8 0;
+    -fx-background-radius: 0 9 9 0;
+    -fx-border-radius: 0 9 9 0;
     -fx-border-width: 1 1 1 0;
 }
 
@@ -210,10 +213,10 @@
 
 .text-field, .text-area, .combo-box, .date-picker > .text-field {
     -fx-background-color: -surface;
-    -fx-background-radius: 8;
+    -fx-background-radius: 9;
     -fx-background-insets: 0;
     -fx-border-color: -border;
-    -fx-border-radius: 8;
+    -fx-border-radius: 9;
     -fx-border-width: 1;
     -fx-text-fill: -text;
     -fx-prompt-text-fill: -text-faint;
@@ -222,7 +225,7 @@
 }
 
 .text-field {
-    -fx-padding: 6 10;
+    -fx-padding: 7 11;
 }
 
 .text-field:focused, .text-area:focused, .combo-box:focused, .combo-box:showing, .date-picker:focused > .text-field {
@@ -353,6 +356,20 @@
     -fx-text-fill: -danger;
 }
 
+/* A menu item that says what it makes: "Clase" over "Lo que se vio en una clase" */
+.menu-item .menu-title {
+    -fx-font-weight: bold;
+}
+
+.menu-item .menu-about {
+    -fx-font-size: 12.5px;
+    -fx-text-fill: -text-muted;
+}
+
+.menu-item:focused .menu-about {
+    -fx-text-fill: -accent-text;
+}
+
 .separator .line {
     -fx-border-color: -border transparent transparent transparent;
 }
@@ -430,11 +447,11 @@
 }
 
 .tooltip {
-    -fx-background-color: #2A2A32;
+    -fx-background-color: #1E2233;
     -fx-text-fill: white;
-    -fx-background-radius: 6;
-    -fx-padding: 6 10;
-    -fx-font-size: 12px;
+    -fx-background-radius: 7;
+    -fx-padding: 7 11;
+    -fx-font-size: 13px;
 }
 
 /* ---------- Scroll bars: thin, rounded, quiet ---------- */
@@ -493,7 +510,7 @@
 }
 
 .dialog-pane > .header-panel .label {
-    -fx-font-size: 16px;
+    -fx-font-size: 17px;
     -fx-font-weight: bold;
     -fx-text-fill: -text;
 }
@@ -504,7 +521,7 @@
 
 .dialog-pane > .content.label {
     -fx-text-fill: -text-muted;
-    -fx-font-size: 13px;
+    -fx-font-size: 14px;
     -fx-wrap-text: true;
 }
 
@@ -517,11 +534,11 @@
     -fx-min-width: 90;
 }
 
-/* A dialog's main button (Open, Create, Save), and Move to trash in red */
+/* A dialog's main button (Abrir, Crear, Guardar), and Mover a la papelera in red */
 .dialog-pane .button:default {
     -fx-background-color: -accent;
     -fx-border-color: transparent;
-    -fx-text-fill: white;
+    -fx-text-fill: -on-accent;
     -fx-font-weight: bold;
 }
 
@@ -565,23 +582,53 @@
     -fx-text-fill: -accent-text;
 }
 
+/* Help: a key, and what it does */
+.key {
+    -fx-font-family: "Cascadia Mono", "Consolas", monospace;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-background-color: -sidebar;
+    -fx-border-color: -border;
+    -fx-background-radius: 6;
+    -fx-border-radius: 6;
+    -fx-padding: 2 8;
+}
+
+.hint {
+    -fx-text-fill: -text-muted;
+    -fx-font-size: 13px;
+}
+
 /* ---------- Top bar ---------- */
 
 .bar {
     -fx-background-color: -surface;
     -fx-border-color: transparent transparent -border transparent;
-    -fx-padding: 10 16;
+    -fx-padding: 10 18;
     -fx-spacing: 8;
 }
 
 .app-name {
-    -fx-font-size: 15px;
+    -fx-font-size: 16px;
     -fx-font-weight: bold;
 }
 
 .crumb {
-    -fx-font-size: 15px;
+    -fx-font-size: 16px;
     -fx-font-weight: bold;
+}
+
+/* A notebook's type next to its name: "Bases de datos", in its color */
+.type-chip {
+    -fx-font-size: 12.5px;
+    -fx-background-color: -sidebar;
+    -fx-background-radius: 99;
+    -fx-padding: 2 10;
+}
+
+/* A type's mark: its icon, white, on its color */
+.tile {
+    -fx-background-radius: 9;
 }
 
 .kind {
@@ -598,8 +645,22 @@
 }
 
 .home {
-    -fx-padding: 30 36 36 36;
-    -fx-spacing: 28;
+    -fx-padding: 28 34 36 34;
+    -fx-spacing: 30;
+}
+
+.period-title {
+    -fx-font-size: 21px;
+    -fx-font-weight: bold;
+}
+
+.period-count {
+    -fx-text-fill: -text-faint;
+}
+
+.button.older-toggle {
+    -fx-font-weight: bold;
+    -fx-padding: 7 12 7 8;
 }
 
 .page-title {
@@ -615,12 +676,12 @@
 
 .button.card {
     -fx-background-color: -surface;
-    -fx-background-radius: 12;
+    -fx-background-radius: 14;
     -fx-border-color: -border;
-    -fx-border-radius: 12;
-    -fx-padding: 16 18;
-    -fx-pref-width: 236;
-    -fx-min-height: 104;
+    -fx-border-radius: 14;
+    -fx-padding: 16;
+    -fx-pref-width: 262;
+    -fx-min-height: 118;
     -fx-alignment: top-left;
 }
 
@@ -629,7 +690,7 @@
     -fx-effect: dropshadow(gaussian, -shadow, 14, 0, 0, 3);
 }
 
-.button.card:focused {
+.button.card:focus-visible {
     -fx-border-color: -accent;
 }
 
@@ -639,34 +700,26 @@
 }
 
 .card-type {
-    -fx-font-size: 12px;
+    -fx-font-size: 12.5px;
     -fx-font-weight: bold;
 }
 
 .card-meta {
-    -fx-font-size: 12px;
+    -fx-font-size: 12.5px;
     -fx-text-fill: -text-muted;
 }
 
-.type-mark {
-    -fx-background-radius: 3;
-    -fx-min-width: 22;
-    -fx-max-width: 22;
-    -fx-min-height: 4;
-    -fx-max-height: 4;
-}
-
 .type-description {
-    -fx-font-size: 12px;
+    -fx-font-size: 12.5px;
     -fx-text-fill: -text-muted;
     -fx-padding: 0 0 0 26;
 }
 
 .panel {
     -fx-background-color: -surface;
-    -fx-background-radius: 12;
+    -fx-background-radius: 14;
     -fx-border-color: -border;
-    -fx-border-radius: 12;
+    -fx-border-radius: 14;
     -fx-padding: 6;
 }
 
@@ -681,7 +734,7 @@
     -fx-background-color: -surface-hover;
 }
 
-.button.upcoming-row:focused, .button.recent-row:focused {
+.button.upcoming-row:focus-visible, .button.recent-row:focus-visible {
     -fx-border-color: -accent;
 }
 
@@ -695,7 +748,7 @@
 }
 
 .empty-title {
-    -fx-font-size: 17px;
+    -fx-font-size: 18px;
     -fx-font-weight: bold;
 }
 
@@ -719,14 +772,15 @@
 .tree-view.views, .tree-view.views:focused {
     -fx-background-color: -sidebar;
     -fx-background-insets: 0;
-    -fx-padding: 10 8;
+    -fx-padding: 12 8;
 }
 
 .views .tree-cell {
     -fx-background-color: transparent;
-    -fx-background-radius: 7;
+    -fx-background-radius: 8;
     -fx-text-fill: -text;
-    -fx-padding: 6 8;
+    -fx-padding: 7 10;
+    -fx-pref-width: 0;   /* as wide as the rail: a long name is cut short, no scroll bar */
 }
 
 .views .tree-cell:filled:hover {
@@ -735,6 +789,9 @@
 
 .views .tree-cell:filled:selected {
     -fx-background-color: -accent-soft;
+}
+
+.views .tree-cell:filled:selected .view-name {
     -fx-text-fill: -accent-text;
     -fx-font-weight: bold;
 }
@@ -836,7 +893,7 @@
 
 .note-header {
     -fx-background-color: -surface;
-    -fx-padding: 10 16 6 26;
+    -fx-padding: 12 18 8 26;
     -fx-spacing: 10;
 }
 
@@ -846,7 +903,7 @@
 }
 
 .note-title {
-    -fx-font-size: 18px;
+    -fx-font-size: 19px;
     -fx-font-weight: bold;
 }
 
@@ -875,6 +932,28 @@
     -fx-font-size: 13px;
 }
 
+/* ---------- Icons: line drawings, colored by where they are ---------- */
+
 .icon {
-    -fx-fill: -text-muted;
+    -fx-fill: transparent;
+    -fx-stroke: -text-muted;
+    -fx-stroke-width: 2;
+    -fx-stroke-line-cap: round;
+    -fx-stroke-line-join: round;
+}
+
+.finder .icon, .views .tree-cell .icon {
+    -fx-stroke: -text-faint;
+}
+
+.button.primary .icon, .menu-button.primary .icon, .button.danger .icon {
+    -fx-stroke: -on-accent;
+}
+
+.tile .icon {
+    -fx-stroke: white;
+}
+
+.segmented .toggle-button:selected .icon, .views .tree-cell:filled:selected .icon {
+    -fx-stroke: -accent-text;
 }

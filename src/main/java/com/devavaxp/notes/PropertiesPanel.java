@@ -32,8 +32,6 @@ import java.util.TreeSet;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import static com.devavaxp.notes.Text.t;
-
 /**
  * The properties of the open note, as the fields of its kind in two columns. A change goes into
  * the note as soon as it is made (a text when Enter is pressed or the field is left); a list is
@@ -71,7 +69,7 @@ final class PropertiesPanel {
     void show(Kind kind, Note note) {
         cells.clear();
         for (Field f : kind.fields()) {
-            Label name = new Label(t(f.label()));
+            Label name = new Label(f.label());
             name.getStyleClass().add("property-name");
             cells.add(new Node[]{name, editor(f, note)});
         }
@@ -104,7 +102,7 @@ final class PropertiesPanel {
                 if (!key.equals("url")) yield field;
                 Button open = new Button("↗");
                 open.getStyleClass().add("flat");
-                open.setTooltip(new Tooltip(t("Open the link")));
+                open.setTooltip(new Tooltip("Abrir el enlace"));
                 open.setOnAction(e -> openLink.accept(note.get("url")));
                 yield row(field, open);
             }
@@ -123,7 +121,7 @@ final class PropertiesPanel {
                     @Override
                     protected void updateItem(String item, boolean empty) {
                         super.updateItem(item, empty);
-                        setText(empty || item == null ? null : t(item));
+                        setText(empty || item == null ? null : Text.shown(item));
                     }
                 });
                 box.setButtonCell(box.getCellFactory().call(null));
@@ -133,7 +131,7 @@ final class PropertiesPanel {
             case DATE -> {
                 DatePicker picker = new DatePicker(date(current));
                 picker.setConverter(new LocalDateStringConverter(DateTimeFormatter.ISO_LOCAL_DATE, DateTimeFormatter.ISO_LOCAL_DATE));
-                picker.setPromptText(t("yyyy-mm-dd"));
+                picker.setPromptText("aaaa-mm-dd");
                 picker.setMinWidth(130);
                 picker.setMaxWidth(Double.MAX_VALUE);
                 picker.valueProperty().addListener((o, was, now) -> change(key, () -> note.set(key, now == null ? "" : now.toString())));

@@ -17,7 +17,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.FileTime;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -31,8 +33,6 @@ import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
-import static com.devavaxp.notes.Text.t;
-
 /**
  * The notes on disk: under Documents/Devava Notes, one folder per notebook and one Markdown
  * file per note, whose file name is its title; the notebook's type is in its .notebook.json.
@@ -44,8 +44,8 @@ final class Vault {
     static final String EXT = ".md";
     private static final String META = ".notebook.json", SETTINGS = "settings.json";
 
-    /** A notebook as the home screen lists it. */
-    record Notebook(Path dir, NotebookType type, int notes, FileTime edited) {
+    /** A notebook as the home screen lists it, with its school period: the one set, or that of its last edit. */
+    record Notebook(Path dir, NotebookType type, int notes, FileTime edited, Period period) {
         String name() {
             return dir.getFileName().toString();
         }
@@ -79,7 +79,9 @@ final class Vault {
                 FileTime t = Files.getLastModifiedTime(n);
                 if (t.compareTo(edited) > 0) edited = t;
             }
-            notebooks.add(new Notebook(dir, type(dir), notes.size(), edited));
+            Period period = Period.parse(meta(dir, "period"));
+            if (period == null) period = Period.of(LocalDate.ofInstant(edited.toInstant(), ZoneId.systemDefault()));
+            notebooks.add(new Notebook(dir, type(dir), notes.size(), edited, period));
         }
         return notebooks;
     }
@@ -196,10 +198,10 @@ final class Vault {
         return Files.copy(file, unique(dir, fileName(dot > 0 ? name.substring(0, dot) : name), dot > 0 ? name.substring(dot) : ""));
     }
 
-    /** Saves a pasted image into the notebook's attachments folder as "Pasted image 2026-09-28 15.30.12.png". */
+    /** Saves a pasted image into the notebook's attachments folder as "Imagen pegada 2026-09-28 15.30.12.png". */
     static Path attach(Path notebook, byte[] png) throws IOException {
         Path dir = Files.createDirectories(notebook.resolve("attachments"));
-        String name = "Pasted image " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH.mm.ss"));
+        String name = "Imagen pegada " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH.mm.ss"));
         return Files.write(unique(dir, name, ".png"), png);
     }
 
@@ -210,9 +212,9 @@ final class Vault {
     /** Moves a note or a notebook to the system trash; nothing is ever deleted for good. */
     static void trash(Path path) throws IOException {
         if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.MOVE_TO_TRASH)) {
-            throw new IOException(t("this system has no trash to move it to, so nothing was deleted"));
+            throw new IOException("este sistema no tiene papelera, así que no se borró nada");
         }
-        if (!Desktop.getDesktop().moveToTrash(path.toFile())) throw new IOException(t("it could not be moved to the trash"));
+        if (!Desktop.getDesktop().moveToTrash(path.toFile())) throw new IOException("no se pudo mover a la papelera");
     }
 
     /** Packs a notebook (its notes, pictures and .notebook.json) into a ZIP, in a folder named after it: to share it. */
@@ -236,11 +238,11 @@ final class Vault {
         try {
             file = new ZipFile(zip.toFile());
         } catch (ZipException e) {
-            throw new IOException(t("it is not a ZIP file"), e);
+            throw new IOException("no es un archivo ZIP", e);
         }
         try (file) {
             List<? extends ZipEntry> entries = file.stream().filter(e -> !e.isDirectory()).toList();
-            if (entries.isEmpty()) throw new IOException(t("the ZIP is empty"));
+            if (entries.isEmpty()) throw new IOException("el ZIP está vacío");
             String first = entries.get(0).getName().replace('\\', '/');
             String top = first.indexOf('/') > 0 ? first.substring(0, first.indexOf('/') + 1) : "";
             boolean inFolder = !top.isEmpty() && entries.stream().allMatch(e -> e.getName().replace('\\', '/').startsWith(top));
@@ -252,7 +254,7 @@ final class Vault {
                     String path = entry.getName().replace('\\', '/');
                     Path target = dir.resolve(inFolder ? path.substring(top.length()) : path).normalize();
                     if (!target.startsWith(dir) || target.equals(dir)) {
-                        throw new IOException(t("“%s” in it points outside the notebook", entry.getName()));
+                        throw new IOException(String.format("“%s” apunta fuera del cuaderno", entry.getName()));
                     }
                     Files.createDirectories(target.getParent());
                     try (InputStream in = file.getInputStream(entry)) {
@@ -317,7 +319,7 @@ final class Vault {
         String name = title.replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", " ").replaceAll("\\s+", " ")
                 .replaceAll("^[. ]+|[. ]+$", "");
         if (name.length() > 80) name = name.substring(0, 80).replaceAll("[. ]+$", "");
-        if (name.isEmpty()) return "Untitled";
+        if (name.isEmpty()) return "Sin título";
         return RESERVED.matcher(name.split("\\.", 2)[0].strip()).matches() ? "_" + name : name;
     }
 

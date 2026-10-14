@@ -42,13 +42,14 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 /**
- * Opens the real window, CodeMirror included, and uses it as a person would, mostly without the
- * keyboard: {@code ./mvnw verify -Dsmoke=true}. Screenshots of each step land in target/smoke. The
- * clipboard test puts back what the clipboard of whoever runs it held (as far as JavaFX can read it).
+ * Opens the real window, CodeMirror included, and uses it as a student of the ITL would, mostly
+ * without the keyboard: {@code ./mvnw verify -Dsmoke=true}. Screenshots of each step land in
+ * target/smoke. The clipboard test puts back what the clipboard held (as far as JavaFX can read it).
  */
 @EnabledIfSystemProperty(named = "smoke", matches = "true")
 class AppSmokeTest {
@@ -56,7 +57,7 @@ class AppSmokeTest {
     private static final String TEMPLATE = "#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n}";
 
     private static final String IDEA = """
-            Keep each value's index in a **hash map**; for every `x`, look up `target - x`.
+            Guarda el índice de cada valor en un **hash map**; para cada `x`, busca `target - x`.
 
             """;
 
@@ -74,7 +75,7 @@ class AppSmokeTest {
             date: 2026-09-27
             ---
             ## Idea
-            Two even parts only if w is even and greater than 2.
+            Dos partes pares solo si w es par y mayor que 2.
             """;
 
     private static final String DSU = """
@@ -82,10 +83,10 @@ class AppSmokeTest {
             kind: snippet
             algorithms: [dsu]
             ---
-            ## When to use
-            Joining sets and asking whether two items are together.
+            ## Cuándo usarlo
+            Para unir conjuntos y saber si dos elementos están juntos.
 
-            ## Code
+            ## Código
 
             ```cpp
             int find(int x) { return p[x] == x ? x : p[x] = find(p[x]); }
@@ -93,13 +94,28 @@ class AppSmokeTest {
             """;
 
     private static final String LECTURE = """
-            The limit that starts it all: $\\lim_{x \\to 0} \\frac{\\sin x}{x} = 1$, and on its own line
+            El límite con el que empieza todo: $\\lim_{x \\to 0} \\frac{\\sin x}{x} = 1$, y en su propia línea
 
             $$
             f'(x) = \\lim_{h \\to 0} \\frac{f(x + h) - f(x)}{h}
             $$
 
             """;
+
+    private static final String QUERY = """
+            SELECT d.department_name, COUNT(e.employee_id) AS empleados
+            FROM departments d
+            LEFT JOIN employees e ON e.department_id = d.department_id
+            GROUP BY d.department_name
+            ORDER BY empleados DESC;""";
+
+    private static final String CREATE = """
+            CREATE TABLE employees (
+              employee_id   NUMBER(6) PRIMARY KEY,
+              first_name    VARCHAR2(20),
+              hire_date     DATE DEFAULT SYSDATE NOT NULL,
+              department_id NUMBER(4) REFERENCES departments
+            );""";
 
     @BeforeAll
     static void startJavaFx() {
@@ -108,13 +124,8 @@ class AppSmokeTest {
         Platform.setImplicitExit(false);
     }
 
-    /** The window in English, off screen so the test does not get in anyone's way, once the editor is ready. */
+    /** The window, off screen so the test does not get in anyone's way, once the editor is ready. */
     private static NotesApp open(Path home, Stage[] stage) throws Exception {
-        return open(home, stage, Text.ENGLISH);
-    }
-
-    private static NotesApp open(Path home, Stage[] stage, String language) throws Exception {
-        new Vault(home).setSetting("language", language);
         NotesApp app = fx(NotesApp::new);
         stage[0] = fx(() -> {
             Stage s = new Stage();
@@ -133,25 +144,26 @@ class AppSmokeTest {
         Stage stage = window[0];
         WebEngine engine = fx(() -> app.editor.view.getEngine());
         shot(stage, "g0-welcome");
+        assertTrue(fx(() -> texts(stage)).contains("Te damos la bienvenida a Devava Notes"));
         NotebookType general = NotebookType.GENERAL;
         Path notebook = fx(() -> app.createNotebook("Ideas", general));
         fx(() -> run(() -> app.openNotebook(notebook)));
-        Path readingList = fx(() -> app.createNote(general.kinds().get(0), "Reading list", ""));
-        Path plans = fx(() -> app.createNote(general.kinds().get(0), "Plans", ""));
+        Path readingList = fx(() -> app.createNote(general.kinds().get(0), "Lista de lectura", ""));
+        Path plans = fx(() -> app.createNote(general.kinds().get(0), "Planes", ""));
 
         // A picture dropped on the note, as its file is: a 2 × 2 PNG.
-        Path picture = pictures.resolve("board photo.png");
+        Path picture = pictures.resolve("foto del pizarrón.png");
         ImageIO.write(new BufferedImage(2, 2, BufferedImage.TYPE_INT_ARGB), "png", picture.toFile());
         fx(() -> run(() -> {
-            ((JSObject) engine.executeScript("window")).call("insertText", "See [[Reading list]] and #books #to-read.\n\n");
+            ((JSObject) engine.executeScript("window")).call("insertText", "Ver [[Lista de lectura]] y #libros #por-leer.\n\n");
             try {
                 app.attachImages(List.of(picture.toFile()));
             } catch (java.io.IOException e) {
                 throw new java.io.UncheckedIOException(e);
             }
         }));
-        waitFor("the note to save itself", () -> Files.readString(plans).contains("![](<attachments/board photo.png>)"));
-        assertTrue(Files.exists(notebook.resolve("attachments").resolve("board photo.png")));
+        waitFor("the note to save itself", () -> Files.readString(plans).contains("![](<attachments/foto del pizarrón.png>)"));
+        assertTrue(Files.exists(notebook.resolve("attachments").resolve("foto del pizarrón.png")));
 
         fx(() -> run(app::toggleMode));
         waitFor("the picture shown", () -> fx(() -> ((Number) engine.executeScript(
@@ -159,7 +171,7 @@ class AppSmokeTest {
         assertEquals(2, fx(() -> ((Number) engine.executeScript("document.querySelectorAll('#reading .tag').length")).intValue()));
         assertEquals(0, fx(() -> ((Number) engine.executeScript("document.querySelectorAll('#reading .wikilink.missing').length")).intValue()));
         shot(stage, "g1-plans");
-        fx(() -> engine.executeScript("document.querySelector('#reading .tag').click()"));   // → By tag › books
+        fx(() -> engine.executeScript("document.querySelector('#reading .tag').click()"));   // → Por etiqueta › libros
         shot(stage, "g2-tag");
         fx(() -> engine.executeScript("document.querySelector('#reading .wikilink').click()"));
         waitFor("the [[link]] to open its note", () -> fx(() -> readingList.equals(app.openPath())));
@@ -176,23 +188,23 @@ class AppSmokeTest {
         NotebookType general = NotebookType.GENERAL;
         Path notebook = fx(() -> app.createNotebook("Ideas", general));
         fx(() -> run(() -> app.openNotebook(notebook)));
-        Path note = fx(() -> app.createNote(general.kinds().get(0), "Clipboard", ""));
+        Path note = fx(() -> app.createNote(general.kinds().get(0), "Portapapeles", ""));
         Map<DataFormat, Object> saved = fx(AppSmokeTest::clipboard);
         try {
-            fx(() -> engine.executeScript("insertText('alpha beta'); selectMatch('beta')"));
+            fx(() -> engine.executeScript("insertText('alfa beta'); selectMatch('beta')"));
             press(app, KeyCode.C);
             assertEquals("beta", fx(() -> Clipboard.getSystemClipboard().getString()));
-            fx(() -> engine.executeScript("selectMatch('alpha')"));
+            fx(() -> engine.executeScript("selectMatch('alfa')"));
             press(app, KeyCode.X);
-            assertEquals("alpha", fx(() -> Clipboard.getSystemClipboard().getString()));
+            assertEquals("alfa", fx(() -> Clipboard.getSystemClipboard().getString()));
             press(app, KeyCode.END);
             press(app, KeyCode.V);
-            waitFor("the cut word pasted at the end", () -> Files.readString(note).equals(" betaalpha"));
+            waitFor("the cut word pasted at the end", () -> Files.readString(note).equals(" betaalfa"));
 
             // A screenshot: no text on the clipboard, a picture saved in attachments/.
             fx(() -> Clipboard.getSystemClipboard().setContent(Map.of(DataFormat.IMAGE, new WritableImage(3, 2))));
             press(app, KeyCode.V);
-            waitFor("the picture pasted", () -> Files.readString(note).contains("![](<attachments/Pasted image "));
+            waitFor("the picture pasted", () -> Files.readString(note).contains("![](<attachments/Imagen pegada "));
         } finally {
             fx(() -> Clipboard.getSystemClipboard().setContent(saved));
         }
@@ -207,29 +219,32 @@ class AppSmokeTest {
         WebEngine engine = fx(() -> app.editor.view.getEngine());
         NotebookType course = NotebookType.CLASS_NOTES;
         LocalDate today = LocalDate.now();
-        Path notebook = fx(() -> app.createNotebook("Calculus II", course));
+        Path notebook = fx(() -> app.createNotebook("Cálculo Vectorial", course));
         fx(() -> run(() -> app.openNotebook(notebook)));
 
-        Path limits = fx(() -> app.createNote(course.kinds().get(0), "Limits", ""));
+        Path limits = fx(() -> app.createNote(course.kinds().get(0), "Límites", ""));
+        assertTrue(Files.readString(limits).contains("## Ideas clave"));
         fx(() -> run(() -> {
-            type(stage, "unit", "1. Limits");
+            type(stage, "unit", "1. Límites");
             ((JSObject) engine.executeScript("window")).call("insertText", LECTURE);
         }));
         waitFor("the lecture to save itself", () -> Files.readString(limits).contains("\\frac{\\sin x}{x}"));
-        Path homework = fx(() -> app.createNote(course.kinds().get(1), "Homework 3", ""));
+        Path homework = fx(() -> app.createNote(course.kinds().get(1), "Tarea 3", ""));
         fx(() -> run(() -> ((DatePicker) stage.getScene().lookup("#property-due")).setValue(today.plusDays(1))));
         waitFor("the due date to be saved", () -> Files.readString(homework).contains("due: " + today.plusDays(1)));
 
         // Written elsewhere: a late assignment, one already done, and an exam.
-        Files.writeString(notebook.resolve("Homework 2.md"), "---\nkind: assignment\ndue: " + today.minusDays(3) + "\nstatus: Pending\n---\n");
-        Files.writeString(notebook.resolve("Homework 1.md"), "---\nkind: assignment\ndue: " + today.minusDays(9) + "\nstatus: Done\n---\n");
-        Files.writeString(notebook.resolve("Midterm.md"), "---\nkind: exam\ndate: " + today.plusDays(5) + "\ntopics: [limits, derivatives]\n---\n");
+        Files.writeString(notebook.resolve("Tarea 2.md"), "---\nkind: assignment\ndue: " + today.minusDays(3) + "\nstatus: Pending\n---\n");
+        Files.writeString(notebook.resolve("Tarea 1.md"), "---\nkind: assignment\ndue: " + today.minusDays(9) + "\nstatus: Done\n---\n");
+        Files.writeString(notebook.resolve("Segundo parcial.md"), "---\nkind: exam\ndate: " + today.plusDays(5)
+                + "\ntopics: [límites, derivadas]\n---\n");
         fx(() -> run(app::refreshFromDisk));
-        fx(() -> run(() -> app.browser.choose("Upcoming", null)));
+        fx(() -> run(() -> app.browser.choose("Lo que se acerca", null)));
         shot(stage, "c1-upcoming");
+        assertTrue(fx(() -> texts(stage)).containsAll(List.of("3 días de retraso", "Vence mañana", "En 5 días")));
 
-        fx(() -> run(() -> app.setProperty(notebook.resolve("Homework 2.md"), "status", "Done")));   // "Mark as done"
-        assertTrue(Files.readString(notebook.resolve("Homework 2.md")).contains("status: Done"));
+        fx(() -> run(() -> app.setProperty(notebook.resolve("Tarea 2.md"), "status", "Done")));   // "Marcar como hecha"
+        assertTrue(Files.readString(notebook.resolve("Tarea 2.md")).contains("status: Done"));   // kept as earlier versions wrote it
 
         fx(() -> run(() -> app.openNote(limits)));
         fx(() -> run(app::toggleMode));
@@ -242,7 +257,7 @@ class AppSmokeTest {
 
         fx(() -> run(app::showHome));
         shot(stage, "c3-home");
-        assertEquals(2, fx(() -> stage.getScene().getRoot().lookupAll(".upcoming-row").size()));   // Homework 3 and the Midterm
+        assertEquals(2, fx(() -> stage.getScene().getRoot().lookupAll(".upcoming-row").size()));   // Tarea 3 and the exam
         assertEquals(List.of(), fx(() -> List.copyOf(app.editor.errors)));
         fx(() -> run(stage::close));
     }
@@ -256,7 +271,7 @@ class AppSmokeTest {
 
         NotebookType cp = NotebookType.COMPETITIVE_PROGRAMMING;
         Kind problem = cp.kinds().get(0);
-        Path notebook = fx(() -> app.createNotebook("Algorithms", cp));
+        Path notebook = fx(() -> app.createNotebook("Algoritmos", cp));
         Vault.setMeta(notebook, "cpp", TEMPLATE + "\n");
         fx(() -> run(() -> app.openNotebook(notebook)));
 
@@ -265,14 +280,14 @@ class AppSmokeTest {
         String created = Files.readString(twoSum);
         assertTrue(created.startsWith("---\nstatus: To do\ndate: " + LocalDate.now()
                 + "\nurl: https://leetcode.com/problems/two-sum/\njudge: LeetCode\nid: two-sum\n---\n"), created);
-        assertTrue(created.contains("```cpp\n\n```"), created);
+        assertTrue(created.contains("## Solución\n\n```cpp\n\n```"), created);
         fx(() -> run(() -> {
             type(stage, "difficulty", "Easy");
             type(stage, "algorithms", "hash map, arrays");
             choose(stage, "status", "Solved");
             ((JSObject) engine.executeScript("window")).call("insertText", IDEA);
         }));
-        waitFor("the note to save itself", () -> Files.readString(twoSum).contains("look up `target - x`"));
+        waitFor("the note to save itself", () -> Files.readString(twoSum).contains("busca `target - x`"));
         assertTrue(Files.readString(twoSum).contains("algorithms: [hash map, arrays]"));
 
         // A Codeforces link: its solution starts with the notebook's C++ template.
@@ -285,21 +300,22 @@ class AppSmokeTest {
             choose(stage, "status", "Solved with help");
         }));
 
-        // Written elsewhere (Obsidian): a problem and a snippet of the Code Library.
+        // Written elsewhere (Obsidian): a problem and a snippet of the code library.
         Files.writeString(notebook.resolve("CF 4A - Watermelon.md"), WATERMELON);
         Files.writeString(notebook.resolve("DSU.md"), DSU);
         fx(() -> run(app::refreshFromDisk));
         fx(() -> run(() -> app.insertSnippet(notebook.resolve("DSU.md"))));
         waitFor("the snippet to be saved in the problem", () -> Files.readString(cf).contains("int find(int x)"));
-        fx(() -> run(() -> app.browser.choose("All problems", null)));
+        fx(() -> run(() -> app.browser.choose("Todos los problemas", null)));
         shot(stage, "1-problem");
 
-        fx(() -> run(() -> app.browser.choose("By algorithm", "graphs")));
+        fx(() -> run(() -> app.browser.choose("Por algoritmo", "graphs")));
         shot(stage, "2-graphs");
-        fx(() -> run(() -> app.browser.choose("By difficulty", null)));
+        fx(() -> run(() -> app.browser.choose("Por dificultad", null)));
         shot(stage, "3-by-difficulty");
+        assertTrue(fx(() -> texts(stage)).containsAll(List.of("Fácil  2", "Difícil  1")));   // the groups, with their counts
         fx(() -> run(() -> {
-            app.browser.choose("All problems", null);
+            app.browser.choose("Todos los problemas", null);
             app.browser.showTable(true);
         }));
         shot(stage, "4-table");
@@ -314,6 +330,7 @@ class AppSmokeTest {
         fx(() -> run(app::showHome));
         shot(stage, "6-home");
         dialogShot(stage, "d1-new-notebook", app::newNotebook, "");
+        dialogShot(stage, "d4-help", app::showHelp, "");
 
         // The dark theme, remembered for the next start, and the editor's page follows it.
         fx(() -> run(() -> app.setDark(true)));
@@ -339,21 +356,6 @@ class AppSmokeTest {
         fx(() -> run(stage::close));
     }
 
-    private static final String QUERY = """
-            SELECT d.department_name, COUNT(e.employee_id) AS employees
-            FROM departments d
-            LEFT JOIN employees e ON e.department_id = d.department_id
-            GROUP BY d.department_name
-            ORDER BY employees DESC;""";
-
-    private static final String CREATE = """
-            CREATE TABLE employees (
-              employee_id   NUMBER(6) PRIMARY KEY,
-              first_name    VARCHAR2(20),
-              hire_date     DATE DEFAULT SYSDATE NOT NULL,
-              department_id NUMBER(4) REFERENCES departments
-            );""";
-
     @Test
     void usesADatabasesNotebook(@TempDir Path home) throws Exception {
         Stage[] window = new Stage[1];
@@ -366,18 +368,18 @@ class AppSmokeTest {
         fx(() -> run(() -> app.openNotebook(notebook)));
 
         // An exercise: its statement, its topics and level, and the query in the PL/SQL block of its template.
-        Path exercise = fx(() -> app.createNote(db.kinds().get(1), "Employees per department", ""));
+        Path exercise = fx(() -> app.createNote(db.kinds().get(1), "Empleados por departamento", ""));
         fx(() -> run(() -> {
-            type(stage, "topics", "queries/joins, queries/group by");
+            type(stage, "topics", "consultas/joins, consultas/group by");
             choose(stage, "level", "Medium");
             choose(stage, "status", "Solved");
-            page.call("selectMatch", "## Statement");
-            page.call("insertText", "## Statement\n\nHow many employees work in each department, those with none included?");
+            page.call("selectMatch", "## Enunciado");
+            page.call("insertText", "## Enunciado\n\n¿Cuántos empleados trabajan en cada departamento, incluidos los que no tienen ninguno?");
             page.call("selectMatch", "```plsql");
             page.call("insertText", "```plsql\n" + QUERY);
         }));
         waitFor("the exercise to save itself", () -> Files.readString(exercise).contains("LEFT JOIN employees e"));
-        assertTrue(Files.readString(exercise).contains("topics: [queries/joins, queries/group by]"));
+        assertTrue(Files.readString(exercise).contains("topics: [consultas/joins, consultas/group by]"));
         shot(stage, "db1-exercise");
         fx(() -> run(app::toggleMode));
         waitFor("PL/SQL colored in the reading view", () -> fx(() ->
@@ -386,11 +388,11 @@ class AppSmokeTest {
         shot(stage, "db2-reading");
         fx(() -> run(app::toggleMode));
 
-        // A table, written with + Query: Oracle's types (VARCHAR2, NUMBER) are colored as types.
+        // A table, written with the Consulta button: Oracle's types (VARCHAR2, NUMBER) are colored as types.
         Path table = fx(() -> app.createNote(db.kinds().get(2), "EMPLOYEES", ""));
         fx(() -> run(() -> {
             stage.getScene().getRoot().lookupAll(".button").stream().map(Button.class::cast)
-                    .filter(b -> "+ Query".equals(b.getText())).findFirst().orElseThrow().fire();
+                    .filter(b -> "Consulta".equals(b.getText())).findFirst().orElseThrow().fire();
             page.call("insertText", CREATE);
         }));
         waitFor("the table to save itself", () -> Files.readString(table).contains("```plsql\n" + CREATE + "\n```"));
@@ -399,13 +401,13 @@ class AppSmokeTest {
                 "[...document.querySelectorAll('#reading .tok-typeName')].some(t => t.textContent === 'VARCHAR2')"))));
         fx(() -> run(app::toggleMode));
 
-        // An exam written elsewhere: Upcoming here and on Home, as in Class Notes.
+        // An exam written elsewhere: in "Lo que se acerca" here and on Home, as in Class Notes.
         LocalDate today = LocalDate.now();
-        Files.writeString(notebook.resolve("Second exam.md"), "---\nkind: exam\ndate: " + today.plusDays(2) + "\ntopics: [plsql/cursors]\n---\n");
+        Files.writeString(notebook.resolve("Segundo examen.md"), "---\nkind: exam\ndate: " + today.plusDays(2) + "\ntopics: [plsql/cursores]\n---\n");
         fx(() -> run(app::refreshFromDisk));
-        fx(() -> run(() -> app.browser.choose("By topic", "queries")));
+        fx(() -> run(() -> app.browser.choose("Por tema", "consultas")));
         shot(stage, "db3-by-topic");
-        fx(() -> run(() -> app.browser.choose("Upcoming", null)));
+        fx(() -> run(() -> app.browser.choose("Lo que se acerca", null)));
         shot(stage, "db4-upcoming");
         fx(() -> run(app::showHome));
         shot(stage, "db5-home");
@@ -414,7 +416,7 @@ class AppSmokeTest {
         fx(() -> run(() -> {
             app.setDark(true);
             app.openNotebook(notebook);
-            app.browser.choose("Exercises", null);
+            app.browser.choose("Ejercicios", null);
             app.openNote(exercise);
             app.toggleMode();
         }));
@@ -425,50 +427,54 @@ class AppSmokeTest {
         fx(() -> run(stage::close));
     }
 
-    /** The app in Spanish, as on a Windows in Spanish; what notes keep stays English. Then back to English, live. */
+    /** Home shows this school period's notebooks; the earlier ones fold away until asked for. */
     @Test
-    void speaksSpanish(@TempDir Path home) throws Exception {
+    void homeGroupsNotebooksBySchoolPeriod(@TempDir Path home) throws Exception {
         Stage[] window = new Stage[1];
-        NotesApp app = open(home, window, Text.SPANISH);
+        NotesApp app = open(home, window);
         Stage stage = window[0];
-        WebEngine engine = fx(() -> app.editor.view.getEngine());
-        LocalDate today = LocalDate.now();
-        shot(stage, "es1-welcome");
-        assertTrue(fx(() -> texts(stage)).contains("+ Nuevo cuaderno"));
-
-        NotebookType course = NotebookType.CLASS_NOTES;
-        Path notebook = fx(() -> app.createNotebook("Cálculo II", course));
-        Files.writeString(notebook.resolve("Tarea 2.md"), "---\nkind: assignment\ndue: " + today.plusDays(1) + "\nstatus: Pending\n---\n");
-        Files.writeString(notebook.resolve("Primer parcial.md"), "---\nkind: exam\ndate: " + today.plusDays(9) + "\n---\n");
+        Period now = Period.of(LocalDate.now()), before = now.previous().previous();
+        fx(() -> app.createNotebook("Programación Orientada a Objetos", NotebookType.CLASS_NOTES));
+        Path fp = fx(() -> app.createNotebook("Fundamentos de Programación", NotebookType.CLASS_NOTES));
+        Vault.setMeta(fp, "period", before.toString());
         fx(() -> run(app::showHome));
-        shot(stage, "es2-home");
-        assertTrue(fx(() -> texts(stage)).containsAll(List.of("Cuadernos", "PRÓXIMOS", "Vence mañana", "Apuntes de clase")));
+        shot(stage, "p1-home-periods");
+        List<String> shown = fx(() -> texts(stage));
+        assertTrue(shown.containsAll(List.of(now.toString(), "Programación Orientada a Objetos", "Semestres anteriores · 1 cuaderno")), shown.toString());
+        assertFalse(shown.contains("Fundamentos de Programación"));
 
-        fx(() -> run(() -> app.openNotebook(notebook)));
-        Path lecture = fx(() -> app.createNote(course.kinds().get(0), "Límites", ""));
-        assertTrue(Files.readString(lecture).contains("## Ideas clave"));   // a new note's headings, in Spanish
-        fx(() -> run(() -> ((JSObject) engine.executeScript("window")).call("insertText", "```sql\nSELECT 1 FROM dual;\n```\n")));
-        waitFor("the lecture to save itself", () -> Files.readString(lecture).contains("SELECT 1 FROM dual;"));
-        shot(stage, "es3-lecture");
-        fx(() -> run(app::toggleMode));
-        waitFor("the code block's Copy button, in Spanish", () -> fx(() ->
-                "Copiar".equals(engine.executeScript("(document.querySelector('#reading .copy') || {}).textContent"))));
-        fx(() -> run(app::toggleMode));
-        fx(() -> run(() -> app.browser.choose("Upcoming", null)));
-        shot(stage, "es4-upcoming");
-        assertTrue(fx(() -> texts(stage)).containsAll(List.of("Próximos", "Clases", "Tareas", "‹ Inicio")));
-        fx(() -> run(() -> app.setProperty(notebook.resolve("Tarea 2.md"), "status", "Done")));   // "Marcar como hecha"
-        assertTrue(Files.readString(notebook.resolve("Tarea 2.md")).contains("status: Done"));   // kept in English
-        dialogShot(stage, "es5-new-notebook", app::newNotebook, "");
+        fx(() -> run(() -> stage.getScene().getRoot().lookupAll(".button").stream().map(Button.class::cast)
+                .filter(b -> b.getText() != null && b.getText().startsWith("Semestres anteriores")).findFirst().orElseThrow().fire()));
+        shot(stage, "p2-home-older");
+        assertTrue(fx(() -> texts(stage)).containsAll(List.of(before.toString(), "Fundamentos de Programación")));
+        fx(() -> run(stage::close));
+    }
 
-        // Back to English: a new window, on the same note, and the choice is remembered.
-        NotesApp english = fx(() -> app.setLanguage(Text.ENGLISH));
-        Stage next = fx(() -> Window.getWindows().stream().filter(w -> w.isShowing() && w instanceof Stage s && s != stage)
-                .map(Stage.class::cast).findFirst().orElseThrow());
-        assertTrue(fx(() -> !stage.isShowing() && lecture.equals(english.openPath())));
-        assertTrue(fx(() -> texts(next)).containsAll(List.of("‹ Home", "Lectures")));
-        assertTrue(Files.readString(home.resolve("settings.json")).contains("\"en\""));
-        fx(() -> run(next::close));
+    /** Home with a notebook of each type, light and dark: the screenshots of the README. */
+    @Test
+    void showsANotebookOfEachTypeOnHome(@TempDir Path home) throws Exception {
+        Stage[] window = new Stage[1];
+        NotesApp app = open(home, window);
+        Stage stage = window[0];
+        LocalDate today = LocalDate.now();
+        Path ideas = fx(() -> app.createNotebook("Ideas", NotebookType.GENERAL));
+        Path calculus = fx(() -> app.createNotebook("Cálculo Vectorial", NotebookType.CLASS_NOTES));
+        Path algorithms = fx(() -> app.createNotebook("Algoritmos", NotebookType.COMPETITIVE_PROGRAMMING));
+        Path databases = fx(() -> app.createNotebook("Taller de Base de Datos", NotebookType.DATABASES));
+        Files.writeString(databases.resolve("Empleados por departamento.md"), "---\nkind: exercise\ntopics: [consultas/joins]\n---\n");
+        Files.writeString(databases.resolve("Segundo examen.md"), "---\nkind: exam\ndate: " + today.plusDays(9) + "\n---\n");
+        Files.writeString(ideas.resolve("Lista de lectura.md"), "---\ntags: [libros]\n---\n");
+        Files.writeString(ideas.resolve("Proyectos.md"), "");
+        Files.writeString(calculus.resolve("Límites.md"), "---\nkind: lecture\ndate: " + today + "\nunit: 1. Límites\n---\n" + LECTURE);
+        Files.writeString(calculus.resolve("Tarea 3.md"), "---\nkind: assignment\ndue: " + today.plusDays(1) + "\nstatus: Pending\n---\n");
+        Files.writeString(calculus.resolve("Segundo parcial.md"), "---\nkind: exam\ndate: " + today.plusDays(5) + "\n---\n");
+        Files.writeString(algorithms.resolve("CF 4A - Watermelon.md"), WATERMELON);
+        Files.writeString(algorithms.resolve("DSU.md"), DSU);
+        fx(() -> run(app::showHome));
+        shot(stage, "h1-home");
+        fx(() -> run(() -> app.setDark(true)));
+        shot(stage, "h2-home-dark");
+        fx(() -> run(stage::close));
     }
 
     /** The texts a window shows: its labels, buttons and cells. */
@@ -481,33 +487,6 @@ class AppSmokeTest {
             if (node instanceof Parent p) nodes.addAll(p.getChildrenUnmodifiable());
         }
         return texts;
-    }
-
-    /** Home with a notebook of each type, light and dark: the screenshots of the README. */
-    @Test
-    void showsANotebookOfEachTypeOnHome(@TempDir Path home) throws Exception {
-        Stage[] window = new Stage[1];
-        NotesApp app = open(home, window);
-        Stage stage = window[0];
-        LocalDate today = LocalDate.now();
-        Path ideas = fx(() -> app.createNotebook("Ideas", NotebookType.GENERAL));
-        Path calculus = fx(() -> app.createNotebook("Calculus II", NotebookType.CLASS_NOTES));
-        Path algorithms = fx(() -> app.createNotebook("Algorithms", NotebookType.COMPETITIVE_PROGRAMMING));
-        Path databases = fx(() -> app.createNotebook("Taller de Base de Datos", NotebookType.DATABASES));
-        Files.writeString(databases.resolve("Employees per department.md"), "---\nkind: exercise\ntopics: [queries/joins]\n---\n");
-        Files.writeString(databases.resolve("Second exam.md"), "---\nkind: exam\ndate: " + today.plusDays(9) + "\n---\n");
-        Files.writeString(ideas.resolve("Reading list.md"), "---\ntags: [books]\n---\n");
-        Files.writeString(ideas.resolve("Side projects.md"), "");
-        Files.writeString(calculus.resolve("Limits.md"), "---\nkind: lecture\ndate: " + today + "\nunit: 1. Limits\n---\n" + LECTURE);
-        Files.writeString(calculus.resolve("Homework 3.md"), "---\nkind: assignment\ndue: " + today.plusDays(1) + "\nstatus: Pending\n---\n");
-        Files.writeString(calculus.resolve("Midterm.md"), "---\nkind: exam\ndate: " + today.plusDays(5) + "\n---\n");
-        Files.writeString(algorithms.resolve("CF 4A - Watermelon.md"), WATERMELON);
-        Files.writeString(algorithms.resolve("DSU.md"), DSU);
-        fx(() -> run(app::showHome));
-        shot(stage, "h1-home");
-        fx(() -> run(() -> app.setDark(true)));
-        shot(stage, "h2-home-dark");
-        fx(() -> run(stage::close));
     }
 
     @SuppressWarnings("unchecked")

@@ -10,7 +10,7 @@ import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.Group;
+import javafx.geometry.VPos;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
@@ -18,22 +18,23 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.CheckMenuItem;
+import javafx.scene.control.ComboBox;
+import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
-import javafx.scene.control.Menu;
 import javafx.scene.control.MenuButton;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.RadioButton;
-import javafx.scene.control.RadioMenuItem;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputDialog;
+import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
@@ -48,12 +49,12 @@ import javafx.scene.input.KeyEvent;
 import javafx.scene.input.TransferMode;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.FlowPane;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-import javafx.scene.shape.FillRule;
-import javafx.scene.shape.SVGPath;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import javafx.util.Duration;
@@ -84,10 +85,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-
-import static com.devavaxp.notes.Text.t;
 
 /**
  * Devava Notes. Home shows the notebooks; a notebook shows the views of its type, the notes of the
@@ -101,8 +101,6 @@ public final class NotesApp extends Application {
     private static final KeyCombination READ = new KeyCodeCombination(KeyCode.E, KeyCombination.SHORTCUT_DOWN);
     private static final KeyCombination QUICK_OPEN = new KeyCodeCombination(KeyCode.O, KeyCombination.SHORTCUT_DOWN);
     private static final KeyCombination SEARCH = new KeyCodeCombination(KeyCode.F, KeyCombination.SHORTCUT_DOWN, KeyCombination.SHIFT_DOWN);
-    /** Windows' language, before the app sets its own: the app's unless ⋯ → Language picked another. */
-    private static final String SYSTEM_LANGUAGE = Locale.getDefault().getLanguage();
 
     Editor editor;
     NotebookView browser;
@@ -117,7 +115,8 @@ public final class NotesApp extends Application {
     private final HBox actions = new HBox(10), actionsRow = new HBox();
     private final Label noteTitle = new Label(), kindName = new Label(), badge = new Label(), status = new Label();
     private final HBox tools = new HBox(4);
-    private final Button mode = new Button("Read");
+    /** Editar or Vista previa: one is always pressed, and Ctrl+E switches. */
+    private final ToggleButton editTab = new ToggleButton("Editar"), readTab = new ToggleButton("Vista previa");
     private final PauseTransition autosave = new PauseTransition(Duration.millis(600));
     private SplitPane notebookView;
 
@@ -132,6 +131,8 @@ public final class NotesApp extends Application {
     /** The note's modification time as this app last read or wrote it, to notice edits made elsewhere. */
     private FileTime seen;
     private String saveError = "";
+    /** Home shows the notebooks of earlier school periods only when asked. */
+    private boolean showOlder;
     /** The dark theme, remembered in settings.json; the icon, of the window and of Home. */
     private boolean dark;
     private Image icon;
@@ -146,10 +147,7 @@ public final class NotesApp extends Application {
     }
 
     void show(Stage stage, Vault vault) {
-        String language = vault.setting("language");
-        Text.use(language.isEmpty() ? SYSTEM_LANGUAGE : language);
-        Locale.setDefault(Text.locale());   // the stock dialogs' "Cancel" and the calendars speak it too
-        mode.setText(t("Read"));
+        Locale.setDefault(Text.SPANISH);   // the stock dialogs' "Cancelar" and the calendars too
         this.stage = stage;
         this.vault = vault;
         editor = new Editor(this::edited, this::openLink, this::openTitle, tag -> browser.showTag(tag), this::paste);
@@ -167,7 +165,7 @@ public final class NotesApp extends Application {
             try {
                 attachImages(e.getDragboard().getFiles());
             } catch (IOException ex) {
-                error(t("Couldn't add the image"), reason(ex));
+                error("No se pudo agregar la imagen", reason(ex));
             }
             e.setDropCompleted(true);
             e.consume();
@@ -180,12 +178,18 @@ public final class NotesApp extends Application {
         noteTitle.getStyleClass().add("note-title");
         noteTitle.setMinWidth(Region.USE_PREF_SIZE);   // a narrow pane squeezes the buttons, not the title
         badge.setMinWidth(Region.USE_PREF_SIZE);
-        mode.setMinWidth(Region.USE_PREF_SIZE);
         kindName.getStyleClass().add("kind");
         status.getStyleClass().add("status-error");
-        mode.setTooltip(new Tooltip(t("Read or edit (Ctrl+E)")));
-        mode.setOnAction(e -> toggleMode());
-        actions.getChildren().setAll(status, tools, mode);
+        editTab.setGraphic(Icons.of("pen", 15));
+        readTab.setGraphic(Icons.of("eye", 15));
+        editTab.setTooltip(new Tooltip("Escribir la nota (Ctrl+E)"));
+        readTab.setTooltip(new Tooltip("Ver cómo queda: fórmulas, código e imágenes (Ctrl+E)"));
+        editTab.setOnAction(e -> setReading(false));
+        readTab.setOnAction(e -> setReading(true));
+        HBox modes = segmented(editTab, readTab);
+        modes.setMinWidth(Region.USE_PREF_SIZE);
+        editTab.setSelected(true);
+        actions.getChildren().setAll(status, tools, modes);
         actions.setAlignment(Pos.CENTER_RIGHT);
         noteHeader.getChildren().setAll(noteTitle, kindName, badge, grow(), actions);
         noteHeader.getStyleClass().add("note-header");
@@ -196,8 +200,8 @@ public final class NotesApp extends Application {
         actionsRow.setManaged(false);
         actionsRow.setVisible(false);
         notebookView = new SplitPane(browser.sidebar, browser.notes, notePane);
-        notebookView.setDividerPositions(0.16, 0.42);
-        browser.tableMode().addListener((o, was, table) -> notebookView.setDividerPositions(0.16, table ? 0.68 : 0.42));
+        notebookView.setDividerPositions(0.19, 0.45);
+        browser.tableMode().addListener((o, was, table) -> notebookView.setDividerPositions(0.19, table ? 0.68 : 0.45));
         SplitPane.setResizableWithParent(browser.sidebar, false);
         SplitPane.setResizableWithParent(browser.notes, false);
 
@@ -244,11 +248,13 @@ public final class NotesApp extends Application {
         if (!leaveNote()) return;
         notebook = null;
         note = null;
-        Button add = button(t("+ New notebook"), "primary", e -> newNotebook());
+        Button add = button("Nuevo cuaderno", "plus", "primary", e -> newNotebook());
         add.setTooltip(new Tooltip("Ctrl+N"));
-        bar.getChildren().setAll(brand(), grow(), finder(), add, more(item(t("Search in all notes…"), this::search),
-                item(t("Import notebook…"), this::importNotebook), item(t("Open data folder"), () -> showInFolder(vault.root)),
-                new SeparatorMenuItem(), themeItem(), languageMenu()));
+        bar.getChildren().setAll(brand(), grow(), finder(), add, help(), options(
+                item("Buscar en todas las notas…", this::search),
+                item("Importar cuaderno…", this::importNotebook),
+                item("Abrir la carpeta de datos", () -> showInFolder(vault.root)),
+                new SeparatorMenuItem(), themeItem()));
         root.setCenter(homeContent(true));
         stage.setTitle(NAME);
         refreshTitles();
@@ -269,28 +275,61 @@ public final class NotesApp extends Application {
 
     /** The field-like button of the bar that opens Quick open. */
     private Button finder() {
-        SVGPath glass = new SVGPath();   // a magnifying glass, on 24 units
-        glass.setContent("M10.5 3a7.5 7.5 0 0 1 5.96 12.06l4.24 4.24-1.41 1.41-4.24-4.24A7.5 7.5 0 1 1 10.5 3zm0 2a5.5 5.5 0 1 0 0 11a5.5 5.5 0 0 0 0-11z");
-        glass.setFillRule(FillRule.EVEN_ODD);
-        glass.getStyleClass().add("icon");
-        glass.setScaleX(0.62);
-        glass.setScaleY(0.62);
-        Label text = new Label(t("Quick open…")), keys = new Label("Ctrl+O");
+        Label text = new Label("Buscar una nota…"), keys = new Label("Ctrl+O");
         text.getStyleClass().add("finder-text");
         keys.getStyleClass().add("finder-keys");
-        HBox content = new HBox(8, new Group(glass), text, grow(), keys);
+        HBox content = new HBox(8, Icons.of("search", 16), text, grow(), keys);
         content.setAlignment(Pos.CENTER_LEFT);
-        content.setPrefWidth(236);
+        content.setPrefWidth(250);
         Button find = new Button(null, content);
         find.getStyleClass().add("finder");
         find.setOnAction(e -> quickOpen());
         find.setFocusTraversable(false);   // focused, it would look like a field being typed in; Ctrl+O reaches it
-        find.setTooltip(new Tooltip(t("Open any note by its title (Ctrl+O); search all their text with Ctrl+Shift+F")));
+        find.setTooltip(new Tooltip("Abre cualquier nota por su título (Ctrl+O); busca en todo su texto con Ctrl+Shift+F"));
         return find;
     }
 
+    private Button help() {
+        Button help = button("Ayuda", "help", "flat", e -> showHelp());
+        help.setTooltip(new Tooltip("Atajos de teclado y dónde quedan tus notas"));
+        return help;
+    }
+
+    /** The keyboard shortcuts, and where the notes are kept. */
+    void showHelp() {
+        String[][] keys = {
+                {"Ctrl+N", "Nuevo cuaderno en Inicio; nueva nota dentro de un cuaderno"},
+                {"Ctrl+O", "Abrir cualquier nota por su título"},
+                {"Ctrl+Shift+F", "Buscar en el texto de todas las notas"},
+                {"Ctrl+E", "Pasar entre Editar y Vista previa"},
+                {"Ctrl+F", "Buscar y reemplazar dentro de la nota"},
+                {"Ctrl+V", "Pegar texto, o una imagen como una captura de pantalla"},
+                {"[[", "Enlazar otra nota: escribe [[ y elige su título"},
+                {"Ctrl+clic", "Abrir el [[enlace]] que está bajo el ratón"},
+                {"#tema", "Etiquetar la nota desde su texto"}};
+        GridPane grid = new GridPane();
+        grid.setHgap(18);
+        grid.setVgap(9);
+        for (int i = 0; i < keys.length; i++) {
+            Label key = new Label(keys[i][0]), what = new Label(keys[i][1]);
+            key.getStyleClass().add("key");
+            grid.addRow(i, key, what);
+        }
+        Label where = new Label("Tus notas se guardan en " + vault.root + ", como archivos de texto (Markdown) que también abren otros programas.");
+        where.setWrapText(true);
+        where.setMaxWidth(480);
+        where.getStyleClass().add("hint");
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Ayuda");
+        dialog.setHeaderText("Atajos de teclado");
+        style(dialog);
+        dialog.getDialogPane().getButtonTypes().setAll(ButtonType.CLOSE);
+        dialog.getDialogPane().setContent(new VBox(18, grid, where));
+        dialog.showAndWait();
+    }
+
     private CheckMenuItem themeItem() {
-        CheckMenuItem item = new CheckMenuItem(t("Dark theme"));
+        CheckMenuItem item = new CheckMenuItem("Tema oscuro");
         item.setSelected(dark);
         item.setOnAction(e -> setDark(item.isSelected()));
         return item;
@@ -306,46 +345,6 @@ public final class NotesApp extends Application {
         }
     }
 
-    /** English or Español; the window opens again in the one picked, where it was. */
-    private Menu languageMenu() {
-        Menu menu = new Menu(t("Language"));
-        ToggleGroup languages = new ToggleGroup();
-        for (String[] language : new String[][]{{Text.ENGLISH, "English"}, {Text.SPANISH, "Español"}}) {
-            RadioMenuItem item = new RadioMenuItem(language[1]);
-            item.setToggleGroup(languages);
-            item.setSelected(language[0].equals(Text.language()));
-            item.setOnAction(e -> setLanguage(language[0]));
-            menu.getItems().add(item);
-        }
-        return menu;
-    }
-
-    /**
-     * Remembers the language and replaces this window with a new one in it, showing the same
-     * notebook and note; returns the new window's app (this one when nothing changes).
-     */
-    NotesApp setLanguage(String language) {
-        if (language.equals(Text.language()) || !leaveNote()) return this;
-        try {
-            vault.setSetting("language", language);
-        } catch (IOException e) {
-            error(t("Couldn't save the language"), reason(e));
-            return this;
-        }
-        Stage next = new Stage();
-        next.setX(stage.getX());
-        next.setY(stage.getY());
-        next.setWidth(stage.getWidth());
-        next.setHeight(stage.getHeight());
-        next.setMaximized(stage.isMaximized());
-        NotesApp app = new NotesApp();
-        app.show(next, vault);
-        if (notebook != null) app.openNotebook(notebook);
-        if (note != null) app.openNote(note);
-        stage.close();
-        return app;
-    }
-
     private void applyTheme() {
         root.getStyleClass().remove("dark");
         if (dark) root.getStyleClass().add("dark");
@@ -358,35 +357,56 @@ public final class NotesApp extends Application {
             notebooks = vault.notebooks();
         } catch (IOException e) {
             notebooks = List.of();
-            if (showErrors) error(t("Couldn't open your notes"), vault.root + "\n\n" + reason(e));
+            if (showErrors) error("No se pudieron abrir tus notas", vault.root + "\n\n" + reason(e));
         }
         if (notebooks.isEmpty()) {
             ImageView logo = new ImageView(icon);
             logo.setFitWidth(72);
             logo.setFitHeight(72);
             logo.setSmooth(true);
-            VBox empty = placeholder(t("Welcome to Devava Notes"), t("A notebook keeps the notes of one subject, course or project."));
+            VBox empty = placeholder("Te damos la bienvenida a Devava Notes",
+                    "Crea un cuaderno para cada materia del semestre: ahí van tus apuntes, tareas, exámenes y código.");
             empty.getChildren().add(0, logo);
-            empty.getChildren().add(button(t("+ New notebook"), "primary", e -> newNotebook()));
+            empty.getChildren().add(button("Nuevo cuaderno", "plus", "primary", e -> newNotebook()));
             return empty;
         }
-        // On the left the notebooks; on the right what is coming and what was written last.
-        FlowPane cards = new FlowPane(16, 16);
-        cards.getChildren().setAll(notebooks.stream().map(this::card).toList());
-        Label title = new Label(t("Notebooks"));
-        title.getStyleClass().add("page-title");
-        VBox main = new VBox(18, title, cards);
+        // On the left the notebooks by school period, the newest first, earlier periods folded away;
+        // on the right what is coming and what was written last.
+        Period now = Period.of(LocalDate.now());
+        Map<Period, List<Vault.Notebook>> byPeriod = new TreeMap<>(Comparator.reverseOrder());
+        notebooks.forEach(nb -> byPeriod.computeIfAbsent(nb.period(), k -> new ArrayList<>()).add(nb));
+        VBox main = new VBox(30), older = new VBox(30);
+        int olderCount = 0;
+        for (Map.Entry<Period, List<Vault.Notebook>> group : byPeriod.entrySet()) {
+            boolean past = group.getKey().compareTo(now) < 0;
+            (past ? older : main).getChildren().add(periodSection(group.getKey(), group.getValue()));
+            if (past) olderCount += group.getValue().size();
+        }
+        if (main.getChildren().isEmpty()) {
+            VBox none = placeholder("Aún no tienes cuadernos de " + now, "Crea uno para cada materia de este semestre.");
+            none.getChildren().add(button("Nuevo cuaderno", "plus", "primary", e -> newNotebook()));
+            main.getChildren().add(none);
+        }
+        if (!older.getChildren().isEmpty()) {
+            Button toggle = button("Semestres anteriores · " + countNotebooks(olderCount), showOlder ? "down" : "right", "flat", e -> {
+                showOlder = !showOlder;
+                root.setCenter(homeContent(false));
+            });
+            toggle.getStyleClass().add("older-toggle");
+            main.getChildren().add(toggle);
+            if (showOlder) main.getChildren().add(older);
+        }
         HBox.setHgrow(main, Priority.ALWAYS);
         VBox side = new VBox(10);
         side.setMinWidth(320);
         side.setPrefWidth(370);
         List<Upcoming> upcoming = upcoming(notebooks);
         if (!upcoming.isEmpty()) {
-            side.getChildren().addAll(sectionTitle(t("UPCOMING")), panel(upcoming.stream().limit(8).map(this::upcomingRow).toList()));
+            side.getChildren().addAll(sectionTitle("LO QUE SE ACERCA"), panel(upcoming.stream().limit(8).map(this::upcomingRow).toList()));
         }
         List<Vault.Place> recent = recent(vault.everyNote(), 6);
         if (!recent.isEmpty()) {
-            Label recentTitle = sectionTitle(t("RECENT"));
+            Label recentTitle = sectionTitle("SEGUIR DONDE TE QUEDASTE");
             if (!side.getChildren().isEmpty()) VBox.setMargin(recentTitle, new Insets(16, 0, 0, 0));
             side.getChildren().addAll(recentTitle, panel(recent.stream().map(this::recentRow).toList()));
         }
@@ -399,6 +419,23 @@ public final class NotesApp extends Application {
         return scroll;
     }
 
+    /** A school period on Home: its name, how many notebooks it has, and their cards. */
+    private Node periodSection(Period period, List<Vault.Notebook> notebooks) {
+        Label name = new Label(period.toString()), count = new Label(countNotebooks(notebooks.size()));
+        name.getStyleClass().add("period-title");
+        count.getStyleClass().add("period-count");
+        HBox head = new HBox(10, name, count);
+        head.setAlignment(Pos.BASELINE_LEFT);
+        FlowPane cards = new FlowPane(14, 14);
+        cards.setRowValignment(VPos.TOP);
+        cards.getChildren().setAll(notebooks.stream().map(this::card).toList());
+        return new VBox(12, head, cards);
+    }
+
+    private static String countNotebooks(int n) {
+        return n == 1 ? "1 cuaderno" : n + " cuadernos";
+    }
+
     private static VBox panel(List<? extends Node> rows) {
         VBox panel = new VBox(2);
         panel.getChildren().setAll(rows);
@@ -406,14 +443,34 @@ public final class NotesApp extends Application {
         return panel;
     }
 
-    /** Each type's color on Home: the mark and the name on its notebooks' cards. */
+    /** Each type's color: its notebooks' marks, and their type's name. */
     private static String color(NotebookType type) {
         return switch (type.id()) {
-            case "class-notes" -> "#0D9488";
-            case "competitive-programming" -> "#EA580C";
-            case "databases" -> "#0284C7";
-            default -> "#6366F1";
+            case "class-notes" -> "#0F8A80";
+            case "competitive-programming" -> "#D9590B";
+            case "databases" -> "#0377B5";
+            default -> "#5D6B82";
         };
+    }
+
+    /** Each type's icon. */
+    private static String icon(NotebookType type) {
+        return switch (type.id()) {
+            case "class-notes" -> "book";
+            case "competitive-programming" -> "trophy";
+            case "databases" -> "database";
+            default -> "note";
+        };
+    }
+
+    /** A type's mark: its icon, white on its color. */
+    private static Node tile(NotebookType type, double size) {
+        StackPane tile = new StackPane(Icons.of(icon(type), Math.round(size * 0.55)));
+        tile.getStyleClass().add("tile");
+        tile.setStyle("-fx-background-color: " + color(type) + ";");
+        tile.setMinSize(size, size);
+        tile.setMaxSize(size, size);
+        return tile;
     }
 
     /** A pending assignment or a coming exam, in one of the Class Notes notebooks. */
@@ -494,19 +551,19 @@ public final class NotesApp extends Application {
         }
     }
 
-    /** "Just now", "12 minutes ago", "3 hours ago", "Yesterday", or the day. */
+    /** "Ahora mismo", "Hace 12 minutos", "Hace 3 horas", "Ayer", or the day. */
     private static String ago(FileTime time) {
         long minutes = ChronoUnit.MINUTES.between(time.toInstant(), Instant.now());
-        if (minutes < 1) return t("Just now");
-        if (minutes < 60) return minutes == 1 ? t("1 minute ago") : t("%d minutes ago", minutes);
-        if (minutes < 60 * 24) return minutes < 120 ? t("1 hour ago") : t("%d hours ago", minutes / 60);
+        if (minutes < 1) return "Ahora mismo";
+        if (minutes < 60) return minutes == 1 ? "Hace 1 minuto" : String.format("Hace %d minutos", minutes);
+        if (minutes < 60 * 24) return minutes < 120 ? "Hace 1 hora" : String.format("Hace %d horas", minutes / 60);
         LocalDate day = LocalDate.ofInstant(time.toInstant(), ZoneId.systemDefault());
-        return day.equals(LocalDate.now().minusDays(1)) ? t("Yesterday") : day().format(time.toInstant());
+        return day.equals(LocalDate.now().minusDays(1)) ? "Ayer" : day().format(time.toInstant());
     }
 
     /** "Sep 28, 2026", "28 sept 2026". */
     private static DateTimeFormatter day() {
-        return DateTimeFormatter.ofPattern(t("MMM d, yyyy"), Text.locale()).withZone(ZoneId.systemDefault());
+        return DateTimeFormatter.ofPattern("d MMM yyyy", Text.SPANISH).withZone(ZoneId.systemDefault());
     }
 
     private static Label sectionTitle(String text) {
@@ -516,20 +573,20 @@ public final class NotesApp extends Application {
     }
 
     private Button card(Vault.Notebook nb) {
-        Region mark = new Region();
-        mark.getStyleClass().add("type-mark");
-        mark.setStyle("-fx-background-color: " + color(nb.type()) + ";");
         Label name = new Label(nb.name());
         name.getStyleClass().add("card-title");
-        Label kind = new Label(t(nb.type().name()));
+        name.setWrapText(true);
+        HBox top = new HBox(11, tile(nb.type(), 36), name);
+        top.setAlignment(Pos.CENTER_LEFT);
+        Label kind = new Label(nb.type().name());
         kind.getStyleClass().add("card-type");
         NotebookView.colored(kind, color(nb.type()));
-        Label meta = new Label(t("%s · edited %s", count(nb.notes()), day().format(nb.edited().toInstant())));
+        String when = ago(nb.edited());
+        Label meta = new Label(count(nb.notes()) + " · " + when.substring(0, 1).toLowerCase(Text.SPANISH) + when.substring(1));
         meta.getStyleClass().add("card-meta");
-        VBox body = new VBox(4, mark, name, kind, meta);
-        VBox.setMargin(name, new Insets(8, 0, 0, 0));
-        Button card = new Button(null, body);
+        Button card = new Button(null, new VBox(10, top, new VBox(2, kind, meta)));
         card.getStyleClass().add("card");
+        card.setWrapText(true);   // so its height is measured at its width, where the name wraps
         card.setOnAction(e -> openNotebook(nb.dir()));
         card.setContextMenu(new ContextMenu(notebookItems(nb.dir())));
         return card;
@@ -537,22 +594,55 @@ public final class NotesApp extends Application {
 
     private MenuItem[] notebookItems(Path dir) {
         List<MenuItem> items = new ArrayList<>(List.of(
-                item(t("Rename…"), () -> renameNotebook(dir)),
-                item(t("Change type…"), () -> changeType(dir))));
-        if (Vault.type(dir).equals(NotebookType.COMPETITIVE_PROGRAMMING)) items.add(item(t("C++ template…"), () -> editTemplate(dir)));
+                item("Cambiar nombre…", () -> renameNotebook(dir)),
+                item("Cambiar tipo…", () -> changeType(dir)),
+                item("Cambiar periodo…", () -> changePeriod(dir))));
+        if (Vault.type(dir).equals(NotebookType.COMPETITIVE_PROGRAMMING)) items.add(item("Plantilla de C++…", () -> editTemplate(dir)));
         items.addAll(List.of(
-                item(t("Export as ZIP…"), () -> exportNotebook(dir)),
-                item(t("Show in folder"), () -> showInFolder(dir)),
+                item("Exportar como ZIP…", () -> exportNotebook(dir)),
+                item("Mostrar en la carpeta", () -> showInFolder(dir)),
                 new SeparatorMenuItem(),
-                danger(item(t("Move to trash…"), () -> trashNotebook(dir)))));
+                danger(item("Mover a la papelera…", () -> trashNotebook(dir)))));
         return items.toArray(MenuItem[]::new);
+    }
+
+    /** The school period a notebook shows under on Home. */
+    private void changePeriod(Path dir) {
+        Period set = Period.parse(Vault.meta(dir, "period"));
+        ComboBox<Period> periods = periodChoice(set == null ? Period.of(LocalDate.now()) : set);
+        Label about = new Label("En Inicio, el cuaderno aparece junto con las materias de ese semestre.");
+        about.getStyleClass().add("hint");
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Cambiar periodo");
+        dialog.setHeaderText("Periodo de “" + dir.getFileName() + "”");
+        style(dialog);
+        ButtonType ok = new ButtonType("Cambiar", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().setAll(ok, ButtonType.CANCEL);
+        dialog.getDialogPane().setContent(new VBox(12, periods, about));
+        if (dialog.showAndWait().filter(b -> b == ok).isEmpty()) return;
+        try {
+            Vault.setMeta(dir, "period", periods.getValue().toString());
+            if (notebook == null) root.setCenter(homeContent(false));
+        } catch (IOException e) {
+            error("No se pudo cambiar el periodo", reason(e));
+        }
+    }
+
+    /** The periods to pick from: the next one, this one and the ones of the last two years. */
+    private static ComboBox<Period> periodChoice(Period selected) {
+        ComboBox<Period> box = new ComboBox<>();
+        Period p = Period.of(LocalDate.now()).next();
+        for (int i = 0; i < 8; i++, p = p.previous()) box.getItems().add(p);
+        if (!box.getItems().contains(selected)) box.getItems().add(selected);
+        box.setValue(selected);
+        return box;
     }
 
     /** Saves the notebook as one ZIP to share it; whoever gets it adds it with Import notebook… on Home. */
     private void exportNotebook(Path dir) {
         if (dir.equals(notebook)) save();   // the open note, as it is now
         FileChooser chooser = new FileChooser();
-        chooser.setTitle(t("Export “%s”", dir.getFileName()));
+        chooser.setTitle(String.format("Exportar “%s”", dir.getFileName()));
         chooser.setInitialFileName(dir.getFileName() + ".zip");
         chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("ZIP", "*.zip"));
         File zip = chooser.showSaveDialog(stage);
@@ -560,21 +650,21 @@ public final class NotesApp extends Application {
         try {
             Vault.exportZip(dir, zip.toPath());
         } catch (IOException e) {
-            error(t("Couldn't export the notebook"), reason(e));
+            error("No se pudo exportar el cuaderno", reason(e));
         }
     }
 
     /** Adds a notebook someone shared as a ZIP, and opens it. */
     private void importNotebook() {
         FileChooser chooser = new FileChooser();
-        chooser.setTitle(t("Import a notebook"));
+        chooser.setTitle("Importar un cuaderno");
         chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("ZIP", "*.zip"));
         File zip = chooser.showOpenDialog(stage);
         if (zip == null) return;
         try {
             openNotebook(vault.importZip(zip.toPath()));
         } catch (IOException e) {
-            error(t("Couldn't import the notebook"), reason(e));
+            error("No se pudo importar el cuaderno", reason(e));
         }
     }
 
@@ -584,20 +674,20 @@ public final class NotesApp extends Application {
         code.getStyleClass().add("code-area");
         code.setPrefColumnCount(64);
         code.setPrefRowCount(18);
-        Label about = new Label(t("New problems and + Solution start with it (LeetCode problems start empty)."));
+        Label about = new Label("Los problemas nuevos y + Solución empiezan con ella (los de LeetCode empiezan vacíos).");
         about.getStyleClass().add("type-description");
         Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.setTitle(t("C++ template"));
-        dialog.setHeaderText(t("C++ template"));
+        dialog.setTitle("Plantilla de C++");
+        dialog.setHeaderText("Plantilla de C++");
         style(dialog);
-        ButtonType save = new ButtonType(t("Save"), ButtonBar.ButtonData.OK_DONE);
+        ButtonType save = new ButtonType("Guardar", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().setAll(save, ButtonType.CANCEL);
         dialog.getDialogPane().setContent(new VBox(8, about, code));
         if (dialog.showAndWait().orElse(ButtonType.CANCEL) != save) return;
         try {
             Vault.setMeta(dir, "cpp", code.getText());
         } catch (IOException e) {
-            error(t("Couldn't save the template"), reason(e));
+            error("No se pudo guardar la plantilla", reason(e));
         }
     }
 
@@ -607,11 +697,13 @@ public final class NotesApp extends Application {
     }
 
     void newNotebook() {
-        askNotebook(t("New notebook"), NotebookType.GENERAL, true).ifPresent(choice -> {
+        askNotebook("Nuevo cuaderno", NotebookType.GENERAL, true).ifPresent(choice -> {
             try {
-                openNotebook(createNotebook(choice.name(), choice.type()));
+                Path dir = createNotebook(choice.name(), choice.type());
+                if (choice.period() != null) Vault.setMeta(dir, "period", choice.period().toString());
+                openNotebook(dir);
             } catch (IOException e) {
-                error(t("Couldn't create the notebook"), reason(e));
+                error("No se pudo crear el cuaderno", reason(e));
             }
         });
     }
@@ -621,7 +713,7 @@ public final class NotesApp extends Application {
     }
 
     private void renameNotebook(Path dir) {
-        ask(t("Rename notebook"), t("Name"), dir.getFileName().toString()).ifPresent(name -> {
+        ask("Cambiar nombre del cuaderno", "Nombre", dir.getFileName().toString()).ifPresent(name -> {
             boolean open = dir.equals(notebook);
             if (open && !leaveNote()) return;
             Path openNote = note;
@@ -634,13 +726,13 @@ public final class NotesApp extends Application {
                 openNotebook(renamed);
                 if (openNote != null) openNote(renamed.resolve(openNote.getFileName()));
             } catch (IOException e) {
-                error(t("Couldn't rename the notebook"), reason(e));
+                error("No se pudo cambiar el nombre del cuaderno", reason(e));
             }
         });
     }
 
     private void changeType(Path dir) {
-        askNotebook(t("Change “%s” to", dir.getFileName()), Vault.type(dir), false).ifPresent(choice -> {
+        askNotebook(String.format("Cambiar “%s” a", dir.getFileName()), Vault.type(dir), false).ifPresent(choice -> {
             boolean open = dir.equals(notebook);
             if (open && !leaveNote()) return;
             try {
@@ -648,7 +740,7 @@ public final class NotesApp extends Application {
                 if (open) openNotebook(dir);
                 else showHome();
             } catch (IOException e) {
-                error(t("Couldn't change the type"), reason(e));
+                error("No se pudo cambiar el tipo", reason(e));
             }
         });
     }
@@ -661,15 +753,15 @@ public final class NotesApp extends Application {
             notes = 0;
         }
         String name = dir.getFileName().toString();
-        if (!confirm(t("Move “%s” to the trash?", name), notes == 0 ? t("The notebook goes to the trash, where you can restore it.")
-                : t("The notebook and its %s go to the trash, where you can restore them.", count(notes)), t("Move to trash"))) return;
+        if (!confirm(String.format("¿Mover “%s” a la papelera?", name), notes == 0 ? "El cuaderno va a la papelera, donde puedes restaurarlo."
+                : String.format("El cuaderno y sus %s van a la papelera, donde puedes restaurarlos.", count(notes)), "Mover a la papelera")) return;
         if (dir.equals(notebook) && !leaveNote()) return;
         try {
             Vault.trash(dir);
             note = null;
             showHome();
         } catch (IOException e) {
-            error(t("Couldn't move “%s” to the trash", name), reason(e));
+            error(String.format("No se pudo mover “%s” a la papelera", name), reason(e));
         }
     }
 
@@ -684,30 +776,40 @@ public final class NotesApp extends Application {
         closeNote();
         Label name = new Label(dir.getFileName().toString());
         name.getStyleClass().add("crumb");
-        Label typeName = new Label(t(type.name()));
-        typeName.getStyleClass().add("kind");
+        Label typeName = new Label(type.name());
+        typeName.getStyleClass().add("type-chip");
+        NotebookView.colored(typeName, color(type));
         List<MenuItem> menu = new ArrayList<>(List.of(notebookItems(dir)));
-        menu.addAll(List.of(new SeparatorMenuItem(), themeItem(), languageMenu()));
-        bar.getChildren().setAll(button(t("‹ Home"), "flat", e -> showHome()), name, typeName, grow(), finder(), newButton(),
-                more(menu.toArray(MenuItem[]::new)));
+        menu.addAll(List.of(new SeparatorMenuItem(), themeItem()));
+        HBox title = new HBox(10, tile(type, 26), name, typeName);
+        title.setAlignment(Pos.CENTER_LEFT);
+        bar.getChildren().setAll(button("Inicio", "back", "flat", e -> showHome()), title, grow(), finder(), newButton(), help(),
+                options(menu.toArray(MenuItem[]::new)));
         loadEntries(true);
         browser.open(type, entries);
         root.setCenter(notebookView);
         stage.setTitle(dir.getFileName() + " — " + NAME);
     }
 
-    /** "+ New note" for one kind of note; with several, a menu of them (Ctrl+N makes the first). */
+    /** "Nueva nota" for one kind of note; with several, a menu that says what each kind is for (Ctrl+N makes the first). */
     private Node newButton() {
         Kind first = type.kinds().get(0);
         if (type.kinds().size() == 1) {
-            Button add = button(t("+ New " + first.name().toLowerCase(Locale.ROOT)), "primary", e -> newNote(first));
+            Button add = button(first.create(), "plus", "primary", e -> newNote(first));
             add.setTooltip(new Tooltip("Ctrl+N"));
             return add;
         }
-        MenuButton add = new MenuButton(t("+ New  ▾"));
-        type.kinds().forEach(k -> add.getItems().add(item(t(k.name()), () -> newNote(k))));
+        MenuButton add = new MenuButton("Nueva nota", Icons.of("plus", 16));
+        for (Kind k : type.kinds()) {
+            Label name = new Label(k.name()), about = new Label(k.about());
+            name.getStyleClass().add("menu-title");
+            about.getStyleClass().add("menu-about");
+            MenuItem item = new MenuItem(null, new VBox(1, name, about));
+            item.setOnAction(e -> newNote(k));
+            add.getItems().add(item);
+        }
         add.getStyleClass().add("primary");
-        add.setTooltip(new Tooltip("Ctrl+N: " + t(first.name()).toLowerCase(Text.locale())));
+        add.setTooltip(new Tooltip("Ctrl+N: " + first.name().toLowerCase(Text.SPANISH)));
         return add;
     }
 
@@ -717,7 +819,7 @@ public final class NotesApp extends Application {
         try {
             paths = Vault.notes(notebook);
         } catch (IOException e) {
-            if (showErrors) error(t("Couldn't list the notes"), reason(e));
+            if (showErrors) error("No se pudieron listar las notas", reason(e));
             return;
         }
         List<Entry> loaded = new ArrayList<>();
@@ -746,7 +848,7 @@ public final class NotesApp extends Application {
             String text = Vault.read(p);
             display(p, Note.parse(text), Files.getLastModifiedTime(p));
         } catch (IOException e) {
-            error(t("Couldn't open “%s”", Vault.title(p)), reason(e));
+            error(String.format("No se pudo abrir “%s”", Vault.title(p)), reason(e));
             browser.select(note);
         }
     }
@@ -760,21 +862,21 @@ public final class NotesApp extends Application {
         entries.replaceAll(e -> e.path().equals(p) ? new Entry(p, n, modified) : e);
         Kind kind = type.kindOf(n);
         noteTitle.setText(Vault.title(p));
-        kindName.setText(type.kinds().size() > 1 ? t(kind.name()) : "");
+        kindName.setText(type.kinds().size() > 1 ? kind.name() : "");
         status.setText("");
         showBadge();
         tools.getChildren().clear();
         if (type.equals(NotebookType.COMPETITIVE_PROGRAMMING) && kind.id().equals("problem")) {
-            tools.getChildren().add(button(t("+ Solution"), "flat", e -> newSolution()));
+            tools.getChildren().add(button("Solución", "plus", "flat", e -> newSolution()));
         }
         if (type.equals(NotebookType.DATABASES)) {
-            tools.getChildren().add(button(t("+ Query"), "flat", e -> {
+            tools.getChildren().add(button("Consulta", "plus", "flat", e -> {
                 setReading(false);
                 editor.insertCode("", "plsql");
             }));
         }
         if (type.kinds().stream().anyMatch(k -> k.id().equals("snippet"))) {
-            tools.getChildren().add(button(t("Insert snippet…"), "flat", e -> insertSnippet()));
+            tools.getChildren().add(button("Insertar fragmento…", "snippet", "flat", e -> insertSnippet()));
         }
         properties.show(kind, n);
         editor.open(n.body, p.getParent());
@@ -784,21 +886,33 @@ public final class NotesApp extends Application {
         fitHeader();
     }
 
-    /** Buttons cut short to "…" say nothing: when the title leaves them no room, they go below it. */
+    /**
+     * Buttons cut short to "…" say nothing: when the title leaves them no room, they go below it,
+     * and when not even that row is wide enough, the tools keep only their icons (and say what they do on hover).
+     */
     private void fitHeader() {
+        notePane.applyCss();   // buttons just made measure their real size only once styled
+        tools.getChildren().forEach(n -> ((Button) n).setContentDisplay(ContentDisplay.LEFT));
         double width = noteHeader.getWidth(), needed = noteTitle.prefWidth(-1) + kindName.prefWidth(-1) + badge.prefWidth(-1)
                 + actions.prefWidth(-1) + 4 * noteHeader.getSpacing() + noteHeader.getInsets().getLeft() + noteHeader.getInsets().getRight();
         boolean narrow = width > 0 && needed > width;
-        if (narrow == (actions.getParent() == actionsRow)) return;
-        (narrow ? actionsRow : noteHeader).getChildren().add(actions);   // leaving the other row
-        actionsRow.setManaged(narrow);
-        actionsRow.setVisible(narrow);
+        if (narrow != (actions.getParent() == actionsRow)) {
+            (narrow ? actionsRow : noteHeader).getChildren().add(actions);   // leaving the other row
+            actionsRow.setManaged(narrow);
+            actionsRow.setVisible(narrow);
+        }
+        boolean tight = narrow && actions.prefWidth(-1) + actionsRow.getInsets().getLeft() + actionsRow.getInsets().getRight() > width;
+        for (Node n : tools.getChildren()) {
+            Button b = (Button) n;
+            b.setContentDisplay(tight ? ContentDisplay.GRAPHIC_ONLY : ContentDisplay.LEFT);
+            b.setTooltip(tight ? new Tooltip(b.getText()) : null);
+        }
     }
 
     /** A problem's difficulty in its judge's color, and its level when that says more ("800 · Easy"). */
     private void showBadge() {
         Badge b = current == null ? null : type.badge(current);
-        String level = current == null ? "" : t(Judges.level(current));
+        String level = current == null ? "" : Text.shown(Judges.level(current));
         badge.setText(b == null ? "" : b.text().equalsIgnoreCase(level) || level.isEmpty() ? b.text() : b.text() + " · " + level);
         NotebookView.colored(badge, b == null ? "" : b.color());
         fitHeader();
@@ -810,19 +924,19 @@ public final class NotesApp extends Application {
         current = null;
         dirty = false;
         notePane.setTop(null);
-        notePane.setCenter(placeholder(t("No note open"), t("Pick a note, or press Ctrl+N to write a new one.")));
+        notePane.setCenter(placeholder("Ninguna nota abierta", "Elige una nota o pulsa Ctrl+N para escribir una nueva."));
     }
 
     void newNote(Kind kind) {
         if (notebook == null) return;
         boolean hasLink = kind.fields().stream().anyMatch(f -> f.key().equals("url"));
         Optional<String[]> answer = hasLink ? askProblem()
-                : ask(t("New " + kind.name().toLowerCase(Locale.ROOT)), t("Title"), "").map(title -> new String[]{title, ""});
+                : ask(kind.create(), "Título", "").map(title -> new String[]{title, ""});
         answer.ifPresent(a -> {
             try {
                 createNote(kind, a[0], a[1]);
             } catch (IOException e) {
-                error(t("Couldn't create the note"), reason(e));
+                error("No se pudo crear la nota", reason(e));
             }
         });
     }
@@ -833,7 +947,7 @@ public final class NotesApp extends Application {
      */
     Path createNote(Kind kind, String title, String link) throws IOException {
         if (!leaveNote()) return null;
-        Note start = Note.parse(Text.template(kind.template()).replace("{today}", LocalDate.now().toString()));
+        Note start = Note.parse(kind.template().replace("{today}", LocalDate.now().toString()));
         if (!link.isBlank()) {
             start.set("url", link);
             Judges.fromLink(link).ifPresent(problem -> {
@@ -858,10 +972,10 @@ public final class NotesApp extends Application {
     }
 
     void renameNote(Path p) {
-        ask(t("Rename note"), t("Title"), Vault.title(p)).ifPresent(title -> {
+        ask("Cambiar nombre de la nota", "Título", Vault.title(p)).ifPresent(title -> {
             boolean open = p.equals(note);
             if (open && !save()) {
-                error(t("Couldn't rename the note"), t("Its latest changes aren't saved: %s", saveError));
+                error("No se pudo cambiar el nombre de la nota", String.format("Sus últimos cambios no están guardados: %s", saveError));
                 return;
             }
             try {
@@ -874,13 +988,13 @@ public final class NotesApp extends Application {
                 loadEntries(true);
                 browser.update();
             } catch (IOException e) {
-                error(t("Couldn't rename the note"), reason(e));
+                error("No se pudo cambiar el nombre de la nota", reason(e));
             }
         });
     }
 
     void trashNote(Path p) {
-        if (!confirm(t("Move “%s” to the trash?", Vault.title(p)), t("You can restore it from the trash."), t("Move to trash"))) return;
+        if (!confirm(String.format("¿Mover “%s” a la papelera?", Vault.title(p)), "Puedes restaurarla desde la papelera.", "Mover a la papelera")) return;
         boolean open = p.equals(note);
         if (open) save();   // its latest text goes to the trash with it
         try {
@@ -889,7 +1003,7 @@ public final class NotesApp extends Application {
             loadEntries(true);
             browser.update();
         } catch (IOException e) {
-            error(t("Couldn't move “%s” to the trash", Vault.title(p)), reason(e));
+            error(String.format("No se pudo mover “%s” a la papelera", Vault.title(p)), reason(e));
         }
     }
 
@@ -897,7 +1011,7 @@ public final class NotesApp extends Application {
     private void newSolution() {
         setReading(false);
         String code = current.get("judge").equals("LeetCode") ? "" : template(notebook);
-        editor.insert("\n" + t("### Solution · O( )") + "\n\n```cpp\n" + code + "\n```\n");
+        editor.insert("\n" + "### Solución · O( )" + "\n\n```cpp\n" + code + "\n```\n");
         editor.focus();
     }
 
@@ -906,7 +1020,7 @@ public final class NotesApp extends Application {
         List<Entry> snippets = entries.stream()
                 .filter(e -> type.kindOf(e.note()).id().equals("snippet") && !e.path().equals(note)).toList();
         if (snippets.isEmpty()) {
-            error(t("The Code Library is empty"), t("Add a snippet with + New ▾ → Snippet, with its code in a block of code."));
+            error("La biblioteca de código está vacía", "Agrega un fragmento con + Nuevo ▾ → Fragmento, con su código en un bloque de código.");
             return;
         }
         // What a snippet is filed under (algorithms and techniques, or topics): shown and searched with its title.
@@ -914,7 +1028,7 @@ public final class NotesApp extends Application {
         Function<Entry, String> filed = e -> kind.fields().stream().filter(f -> f.input() == NotebookType.Input.LIST)
                 .flatMap(f -> e.note().list(f.key()).stream()).collect(Collectors.joining(", "));
         TextField filter = new TextField();
-        filter.setPromptText(t("Filter"));
+        filter.setPromptText("Filtrar");
         ListView<Entry> list = new ListView<>();
         list.setCellFactory(v -> new ListCell<>() {
             @Override
@@ -931,7 +1045,7 @@ public final class NotesApp extends Application {
         };
         filter.textProperty().addListener((o, was, now) -> narrow.run());
         narrow.run();
-        pick(t("Insert snippet"), t("Insert"), filter, list).ifPresent(e -> insertSnippet(e.path()));
+        pick("Insertar fragmento", "Insertar", filter, list).ifPresent(e -> insertSnippet(e.path()));
     }
 
     /** Ctrl+O: any note of any notebook by a part of its title; with nothing typed, the latest first. */
@@ -940,7 +1054,7 @@ public final class NotesApp extends Application {
         Map<Path, FileTime> times = new HashMap<>();
         all.forEach(p -> times.put(p.note(), modified(p.note())));
         TextField title = new TextField();
-        title.setPromptText(t("Title"));
+        title.setPromptText("Título");
         ListView<Vault.Place> list = new ListView<>();
         list.setCellFactory(v -> placeCell(p -> p.notebook().getFileName().toString()));
         Runnable narrow = () -> {
@@ -953,7 +1067,7 @@ public final class NotesApp extends Application {
         };
         title.textProperty().addListener((o, was, now) -> narrow.run());
         narrow.run();
-        pick(t("Quick open"), t("Open"), title, list).ifPresent(this::go);
+        pick("Abrir rápido", "Abrir", title, list).ifPresent(this::go);
     }
 
     /** A line found by Search: the note and the line where the words are. */
@@ -974,7 +1088,7 @@ public final class NotesApp extends Application {
             }
         }
         TextField words = new TextField();
-        words.setPromptText(t("Words to find"));
+        words.setPromptText("Palabras a buscar");
         ListView<Hit> list = new ListView<>();
         list.setCellFactory(v -> new ListCell<>() {
             @Override
@@ -1005,7 +1119,7 @@ public final class NotesApp extends Application {
             list.getSelectionModel().selectFirst();
         });
         words.textProperty().addListener((o, was, now) -> typing.playFromStart());
-        pick(t("Search in all notes"), t("Open"), words, list).ifPresent(hit -> {
+        pick("Buscar en todas las notas", "Abrir", words, list).ifPresent(hit -> {
             go(hit.place());
             if (!hit.place().note().equals(note)) return;
             setReading(false);
@@ -1050,7 +1164,7 @@ public final class NotesApp extends Application {
             try {
                 createNote(type.kinds().get(0), title, "");
             } catch (IOException e) {
-                error(t("Couldn't create “%s”", title), reason(e));
+                error(String.format("No se pudo crear “%s”", title), reason(e));
             }
         }
     }
@@ -1077,7 +1191,7 @@ public final class NotesApp extends Application {
                 editor.insert(imageLink(Vault.attach(notebook, png(clip.getImage()))));
             }
         } catch (IOException e) {
-            error(t("Couldn't paste the image"), reason(e));
+            error("No se pudo pegar la imagen", reason(e));
         }
     }
 
@@ -1150,7 +1264,7 @@ public final class NotesApp extends Application {
         Entry entry = entries.stream().filter(e -> e.path().equals(snippet)).findFirst().orElse(null);
         Optional<Note.Code> code = entry == null ? Optional.empty() : entry.note().firstCode();
         if (code.isEmpty()) {
-            error(t("Nothing to insert"), t("“%s” has no block of code yet.", Vault.title(snippet)));
+            error("Nada que insertar", String.format("“%s” aún no tiene un bloque de código.", Vault.title(snippet)));
             return;
         }
         setReading(false);
@@ -1163,13 +1277,13 @@ public final class NotesApp extends Application {
     }
 
     ContextMenu noteMenu(Path p) {
-        ContextMenu menu = new ContextMenu(item(t("Rename…"), () -> renameNote(p)));
+        ContextMenu menu = new ContextMenu(item("Cambiar nombre…", () -> renameNote(p)));
         Note n = entries.stream().filter(e -> e.path().equals(p)).map(Entry::note).findFirst().orElse(null);
         if (n != null && type.course() && type.kindOf(n).id().equals("assignment")) {
             boolean done = n.get("status").equalsIgnoreCase("Done");
-            menu.getItems().add(item(done ? t("Mark as pending") : t("Mark as done"), () -> setProperty(p, "status", done ? "Pending" : "Done")));
+            menu.getItems().add(item(done ? "Marcar como pendiente" : "Marcar como hecha", () -> setProperty(p, "status", done ? "Pending" : "Done")));
         }
-        menu.getItems().addAll(new SeparatorMenuItem(), danger(item(t("Move to trash…"), () -> trashNote(p))));
+        menu.getItems().addAll(new SeparatorMenuItem(), danger(item("Mover a la papelera…", () -> trashNote(p))));
         return menu;
     }
 
@@ -1186,7 +1300,7 @@ public final class NotesApp extends Application {
             n.set(key, value);
             Vault.write(p, n.text());
         } catch (IOException e) {
-            error(t("Couldn't change “%s”", Vault.title(p)), reason(e));
+            error(String.format("No se pudo cambiar “%s”", Vault.title(p)), reason(e));
             return;
         }
         loadEntries(true);
@@ -1199,7 +1313,8 @@ public final class NotesApp extends Application {
 
     private void setReading(boolean on) {
         reading = on;
-        mode.setText(on ? t("Edit") : t("Read"));
+        editTab.setSelected(!on);
+        readTab.setSelected(on);
         editor.setReading(on);
     }
 
@@ -1243,15 +1358,15 @@ public final class NotesApp extends Application {
             return true;
         } catch (IOException e) {
             saveError = reason(e);
-            status.setText(t("Not saved: %s", saveError));   // tried again on the next change or when leaving
+            status.setText(String.format("Sin guardar: %s", saveError));   // tried again on the next change or when leaving
             return false;
         }
     }
 
     /** Saves the open note before leaving it; if that fails, asks whether to leave it anyway. */
     private boolean leaveNote() {
-        return save() || confirm(t("Leave without saving?"), t("The latest changes to “%s” couldn't be saved (%s). If you leave, they are lost.",
-                Vault.title(note), saveError), t("Leave anyway"));
+        return save() || confirm("¿Salir sin guardar?", String.format("Los últimos cambios de “%s” no se pudieron guardar (%s). Si sales, se pierden.",
+                Vault.title(note), saveError), "Salir de todos modos");
     }
 
     /**
@@ -1297,21 +1412,27 @@ public final class NotesApp extends Application {
         try {
             Desktop.getDesktop().open(dir.toFile());
         } catch (IOException | RuntimeException e) {
-            error(t("Couldn't open the folder"), dir.toString());
+            error("No se pudo abrir la carpeta", dir.toString());
         }
     }
 
     /** A short reason people understand; the exception's own message is often just a path. */
     private static String reason(IOException e) {
-        if (e instanceof FileAlreadyExistsException) return t("there's already one with that name");
-        if (e instanceof AccessDeniedException) return t("access to the file was denied");
-        if (e instanceof NoSuchFileException) return t("the file is no longer there");
-        if (e instanceof CharacterCodingException) return t("it isn't UTF-8 text");
+        if (e instanceof FileAlreadyExistsException) return "ya hay uno con ese nombre";
+        if (e instanceof AccessDeniedException) return "se negó el acceso al archivo";
+        if (e instanceof NoSuchFileException) return "el archivo ya no está";
+        if (e instanceof CharacterCodingException) return "no es texto UTF-8";
         return e.getMessage() != null ? e.getMessage() : e.toString();
     }
 
     private static String count(int notes) {
-        return notes == 0 ? t("no notes") : notes == 1 ? t("1 note") : t("%d notes", notes);
+        return notes == 0 ? "sin notas" : notes == 1 ? "1 nota" : String.format("%d notas", notes);
+    }
+
+    private static Button button(String text, String icon, String style, EventHandler<ActionEvent> action) {
+        Button b = button(text, style, action);
+        b.setGraphic(Icons.of(icon, 16));
+        return b;
     }
 
     private static Button button(String text, String style, EventHandler<ActionEvent> action) {
@@ -1332,14 +1453,22 @@ public final class NotesApp extends Application {
         return item;
     }
 
-    private static MenuButton more(MenuItem... items) {
-        SVGPath dots = new SVGPath();   // three dots, on 24 units
-        dots.setContent("M5 10a2 2 0 1 0 0 4a2 2 0 1 0 0-4zm7 0a2 2 0 1 0 0 4a2 2 0 1 0 0-4zm7 0a2 2 0 1 0 0 4a2 2 0 1 0 0-4z");
-        dots.getStyleClass().add("icon");
-        MenuButton more = new MenuButton(null, dots, items);
-        more.setTooltip(new Tooltip(t("More")));
-        more.getStyleClass().addAll("flat", "more-menu");
-        return more;
+    /** The menu of what else can be done here, as a button that says so. */
+    private static MenuButton options(MenuItem... items) {
+        MenuButton options = new MenuButton("Opciones", Icons.of("options", 16), items);
+        options.getStyleClass().add("flat");
+        return options;
+    }
+
+    /** Two or more toggles joined into one control. */
+    private static HBox segmented(ToggleButton... buttons) {
+        ToggleGroup group = new ToggleGroup();
+        for (ToggleButton b : buttons) b.setToggleGroup(group);
+        buttons[0].getStyleClass().add("first");
+        buttons[buttons.length - 1].getStyleClass().add("last");
+        HBox box = new HBox(buttons);
+        box.getStyleClass().add("segmented");
+        return box;
     }
 
     private static Region grow() {
@@ -1379,23 +1508,23 @@ public final class NotesApp extends Application {
     /** Asks for a new problem's link and title: a known link suggests the title ("CF 4A", "Two Sum"). */
     private Optional<String[]> askProblem() {
         TextField link = new TextField(), title = new TextField();
-        link.setPromptText(t("https://codeforces.com/…, atcoder.jp/…, leetcode.com/… (optional)"));
+        link.setPromptText("https://codeforces.com/…, atcoder.jp/…, leetcode.com/… (opcional)");
         link.setPrefColumnCount(36);
-        title.setPromptText(t("Title"));
+        title.setPromptText("Título");
         String[] suggested = {""};
         link.textProperty().addListener((o, was, now) -> {
             if (!title.getText().isBlank() && !title.getText().equals(suggested[0])) return;   // typed by hand: keep it
             suggested[0] = Judges.fromLink(now).map(Judges.Problem::title).orElse("");
             title.setText(suggested[0]);
         });
-        Label linkName = new Label(t("Link")), titleName = new Label(t("Title"));
+        Label linkName = new Label("Enlace"), titleName = new Label("Título");
         linkName.getStyleClass().add("property-name");
         titleName.getStyleClass().add("property-name");
         Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.setTitle(t("New problem"));
-        dialog.setHeaderText(t("New problem"));
+        dialog.setTitle("Nuevo problema");
+        dialog.setHeaderText("Nuevo problema");
         style(dialog);
-        ButtonType create = new ButtonType(t("Create"), ButtonBar.ButtonData.OK_DONE);
+        ButtonType create = new ButtonType("Crear", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().setAll(create, ButtonType.CANCEL);
         dialog.getDialogPane().setContent(new VBox(6, linkName, link, titleName, title));
         dialog.getDialogPane().lookupButton(create).disableProperty().bind(title.textProperty().map(String::isBlank));
@@ -1403,7 +1532,7 @@ public final class NotesApp extends Application {
         return dialog.showAndWait().filter(b -> b == create).map(b -> new String[]{title.getText().strip(), link.getText().strip()});
     }
 
-    private record NotebookChoice(String name, NotebookType type) {
+    private record NotebookChoice(String name, NotebookType type, Period period) {
     }
 
     /** Asks for a notebook's type, and for its name when {@code withName}. */
@@ -1413,21 +1542,38 @@ public final class NotesApp extends Application {
         dialog.setHeaderText(title);
         style(dialog);
         TextField name = new TextField();
-        name.setPromptText(t("Name"));
+        name.setPromptText("Nombre");
         name.setPrefColumnCount(28);
         VBox content = new VBox(12);
         if (withName) content.getChildren().add(name);
         ToggleGroup types = new ToggleGroup();
         for (NotebookType each : NotebookType.ALL) {
-            RadioButton option = new RadioButton(t(each.name()));
+            RadioButton option = new RadioButton(each.name());
             option.setUserData(each);
             option.setToggleGroup(types);
             option.setSelected(each.equals(selected));
-            Label about = new Label(t(each.description()));
+            Label about = new Label(each.description());
             about.getStyleClass().add("type-description");
             content.getChildren().add(new VBox(2, option, about));
         }
-        ButtonType ok = new ButtonType(withName ? t("Create") : t("Change"), ButtonBar.ButtonData.OK_DONE);
+        // A course belongs to a school period; the other notebooks show under the period they were last edited in.
+        ComboBox<Period> period = periodChoice(Period.of(LocalDate.now()));
+        Label periodName = new Label("Periodo");
+        periodName.getStyleClass().add("property-name");
+        HBox periodRow = new HBox(10, periodName, period);
+        periodRow.setAlignment(Pos.CENTER_LEFT);
+        if (withName) {
+            content.getChildren().add(periodRow);
+            Runnable showPeriod = () -> {
+                boolean course = ((NotebookType) types.getSelectedToggle().getUserData()).course();
+                periodRow.setVisible(course);
+                periodRow.setManaged(course);
+                if (dialog.getDialogPane().getScene() != null) dialog.getDialogPane().getScene().getWindow().sizeToScene();
+            };
+            types.selectedToggleProperty().addListener((o, was, now) -> showPeriod.run());
+            showPeriod.run();
+        }
+        ButtonType ok = new ButtonType(withName ? "Crear" : "Cambiar", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().setAll(ok, ButtonType.CANCEL);
         dialog.getDialogPane().setContent(content);
         if (withName) {
@@ -1435,7 +1581,10 @@ public final class NotesApp extends Application {
             Platform.runLater(name::requestFocus);
         }
         return dialog.showAndWait().filter(b -> b == ok)
-                .map(b -> new NotebookChoice(name.getText().strip(), (NotebookType) types.getSelectedToggle().getUserData()));
+                .map(b -> {
+                    NotebookType chosen = (NotebookType) types.getSelectedToggle().getUserData();
+                    return new NotebookChoice(name.getText().strip(), chosen, withName && chosen.course() ? period.getValue() : null);
+                });
     }
 
     /** A yes/no question whose "yes" loses or moves something, so it shows in red. */

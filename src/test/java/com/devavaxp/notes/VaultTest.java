@@ -29,7 +29,7 @@ class VaultTest {
         assertEquals("_CON", Vault.fileName("CON"));
         assertEquals("_nul.txt", Vault.fileName("nul.txt"));
         assertEquals("Console", Vault.fileName("Console"));
-        assertEquals("Untitled", Vault.fileName(" ?? "));
+        assertEquals("Sin título", Vault.fileName(" ?? "));
         assertEquals(80, Vault.fileName("x".repeat(200)).length());
     }
 

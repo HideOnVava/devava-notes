@@ -154,9 +154,9 @@ const clipboard = EditorView.domEventHandlers({
     }
 });
 
-// The page's words, and CodeMirror's own (its search panel), in the app's language: Java sends them.
-let words = {placeholder: "Start writing…", copy: "Copy", copied: "Copied", code: "code"}, phrases = {};
-const SPANISH = {
+// The page's words, and CodeMirror's own (its search panel), in Spanish.
+const words = {placeholder: "Empieza a escribir…", copy: "Copiar", copied: "Copiado", code: "código"};
+const phrases = {
     "Find": "Buscar", "Replace": "Reemplazar", "next": "siguiente", "previous": "anterior", "all": "todas",
     "match case": "mayúsculas", "by word": "palabra completa", "regexp": "expresión regular", "replace": "reemplazar",
     "replace all": "reemplazar todas", "close": "cerrar", "Go to line": "Ir a la línea", "go": "ir",
@@ -188,10 +188,6 @@ function fold(text) {
 
 // Called by Java.
 window.setText = text => view.setState(EditorState.create({doc: text, extensions: extensions()}));
-window.setLanguage = (language, placeholderText, copy, copied, code) => {
-    words = {placeholder: placeholderText, copy, copied, code};
-    phrases = language === "es" ? SPANISH : {};
-};
 window.getText = () => view.state.doc.toString();
 window.setTitles = lines => titles = lines ? lines.split("\n") : [];
 window.setTheme = theme => document.documentElement.dataset.theme = theme;

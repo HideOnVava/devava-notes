@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Read by jpackage's main.wxs. The installer's language is Spanish (Mexico): with it, the messages
+  of Windows itself while installing come in Spanish too.
+-->
+<Include>
+  <?undef JpProductLanguage ?>
+  <?define JpProductLanguage=2058 ?>
+</Include>

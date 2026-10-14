@@ -71,6 +71,23 @@ if ($Setup) {
     if ($p.ExitCode -ne 0) { throw "Installer exit code $($p.ExitCode)" }
     $Exe = Join-Path $env:LOCALAPPDATA "Devava Notes\Devava Notes.exe"
     Write-Host "Installed: $Exe"
+
+    # The installer is in Spanish: read from the package Windows keeps of it.
+    $installer = New-Object -ComObject WindowsInstaller.Installer
+    function Invoke-Msi($o, $name, $kind, $argv) { $o.GetType().InvokeMember($name, $kind, $null, $o, $argv) }
+    $package = Invoke-Msi $installer "ProductsEx" "GetProperty" @("", "", 7) |
+        Where-Object { (Invoke-Msi $_ "InstallProperty" "GetProperty" @("ProductName")) -eq "Devava Notes" } |
+        ForEach-Object { Invoke-Msi $_ "InstallProperty" "GetProperty" @("LocalPackage") } | Select-Object -First 1
+    $db = Invoke-Msi $installer "OpenDatabase" "InvokeMethod" @([string]$package, 0)
+    $texts = foreach ($q in @("SELECT ``Text`` FROM ``Control`` WHERE ``Dialog_``='WelcomeDlg' AND ``Control``='Next'",
+                              "SELECT ``Value`` FROM ``Property`` WHERE ``Property``='ProductLanguage'")) {
+        $view = Invoke-Msi $db "OpenView" "InvokeMethod" @($q)
+        Invoke-Msi $view "Execute" "InvokeMethod" $null | Out-Null
+        Invoke-Msi (Invoke-Msi $view "Fetch" "InvokeMethod" $null) "StringData" "GetProperty" @(1)
+        Invoke-Msi $view "Close" "InvokeMethod" $null | Out-Null
+    }
+    Write-Host "Installer: next button '$($texts[0])', language $($texts[1])"
+    if ($texts[0] -notlike "*Siguiente*" -or $texts[1] -ne "2058") { throw "The installer is not in Spanish." }
 }
 if (-not (Test-Path $Exe)) { throw "Launcher not found: $Exe" }
 

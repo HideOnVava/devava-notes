@@ -14,7 +14,8 @@
     4. -Type app-image (default): copies the image to <Destination>\Devava Notes.
        -Type exe / msi: builds a per-user installer from the image into <Destination>.
        Installers need the WiX Toolset 3.x (https://github.com/wixtoolset/wix3/releases);
-       jpackage finds it through the PATH or the WIX environment variable.
+       jpackage finds it through the PATH or the WIX environment variable. They are in Spanish:
+       jpackage reads MsiInstallerStrings_es.wxl and overrides.wxi from this folder.
 
     Requirements: a full JDK 21 (with the jmods folder). The version number is read from
     pom.xml so it is defined in one place.
@@ -38,7 +39,8 @@ $ErrorActionPreference = "Stop"
 $projectDir = Split-Path $PSScriptRoot -Parent
 $appName = "Devava Notes"
 $vendor = "devava XP Studios"
-$description = "Notes in notebooks made for what you write: classes, competitive programming and more"
+# Windows shows the description as the program's name: in the Task Manager, on the shortcuts.
+$description = $appName
 $appVersion = ([xml](Get-Content (Join-Path $projectDir "pom.xml"))).project.version
 # Identifies the product across versions: a newer installer replaces an older installation
 # instead of sitting next to it. Never change it.
@@ -161,7 +163,7 @@ try {
             $link.TargetPath = $exe
             $link.WorkingDirectory = $appFolder
             $link.IconLocation = "$exe,0"
-            $link.Description = "$appName by $vendor"
+            $link.Description = "$appName de $vendor"
             $link.Save()
             Write-Host "Desktop shortcut created: $desktop\$appName.lnk"
         }
@@ -183,6 +185,7 @@ try {
             --win-menu --win-menu-group $vendor `
             --win-shortcut --win-shortcut-prompt `
             --win-upgrade-uuid $upgradeUuid `
+            --resource-dir $PSScriptRoot `
             --dest $Destination
         if ($LASTEXITCODE -ne 0) { throw "jpackage failed." }
         $installer = Get-ChildItem (Join-Path $Destination "$appName-$appVersion.$Type")
