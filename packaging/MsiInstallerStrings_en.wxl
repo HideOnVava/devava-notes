@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  jpackage's own texts of the installer (its MsiInstallerStrings_en.wxl), in Spanish. With this
-  file in the resource folder the installer is built for the es-es culture, so the dialogs of the
-  WiX Toolset come in Spanish too. They address the user as "usted", and so do these.
+  jpackage's own texts of the installer, in Spanish. jpackage reads them from the file with this
+  name and builds the installer for its culture, es-es, so the dialogs of the WiX Toolset come in
+  Spanish too (they address the user as "usted", and so do these). A file with another name would
+  be added next to the English one, and WiX refuses the same texts in two cultures.
 -->
 <WixLocalization Culture="es-es" xmlns="http://schemas.microsoft.com/wix/2006/localization" Codepage="1252">
   <String Id="message.install.dir.exist">La carpeta [INSTALLDIR] ya existe. ¿Desea instalar en ella de todos modos?</String>

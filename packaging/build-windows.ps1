@@ -15,7 +15,7 @@
        -Type exe / msi: builds a per-user installer from the image into <Destination>.
        Installers need the WiX Toolset 3.x (https://github.com/wixtoolset/wix3/releases);
        jpackage finds it through the PATH or the WIX environment variable. They are in Spanish:
-       jpackage reads MsiInstallerStrings_es.wxl and overrides.wxi from this folder.
+       jpackage reads MsiInstallerStrings_en.wxl (in Spanish) and overrides.wxi from this folder.
 
     Requirements: a full JDK 21 (with the jmods folder). The version number is read from
     pom.xml so it is defined in one place.
