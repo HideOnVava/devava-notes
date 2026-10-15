@@ -156,6 +156,7 @@ final class Editor {
     private void report(String error) {
         errors.add(error);
         System.err.println("[editor.js] " + error);
+        ErrorLog.add("[editor.js] " + error);
     }
 
     /** Shows a note (its undo history starts fresh); {@code folder} is where its relative images are. */

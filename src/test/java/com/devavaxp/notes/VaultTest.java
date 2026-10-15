@@ -33,6 +33,28 @@ class VaultTest {
         assertEquals(80, Vault.fileName("x".repeat(200)).length());
     }
 
+    /** A rename's new title in every [[link]] to the old one, its words to show kept; in code, links are text. */
+    @Test
+    void linksFollowARenamedTitle() {
+        String text = """
+                Ver [[Pilas]], [[ pilas | la pila ]] y [[Pilas y colas]]; [[Pilas]] otra vez.
+                `[[Pilas]]` en código, y \\[[Pilas]] escrito tal cual.
+
+                ```java
+                // [[Pilas]]
+                ```
+                | [[Pilas|pila]] | celda |""";
+        assertEquals("""
+                Ver [[Estructuras lineales]], [[Estructuras lineales| la pila ]] y [[Pilas y colas]]; [[Estructuras lineales]] otra vez.
+                `[[Pilas]]` en código, y \\[[Pilas]] escrito tal cual.
+
+                ```java
+                // [[Pilas]]
+                ```
+                | [[Estructuras lineales|pila]] | celda |""", Vault.relink(text, "Pilas", "Estructuras lineales"));
+        assertEquals(text, Vault.relink(text, "Colas", "Otra"));
+    }
+
     @Test
     void listsNotebooksAndNotesInNaturalOrder(@TempDir Path home) throws Exception {
         Vault vault = new Vault(home);

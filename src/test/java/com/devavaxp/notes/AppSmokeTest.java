@@ -8,6 +8,7 @@ import javafx.geometry.Point2D;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.ContextMenu;
@@ -1452,6 +1453,50 @@ class AppSmokeTest {
 
         fx(() -> run(app::save));
         assertEquals(text(engine), Files.readString(note));
+        assertEquals(List.of(), fx(() -> List.copyOf(app.editor.errors)));
+        fx(() -> run(stage::close));
+    }
+
+    /**
+     * Renaming a note takes its [[links]] along: in the notes whose link meant it, in its notebook
+     * and in others, the open one too; not where another notebook has its own note by that name.
+     */
+    @Test
+    void renamingANoteKeepsItsLinks(@TempDir Path home) throws Exception {
+        Stage[] window = new Stage[1];
+        NotesApp app = open(home, window);
+        Stage stage = window[0];
+        WebEngine engine = fx(() -> app.editor.view.getEngine());
+        Path ed = fx(() -> app.createNotebook("Estructura de Datos", NotebookType.PROGRAMMING));
+        Path ideas = fx(() -> app.createNotebook("Ideas", NotebookType.GENERAL));
+        Path other = fx(() -> app.createNotebook("Otra materia", NotebookType.CLASS_NOTES));
+        Path stacks = Files.writeString(ed.resolve("Pilas.md"), "Una pila.\n");
+        Path review = Files.writeString(ed.resolve("Repaso.md"), "Ver [[Pilas]] y [[pilas|la pila]], no `[[Pilas]]`.\n");
+        Path idea = Files.writeString(ideas.resolve("Proyecto.md"), "Usa [[Pilas]].\n");
+        Files.writeString(other.resolve("Pilas.md"), "Otras pilas.\n");
+        Path own = Files.writeString(other.resolve("Tarea.md"), "Sobre [[Pilas]] de esta materia.\n");
+        fx(() -> run(() -> {
+            app.openNotebook(ed);
+            app.openNote(review);
+        }));
+        waitFor("the note in the editor", () -> text(engine).startsWith("Ver [[Pilas]]"));
+
+        Platform.runLater(() -> app.renameNote(stacks));   // it stays in showAndWait() until the dialog closes
+        waitFor("the dialog to rename", () -> fx(() -> dialog(stage) != null));
+        Stage dialog = fx(() -> dialog(stage));
+        fx(() -> run(() -> {
+            ((TextField) dialog.getScene().lookup(".text-field")).setText("Pilas y colas");
+            ((Button) ((DialogPane) dialog.getScene().getRoot().lookup(".dialog-pane")).lookupButton(ButtonType.OK)).fire();
+        }));
+        waitFor("the note renamed", () -> Files.exists(ed.resolve("Pilas y colas.md")));
+        assertEquals("Ver [[Pilas y colas]] y [[Pilas y colas|la pila]], no `[[Pilas]]`.\n", Files.readString(review));
+        assertEquals("Usa [[Pilas y colas]].\n", Files.readString(idea));
+        assertEquals("Sobre [[Pilas]] de esta materia.\n", Files.readString(own), "the [[Pilas]] of a notebook with its own");
+        assertTrue(text(engine).startsWith("Ver [[Pilas y colas]]"), "the open note, as it is now: " + text(engine));
+
+        // Ayuda says the version and leads to Reportar un problema.
+        dialogShot(stage, "h1-help", app::showHelp, "");
+        dialogShot(stage, "h2-report", app::reportProblem, "");
         assertEquals(List.of(), fx(() -> List.copyOf(app.editor.errors)));
         fx(() -> run(stage::close));
     }

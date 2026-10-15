@@ -194,6 +194,50 @@ final class Vault {
         return Files.move(temp, target);
     }
 
+    /**
+     * A note's text with its [[links]] to one title (in any letter case, with or without |words to
+     * show) leading to another title instead. In code they are no links, as the reading view has it
+     * (Editor.setAside).
+     */
+    static String relink(String text, String from, String to) {
+        StringBuilder out = new StringBuilder();
+        String fence = null;   // the ``` or ~~~ of the code block we are in
+        int i = 0, n = text.length();
+        while (i < n) {
+            if (i == 0 || text.charAt(i - 1) == '\n') {   // a fenced code block passes whole
+                int end = text.indexOf('\n', i) < 0 ? n : text.indexOf('\n', i) + 1;
+                String line = text.substring(i, end).stripLeading();
+                if (fence != null || line.startsWith("```") || line.startsWith("~~~")) {
+                    if (fence == null) fence = line.substring(0, 3);
+                    else if (line.startsWith(fence)) fence = null;
+                    out.append(text, i, end);
+                    i = end;
+                    continue;
+                }
+            }
+            int end = i + 1;
+            if (text.charAt(i) == '\\') {
+                end = Math.min(i + 2, n);
+            } else if (text.charAt(i) == '`') {   // an inline code span, whole
+                int run = 0;
+                while (i + run < n && text.charAt(i + run) == '`') run++;
+                int close = text.indexOf("`".repeat(run), i + run);
+                end = close < 0 ? i + run : close + run;
+            } else if (text.startsWith("[[", i)) {
+                int close = text.indexOf("]]", i + 2), line = text.indexOf('\n', i);
+                String[] parts = close > i + 2 && (line < 0 || close < line) ? text.substring(i + 2, close).split("\\|", 2) : null;
+                if (parts != null && parts[0].strip().equalsIgnoreCase(from)) {
+                    out.append("[[").append(to).append(parts.length > 1 ? "|" + parts[1] : "").append("]]");
+                    i = close + 2;
+                    continue;
+                }
+            }
+            out.append(text, i, end);
+            i = end;
+        }
+        return out.toString();
+    }
+
     /** Copies an image into the notebook's attachments folder (under a new name if taken) and returns the copy. */
     static Path attach(Path notebook, Path file) throws IOException {
         String name = file.getFileName().toString();

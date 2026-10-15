@@ -122,6 +122,7 @@ final class Drawing {
             } else if (message.startsWith("error:")) {
                 errors.add(message.substring(6));
                 System.err.println("[draw.js] " + message.substring(6));
+                ErrorLog.add("[draw.js] " + message.substring(6));
             }
         });
         engine.setPromptHandler(prompt -> {   // Pegar, in Excalidraw's menu: the text, or the pictures pasted here

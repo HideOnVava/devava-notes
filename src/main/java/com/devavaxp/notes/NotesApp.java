@@ -73,7 +73,9 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.nio.charset.CharacterCodingException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
@@ -153,13 +155,32 @@ public final class NotesApp extends Application {
     private boolean dark;
     private Image icon;
 
+    /** This version, from the jar's manifest; "dev" when run from the code. */
+    static final String VERSION = Objects.requireNonNullElse(NotesApp.class.getPackage().getImplementationVersion(), "dev");
+
     public static void main(String[] args) {
         launch(args);
     }
 
     @Override
     public void start(Stage stage) {
-        show(stage, new Vault(Vault.defaultRoot()));
+        Vault vault = new Vault(Vault.defaultRoot());
+        // Already open on these notes: that window comes to the front instead of a second one.
+        if (!Instance.claim(Instance.local(), vault.root, () -> Platform.runLater(() -> toFront(stage)))) {
+            Platform.exit();
+            return;
+        }
+        ErrorLog.start(Instance.local().resolve(ErrorLog.NAME), VERSION);
+        show(stage, vault);
+    }
+
+    /** The window, in front of the others; Windows brings forward one that was behind only while it is "always on top". */
+    private static void toFront(Stage stage) {
+        stage.setIconified(false);
+        stage.setAlwaysOnTop(true);
+        stage.setAlwaysOnTop(false);
+        stage.toFront();
+        stage.requestFocus();
     }
 
     void show(Stage stage, Vault vault) {
@@ -279,6 +300,7 @@ public final class NotesApp extends Application {
                 item("Buscar en todas las notas…", this::search),
                 item("Importar un cuaderno (ZIP)…", this::importNotebook),
                 item("Abrir la carpeta de datos", () -> showInFolder(vault.root)),
+                item("Reportar un problema…", this::reportProblem),
                 new SeparatorMenuItem(), themeItem()));
         root.setCenter(homeContent(true));
         stage.setTitle(NAME);
@@ -347,13 +369,50 @@ public final class NotesApp extends Application {
         where.setWrapText(true);
         where.setMaxWidth(480);
         where.getStyleClass().add("hint");
+        Label version = new Label("Devava Notes " + VERSION + " · devava XP Studios");
+        version.getStyleClass().add("hint");
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.setTitle("Ayuda");
         dialog.setHeaderText("Atajos de teclado");
         style(dialog);
-        dialog.getDialogPane().getButtonTypes().setAll(ButtonType.CLOSE);
-        dialog.getDialogPane().setContent(new VBox(18, grid, where));
-        dialog.showAndWait();
+        ButtonType report = new ButtonType("Reportar un problema…", ButtonBar.ButtonData.LEFT);
+        dialog.getDialogPane().getButtonTypes().setAll(report, ButtonType.CLOSE);
+        dialog.getDialogPane().setContent(new VBox(18, grid, where, version));
+        if (dialog.showAndWait().orElse(ButtonType.CLOSE) == report) reportProblem();
+    }
+
+    /**
+     * Reportar un problema: GitHub's form for a new issue, filled in with this version and the last
+     * lines of the error log, to read (and change) before sending; or the whole log, to attach it.
+     */
+    void reportProblem() {
+        Label about = new Label("Se abre GitHub con una plantilla para contar qué pasó, con la versión de la app y las últimas líneas de su"
+                + " registro de errores. Revisa el texto antes de publicarlo: cualquiera puede verlo. Con «Ver el registro» puedes adjuntarlo completo.");
+        about.setWrapText(true);
+        about.setPrefWidth(460);
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Reportar un problema");
+        dialog.setHeaderText("Reportar un problema");
+        style(dialog);
+        ButtonType open = new ButtonType("Abrir GitHub", ButtonBar.ButtonData.OK_DONE), log = new ButtonType("Ver el registro", ButtonBar.ButtonData.LEFT);
+        dialog.getDialogPane().getButtonTypes().setAll(log, open, ButtonType.CANCEL);
+        dialog.getDialogPane().setContent(about);
+        ButtonType chosen = dialog.showAndWait().orElse(ButtonType.CANCEL);
+        Path file = ErrorLog.file();
+        if (chosen == open) {
+            openLink(issueLink(VERSION, file == null ? "" : ErrorLog.tail(file, 600)));
+        } else if (chosen == log) {
+            if (file != null && Files.exists(file)) showInFolder(file);
+            else error("Aún no hay registro", "No se ha registrado ningún error.");
+        }
+    }
+
+    /** The link to a new issue of the app on GitHub, its text a template with the version, the system and those lines of the log. */
+    static String issueLink(String version, String log) {
+        String body = "**Qué pasó**\n\n\n**Qué esperabas**\n\n\n**Cómo repetirlo**\n1. \n\n---\nDevava Notes " + version + " · "
+                + System.getProperty("os.name") + " " + System.getProperty("os.version") + " · Java " + System.getProperty("java.version")
+                + (log.isEmpty() ? "" : "\n\n<details><summary>Registro de errores</summary>\n\n```\n" + log + "\n```\n</details>");
+        return "https://github.com/HideOnVava/devava-notes/issues/new?body=" + URLEncoder.encode(body, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
     private CheckMenuItem themeItem() {
@@ -1281,10 +1340,12 @@ public final class NotesApp extends Application {
     void renameNote(Path p) {
         ask("Cambiar nombre de la nota", "Título", Vault.title(p)).ifPresent(title -> {
             boolean open = p.equals(note);
-            if (open && !save()) {
-                error("No se pudo cambiar el nombre de la nota", String.format("Sus últimos cambios no están guardados: %s", saveError));
+            if (note != null && !save()) {   // the open note as it is now: its links may change too
+                error("No se pudo cambiar el nombre de la nota", String.format("Los últimos cambios de “%s” no están guardados: %s",
+                        Vault.title(note), saveError));
                 return;
             }
+            List<Vault.Place> before = vault.everyNote();
             try {
                 Path renamed = Vault.rename(p, title);
                 if (open) {
@@ -1292,12 +1353,47 @@ public final class NotesApp extends Application {
                     noteTitle.setText(Vault.title(renamed));
                     fitHeader();
                 }
+                relink(before, p, renamed);
                 loadEntries(true);
                 browser.update();
+                refreshTitles();
             } catch (IOException e) {
                 error("No se pudo cambiar el nombre de la nota", reason(e));
             }
         });
+    }
+
+    /**
+     * After a rename, each [[link]] that led to the note leads to its new title: in every note whose
+     * [[old title]] meant this one, a note of its own notebook first (as openTitle finds it).
+     */
+    private void relink(List<Vault.Place> before, Path old, Path renamed) {
+        String from = Vault.title(old), to = Vault.title(renamed);
+        if (from.equalsIgnoreCase(to)) return;   // links ignore letter case: they still lead to it
+        Map<Path, Path> own = new HashMap<>();   // a notebook's note with that title
+        Path first = null;
+        for (Vault.Place place : before) {
+            if (!place.title().equalsIgnoreCase(from)) continue;
+            own.putIfAbsent(place.notebook(), place.note());
+            if (first == null) first = place.note();
+        }
+        List<String> failed = new ArrayList<>();
+        for (Vault.Place place : before) {
+            if (!old.equals(own.getOrDefault(place.notebook(), first))) continue;
+            Path file = place.note().equals(old) ? renamed : place.note();
+            try {
+                String text = Vault.read(file), linked = Vault.relink(text, from, to);
+                if (linked.equals(text)) continue;
+                Vault.write(file, linked);
+                if (file.equals(note)) display(note, Note.parse(linked), Files.getLastModifiedTime(note));
+            } catch (IOException e) {
+                failed.add(Vault.title(file));
+            }
+        }
+        if (!failed.isEmpty()) {
+            error("Algunos enlaces siguen con el nombre anterior", String.format("No se pudieron cambiar los [[%s]] de: %s. Cámbialos a [[%s]] a mano.",
+                    from, String.join(", ", failed), to));
+        }
     }
 
     void trashNote(Path p) {
@@ -1675,6 +1771,7 @@ public final class NotesApp extends Application {
         } catch (IOException e) {
             saveError = reason(e);
             status.setText(String.format("Sin guardar: %s", saveError));   // tried again on the next change or when leaving
+            ErrorLog.add("No se pudo guardar " + note + ": " + saveError);
             return false;
         }
     }
@@ -2140,7 +2237,7 @@ public final class NotesApp extends Application {
             for (Reticula.Subject s : subjects) createNotebook(new NotebookChoice(s.name(), s.type(), period, s.language(), s.key()));
             Path guide = createNotebook("Primeros pasos", NotebookType.GENERAL);
             try (var in = NotesApp.class.getResourceAsStream("guia.md")) {
-                Vault.createNote(guide, "Cómo usar Devava Notes", new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
+                Vault.createNote(guide, "Cómo usar Devava Notes", new String(in.readAllBytes(), StandardCharsets.UTF_8));
             }
         } catch (IOException e) {
             error("No se pudieron crear tus materias", reason(e));
@@ -2188,6 +2285,7 @@ public final class NotesApp extends Application {
     }
 
     private void error(String title, String message) {
+        ErrorLog.add(title + ": " + message);
         Alert alert = new Alert(Alert.AlertType.ERROR, message);
         alert.setTitle(title);
         alert.setHeaderText(title);

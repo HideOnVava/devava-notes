@@ -93,6 +93,19 @@
                     </compilerArgs>
                 </configuration>
             </plugin>
+            <!-- The jar says its version (Implementation-Version), which the app shows and reports -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.4.2</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
             <!-- Surefire 3.x is required for JUnit 5 tests to run -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
