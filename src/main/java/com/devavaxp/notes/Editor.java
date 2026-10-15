@@ -37,8 +37,8 @@ import java.util.regex.Pattern;
 /**
  * The open note, in one WebView page (editor.html): CodeMirror 6 to write it, or the note
  * rendered to read it. The page reports to Java only as alert() text ("ready", "changed",
- * "link:url", "open:title", "tag:name", "copy:text", "language:id", "draw:src", "error:message"), so no Java
- * object is ever within reach of JavaScript.
+ * "link:url", "open:title", "tag:name", "copy:text", "table:markdown", "language:id", "draw:src",
+ * "error:message"), so no Java object is ever within reach of JavaScript.
  */
 final class Editor {
 
@@ -98,6 +98,9 @@ final class Editor {
                 Platform.runLater(() -> onDraw.accept(message.substring(5)));
             } else if (message.startsWith("copy:")) {   // copy, cut and the Copy button of a code block (see main.js)
                 Clipboard.getSystemClipboard().setContent(Map.of(DataFormat.PLAIN_TEXT, message.substring(5)));
+            } else if (message.startsWith("table:")) {   // Copiar of a table: cells for Word, Excel or Docs, Markdown for the rest
+                String markdown = message.substring(6);
+                Clipboard.getSystemClipboard().setContent(Map.of(DataFormat.HTML, tableHtml(markdown), DataFormat.PLAIN_TEXT, markdown));
             } else if (message.startsWith("error:")) {
                 report(message.substring(6));
             }
@@ -220,6 +223,16 @@ final class Editor {
     /** One of the formatting bar's buttons: bold, italic, heading, list, check, link or math. */
     void format(String kind) {
         if (ready && !reading) call("format", kind);
+    }
+
+    /** A new, empty table at the cursor, its first row the header, with the cursor in its first cell. */
+    void insertTable(int columns, int rows) {
+        if (ready && !reading) call("insertTable", columns, rows);
+    }
+
+    /** A table of a note as Word, Excel and Docs paste it: with its borders. */
+    static String tableHtml(String markdown) {
+        return html(markdown).replace("<table>", "<table border=\"1\" cellpadding=\"6\" style=\"border-collapse: collapse\">");
     }
 
     /** Names of other languages the curriculum proposes (as main.js shows them too). */

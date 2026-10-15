@@ -35,6 +35,21 @@ class EditorTest {
         assertTrue(html.contains("<table>"));
     }
 
+    /** A table as the grid of the editor writes it: aligned columns, \| for a | in a cell, and math or links whose | split nothing. */
+    @Test
+    void tablesInTheReadingViewAndOnTheClipboard() {
+        String markdown = """
+                | Operador | Significado | Valor |
+                | --- | :---: | ---: |
+                | \\|\\| | o lógico | $|x|$ |
+                | [[Pilas|pila]] | push | 1 |""";
+        String html = Editor.html(markdown);
+        assertTrue(html.contains("<th>Operador</th>") && html.contains("<th align=\"center\">Significado</th>"), html);
+        assertTrue(html.contains("<td>||</td>") && html.contains("<td align=\"right\"><span class=\"math\">|x|</span></td>"), html);
+        assertTrue(html.contains("data-note=\"Pilas\">pila</a></td>"), html);
+        assertTrue(Editor.tableHtml(markdown).startsWith("<table border=\"1\" cellpadding=\"6\" style=\"border-collapse: collapse\">"));
+    }
+
     @Test
     void linksTagsAndImagesInTheReadingView(@TempDir Path folder) {
         String html = Editor.html("See [[Reading list]], [[Nowhere|a missing one]] and #books.\n\n"

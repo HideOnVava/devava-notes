@@ -148,6 +148,105 @@ html, body {
     visibility: hidden;
 }
 
+/* A table while writing: its bar, then its grid, whose cells are written in. As for a card, the
+   space around it is padding, and the cursor right before or after it shows as a line */
+#editor .cm-table {
+    position: relative;
+    padding: 10px 0;
+}
+
+#editor .cm-focused .cm-table.here-top::before, #editor .cm-focused .cm-table.here-bottom::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--accent);
+}
+
+#editor .cm-focused .cm-table.here-top::before {
+    top: 3px;
+}
+
+#editor .cm-focused .cm-table.here-bottom::after {
+    bottom: 3px;
+}
+
+#editor .cm-table-head {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 6px;
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: 10px 10px 0 0;
+    background: var(--code-head);
+    font: 12.5px/1.4 var(--font);
+    user-select: none;
+}
+
+#editor .cm-table-head .grow {
+    flex: 1;
+}
+
+#editor .cm-table-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px 3px 6px;
+    color: var(--muted);
+    font-weight: 600;
+}
+
+#editor .cm-table .more .icon {
+    stroke-width: 3;
+}
+
+#editor .cm-table-scroll {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 0 0 10px 10px;
+}
+
+#editor .cm-table table {
+    width: 100%;
+    border-collapse: collapse;
+    border-style: hidden;
+}
+
+#editor .cm-table th, #editor .cm-table td {
+    min-width: 4em;
+    height: 1.7em;
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    text-align: left;
+    vertical-align: top;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    outline: none;
+    cursor: text;
+}
+
+#editor .cm-table th {
+    background: var(--code-bg);
+    font-weight: 700;
+}
+
+#editor .cm-table th:focus, #editor .cm-table td:focus {
+    box-shadow: inset 0 0 0 2px var(--accent);
+    caret-color: var(--accent) !important;
+}
+
+#editor .cm-table th:focus::selection, #editor .cm-table td:focus::selection {
+    background: var(--selection) !important;
+}
+
+/* The cell a search found */
+#editor .cm-table .found {
+    background: var(--accent-soft);
+}
+
 /* After a drawing's link: the button that opens it to draw on it again */
 #editor .cm-draw-edit {
     display: inline-flex;
@@ -663,13 +762,23 @@ html, body {
     color: var(--muted);
 }
 
+/* A table as wide as it needs, up to the page's width, past which it scrolls sideways */
 #reading table {
+    display: block;
+    width: max-content;
+    max-width: 100%;
+    overflow-x: auto;
     border-collapse: collapse;
 }
 
 #reading th, #reading td {
     border: 1px solid var(--border);
     padding: 6px 12px;
+    vertical-align: top;
+}
+
+/* A column's alignment (| :---: |) comes as align="center"; the others start on the left */
+#reading th:not([align]) {
     text-align: left;
 }
 

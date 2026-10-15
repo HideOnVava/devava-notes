@@ -1119,6 +1119,32 @@
     -fx-text-fill: -text;
 }
 
+/* Tabla's sizes: squares to choose columns and rows, as in Word */
+.table-sizes .menu-item, .table-sizes .menu-item:focused, .table-sizes .menu-item:hover {
+    -fx-background-color: transparent;
+    -fx-padding: 8 10 10 10;
+}
+
+.sizes-title {
+    -fx-text-fill: -text;
+    -fx-font-weight: bold;
+}
+
+.size-square {
+    -fx-min-width: 18;
+    -fx-min-height: 18;
+    -fx-background-color: -surface;
+    -fx-border-color: -border-strong;
+    -fx-border-radius: 3;
+    -fx-background-radius: 3;
+    -fx-cursor: hand;
+}
+
+.size-square:on {
+    -fx-background-color: -accent-soft;
+    -fx-border-color: -accent;
+}
+
 .format-separator {
     -fx-padding: 4 5;
 }

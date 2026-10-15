@@ -18,6 +18,13 @@ La barra sobre la nota pone **negritas**, *cursivas*, títulos, listas y casilla
 
 Una fórmula, como en LaTeX: $\int_0^1 x^2\,dx = \frac{1}{3}$
 
+Una tabla, con **Tabla** en la barra o pegando celdas de Excel. Se escribe en sus celdas; Tab pasa a la siguiente y Enter a la de abajo:
+
+| Estructura | Inserta | Busca |
+| --- | :---: | :---: |
+| Arreglo | O(n) | O(1) |
+| Pila | O(1) | O(n) |
+
 Para enlazar otra nota, escribe dos corchetes y elige su título; para etiquetar una nota, escribe una palabra con #, como #ejemplo.
 
 ## Código

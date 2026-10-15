@@ -10,6 +10,7 @@ import javafx.scene.Parent;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.ContextMenu;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.DialogPane;
 import javafx.scene.control.Labeled;
@@ -24,6 +25,7 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
+import javafx.scene.layout.GridPane;
 import javafx.scene.web.WebEngine;
 import javafx.scene.web.WebView;
 import javafx.stage.Stage;
@@ -52,6 +54,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -1160,6 +1163,294 @@ class AppSmokeTest {
         fx(() -> run(stage::close));
     }
 
+    /** A note with a table between two paragraphs, its columns aligned as Markdown says. */
+    private static final String TABLE = """
+            ## Complejidad
+
+            Lo que cuesta cada operación.
+
+            | Estructura | Inserta | Busca |
+            | --- | :---: | ---: |
+            | Arreglo | O(n) | O(1) |
+            | Pila | O(1) | O(n) |
+
+            Texto después.
+            """;
+
+    /** A table is written in its cells, as a grid: the keys of a spreadsheet, its bar, and the note keeps Markdown. */
+    @Test
+    void writesInTheCellsOfATable(@TempDir Path home) throws Exception {
+        Stage[] window = new Stage[1];
+        NotesApp app = open(home, window);
+        Stage stage = window[0];
+        WebView page = fx(() -> app.editor.view);
+        WebEngine engine = page.getEngine();
+        Path notebook = fx(() -> app.createNotebook("Estructura de Datos", NotebookType.PROGRAMMING));
+        Path note = notebook.resolve("Tablas.md");
+        Files.writeString(note, TABLE);
+        fx(() -> run(() -> {
+            app.openNotebook(notebook);
+            app.openNote(note);
+        }));
+        waitFor("the grid", () -> fx(() -> (Boolean) engine.executeScript("!!document.querySelector('.cm-table tbody')")));
+        Thread.sleep(500);
+        shot(stage, "t1-table");
+        assertEquals("Estructura|Inserta|Busca/Arreglo|O(n)|O(1)/Pila|O(1)|O(n)", grid(engine));
+        assertEquals("left center right", fx(() -> engine.executeScript(
+                "[...document.querySelector('.cm-table tbody').rows[1].cells].map(c => getComputedStyle(c).textAlign).join(' ')")));
+        // The lines below it are where CodeMirror has them, so clicks land where they show.
+        assertEquals("", fx(() -> engine.executeScript("""
+                [...editorView.contentDOM.querySelectorAll('.cm-line')].map(l => {
+                    const drift = Math.round(l.getBoundingClientRect().top - editorView.lineBlockAt(editorView.posAtDOM(l)).top - editorView.documentTop);
+                    return drift ? editorView.state.doc.lineAt(editorView.posAtDOM(l)).number + ': ' + drift + 'px' : '';
+                }).filter(d => d).join(', ')""")));
+
+        // A click in a cell writes in it, and the note gets it as it is typed.
+        clickCell(page, 1, 0);
+        assertEquals("Arreglo", fx(() -> engine.executeScript("document.activeElement.textContent")));
+        typeIn(page, " dinámico");
+        assertTrue(text(engine).contains("| Arreglo dinámico | O(n) | O(1) |"), text(engine));
+        assertEquals("Arreglo dinámico", fx(() -> engine.executeScript("document.activeElement.textContent")), "the cell keeps the focus");
+
+        // Tab goes to the next cell, its text selected; Enter to the one below, and past the last row adds one.
+        key(page, KeyCode.TAB);
+        typeIn(page, "O(1)");
+        assertTrue(text(engine).contains("| Arreglo dinámico | O(1) | O(1) |"), text(engine));
+        key(page, KeyCode.ENTER);
+        assertEquals("2,1", focused(engine));
+        key(page, KeyCode.ENTER);
+        assertEquals("3,1", focused(engine));
+        assertTrue(text(engine).contains("| Pila | O(1) | O(n) |\n|  |  |  |\n"), text(engine));
+        typeIn(page, "x");
+        assertTrue(text(engine).contains("|  | x |  |"), text(engine));
+        key(page, KeyCode.BACK_SPACE);
+        // Enter on that new row, left empty: out of the table, as out of a list.
+        key(page, KeyCode.ENTER);
+        assertEquals("", focused(engine));
+        assertTrue(fx(() -> (Boolean) engine.executeScript("editorView.hasFocus")));
+        assertEquals("Estructura|Inserta|Busca/Arreglo dinámico|O(1)|O(1)/Pila|O(1)|O(n)", grid(engine));
+
+        // A | in a cell stays in it: the note escapes it. Ctrl+Z takes back what was typed.
+        clickCell(page, 2, 2);
+        typeIn(page, " | O(log n)");
+        assertTrue(text(engine).contains("| Pila | O(1) | O(n) \\| O(log n) |"), text(engine));
+        assertEquals("Estructura|Inserta|Busca/Arreglo dinámico|O(1)|O(1)/Pila|O(1)|O(n) | O(log n)", grid(engine));
+        press(page, KeyCode.Z);
+        assertTrue(text(engine).contains("| Pila | O(1) | O(n) |\n"), text(engine));
+        assertEquals("2,2", focused(engine));
+
+        // The arrows go from cell to cell, and out of the table at its edges.
+        key(page, KeyCode.UP);
+        assertEquals("1,2", focused(engine));
+        key(page, KeyCode.UP);
+        key(page, KeyCode.UP);
+        assertEquals("", focused(engine));
+        assertEquals(4, cursorLine(engine), "the empty line above the table");
+        key(page, KeyCode.DOWN);
+        assertEquals("0,0", focused(engine));
+
+        // The bar: + Fila below the cell, + Columna after it, and ⋯ for the rest.
+        clickCell(page, 1, 0);
+        bar(engine, 0, "Fila");
+        assertEquals("2,0", focused(engine));
+        assertEquals("Estructura|Inserta|Busca/Arreglo dinámico|O(1)|O(1)/||/Pila|O(1)|O(n)", grid(engine));
+        bar(engine, 0, "Columna");
+        assertEquals("2,1", focused(engine));
+        assertTrue(text(engine).contains("| Estructura |  | Inserta | Busca |\n| --- | --- | :---: | ---: |"), text(engine));
+        typeIn(page, "Borra");
+        shot(stage, "t2-table-new-row-and-column");
+        menu(engine, 0, "Quitar la columna 2");
+        assertTrue(text(engine).contains("| Estructura | Inserta | Busca |\n| --- | :---: | ---: |"), text(engine));
+        menu(engine, 0, "Quitar la fila 2");
+        assertEquals("Estructura|Inserta|Busca/Arreglo dinámico|O(1)|O(1)/Pila|O(1)|O(n)", grid(engine));
+        clickCell(page, 1, 1);
+        menu(engine, 0, "Alinear a la derecha");
+        assertTrue(text(engine).contains("| --- | ---: | ---: |"), text(engine));
+        assertEquals("right", fx(() -> engine.executeScript("getComputedStyle(document.querySelector('.cm-table tbody').rows[2].cells[1]).textAlign")));
+
+        // Copiar: a table for Word, Excel or Docs, and its Markdown for the rest.
+        Map<DataFormat, Object> saved = fx(AppSmokeTest::clipboard);
+        try {
+            bar(engine, 0, "Copiar");
+            waitFor("the table on the clipboard", () -> fx(() -> Clipboard.getSystemClipboard().hasHtml()));
+            String html = fx(() -> Clipboard.getSystemClipboard().getHtml());
+            assertTrue(html.contains("<table border=\"1\"") && html.contains("<td align=\"right\">O(1)</td>"), html);
+            assertTrue(fx(() -> Clipboard.getSystemClipboard().getString()).startsWith("| Estructura | Inserta | Busca |\n| --- | ---: |"));
+        } finally {
+            fx(() -> Clipboard.getSystemClipboard().setContent(saved));
+        }
+
+        // What Buscar finds in a cell is marked, and selected in that cell: what is typed then replaces it there.
+        fx(() -> run(() -> app.editor.selectMatch("Pila")));
+        assertEquals("Pila", fx(() -> engine.executeScript("document.querySelector('.cm-table .found')?.textContent ?? ''")));
+        waitFor("the cell found", () -> "2,0".equals(focused(engine)));
+        assertEquals("Pila", fx(() -> engine.executeScript("getSelection().toString()")));
+        typeIn(page, "Cola");
+        assertEquals("Estructura|Inserta|Busca/Arreglo dinámico|O(1)|O(1)/Cola|O(1)|O(n)", grid(engine));
+        assertTrue(text(engine).contains("| Cola | O(1) | O(n) |\n"), text(engine));
+
+        // In Vista previa, as aligned; in the dark, the same grid.
+        fx(() -> run(app::toggleMode));
+        waitFor("the table read", () -> fx(() -> (Boolean) engine.executeScript("!!document.querySelector('#reading table')")));
+        assertEquals("left right right / left right right", fx(() -> engine.executeScript("[...document.querySelectorAll('#reading tr')].slice(0, 2)"
+                + ".map(r => [...r.cells].map(c => getComputedStyle(c).textAlign.replace('-webkit-', '').replace('start', 'left')).join(' ')).join(' / ')")));
+        shot(stage, "t3-table-read");
+        fx(() -> run(() -> {
+            app.toggleMode();
+            app.setDark(true);
+        }));
+        waitFor("the editor in dark", () -> fx(() -> "dark".equals(engine.executeScript("document.documentElement.dataset.theme"))));
+        shot(stage, "t4-table-dark");
+        fx(() -> run(() -> app.setDark(false)));
+
+        fx(() -> run(app::save));
+        assertEquals(text(engine), Files.readString(note));
+        assertEquals(List.of(), fx(() -> List.copyOf(app.editor.errors)));
+        fx(() -> run(stage::close));
+    }
+
+    /**
+     * A table starts from Tabla in the bar (as many columns and rows as chosen), from cells pasted from
+     * a spreadsheet, or from its header typed and Enter; Java's buttons and pastes go in its cells.
+     */
+    @Test
+    void makesTables(@TempDir Path home) throws Exception {
+        Stage[] window = new Stage[1];
+        NotesApp app = open(home, window);
+        Stage stage = window[0];
+        WebView page = fx(() -> app.editor.view);
+        WebEngine engine = page.getEngine();
+        Path notebook = fx(() -> app.createNotebook("Fundamentos de Programación", NotebookType.PROGRAMMING));
+        Path note = notebook.resolve("Prueba de escritorio.md");
+        Files.writeString(note, """
+                Una prueba de escritorio:
+
+                - Una lista con una tabla, que se queda como texto:
+
+                  | a | b |
+                  | --- | --- |
+                  | 1 | 2 |
+
+                Datos pegados a una tabla:
+                | x | y |
+                | --- | --- |
+                | 1 | 2 |
+
+                Calificaciones:""");
+        fx(() -> run(() -> {
+            app.openNotebook(notebook);
+            app.openNote(note);
+        }));
+        waitFor("the grid", () -> fx(() -> (Boolean) engine.executeScript("!!document.querySelector('.cm-table tbody')")));
+        assertEquals(1, tableCount(engine), "the table in the list is text");
+
+        // Delete at the end of a line right before a table goes into its first cell, not its Markdown.
+        fx(() -> engine.executeScript("editorView.focus(); editorView.dispatch({selection: {anchor: editorView.state.doc.line(9).to}})"));
+        key(page, KeyCode.DELETE);
+        assertEquals("0,0", focused(engine));
+        assertTrue(text(engine).contains("Datos pegados a una tabla:\n| x | y |"), text(engine));
+
+        // Tabla, in the bar: its squares say how many columns and rows, and one is made at the cursor.
+        fx(() -> engine.executeScript("editorView.focus(); editorView.dispatch({selection: {anchor: editorView.state.doc.line(1).to}})"));
+        fx(() -> run(() -> button(stage, "Tabla").fire()));
+        waitFor("the sizes", () -> fx(() -> Window.getWindows().stream().anyMatch(w -> w instanceof ContextMenu && w.isShowing())));
+        Window sizes = fx(() -> Window.getWindows().stream().filter(w -> w instanceof ContextMenu && w.isShowing()).findFirst().orElseThrow());
+        Node square = fx(() -> sizes.getScene().getRoot().lookupAll(".size-square").stream()
+                .filter(n -> GridPane.getColumnIndex(n) == 2 && GridPane.getRowIndex(n) == 2).findFirst().orElseThrow());
+        mouse(square, MouseEvent.MOUSE_ENTERED);
+        assertTrue(fx(() -> texts(sizes)).contains("3 columnas × 3 filas"), fx(() -> texts(sizes)).toString());
+        shot(sizes, "t5-table-sizes");
+        mouse(square, MouseEvent.MOUSE_CLICKED);
+        waitFor("the new table", () -> tableCount(engine) == 2);
+        assertEquals("0,0", focused(engine));
+        assertTrue(text(engine).startsWith("Una prueba de escritorio:\n\n|  |  |  |\n| --- | --- | --- |\n|  |  |  |\n|  |  |  |\n\n- Una lista"), text(engine));
+        typeIn(page, "Paso");
+        key(page, KeyCode.TAB);
+        typeIn(page, "i");
+        key(page, KeyCode.TAB);
+        typeIn(page, "suma");
+        key(page, KeyCode.TAB);
+        typeIn(page, "1");
+        key(page, KeyCode.TAB);
+        typeIn(page, "0");
+        key(page, KeyCode.TAB);
+        typeIn(page, "0");
+        assertTrue(text(engine).contains("| Paso | i | suma |\n| --- | --- | --- |\n| 1 | 0 | 0 |\n|  |  |  |\n"), text(engine));
+
+        // Negrita in the bar, with a cell being written in: in that cell.
+        fx(() -> engine.executeScript("getSelection().selectAllChildren(document.activeElement)"));
+        fx(() -> run(() -> app.editor.format("bold")));
+        assertTrue(text(engine).contains("| 1 | 0 | **0** |"), text(engine));
+        assertEquals("1,2", focused(engine));
+
+        Map<DataFormat, Object> saved = fx(AppSmokeTest::clipboard);
+        try {
+            // A screenshot pasted in a cell: its link goes in that cell.
+            fx(() -> Clipboard.getSystemClipboard().setContent(Map.of(DataFormat.IMAGE, new WritableImage(3, 2))));
+            fx(() -> engine.executeScript("(c => { const r = document.createRange(); r.selectNodeContents(c); r.collapse(false); "
+                    + "getSelection().removeAllRanges(); getSelection().addRange(r); })(document.activeElement)"));   // the caret at the cell's end
+            press(page, KeyCode.V);
+            waitFor("the picture in the cell", () -> Pattern.compile("\\| 1 \\| 0 \\| \\*\\*0\\*\\*!\\[]\\(<attachments/Imagen pegada [^>]+\\.png>\\) \\|\n")
+                    .matcher(text(engine)).find());
+            assertEquals("1,2", focused(engine));
+
+            // Cells from a spreadsheet, pasted in a cell: from there on, adding the rows that do not fit.
+            clickCell(page, 1, 1);
+            fx(() -> Clipboard.getSystemClipboard().setContent(Map.of(DataFormat.PLAIN_TEXT, "7\t8\n9\t10\n11\t12\n")));
+            press(page, KeyCode.V);
+            assertEquals("Paso|i|suma/1|7|8/|9|10/|11|12", grid(engine));
+
+            // Pasted outside a table, they make one, the first row its header; Ctrl+Z leaves what was pasted.
+            fx(() -> engine.executeScript("editorView.focus(); editorView.dispatch({selection: {anchor: editorView.state.doc.length}})"));
+            fx(() -> Clipboard.getSystemClipboard().setContent(Map.of(DataFormat.PLAIN_TEXT, "Nombre\tCalificación\r\nAna\t95\r\nLuis\t88\r\n")));
+            press(page, KeyCode.V);
+            waitFor("the pasted table", () -> tableCount(engine) == 3);
+            assertTrue(text(engine).endsWith("Calificaciones:\n\n| Nombre | Calificación |\n| --- | --- |\n| Ana | 95 |\n| Luis | 88 |"), text(engine));
+            shot(stage, "t6-table-pasted");
+            press(page, KeyCode.Z);
+            assertTrue(text(engine).endsWith("Calificaciones:Nombre\tCalificación\nAna\t95\nLuis\t88\n"), text(engine));
+            press(page, KeyCode.Z);
+            assertTrue(text(engine).endsWith("Calificaciones:"), text(engine));
+        } finally {
+            fx(() -> Clipboard.getSystemClipboard().setContent(saved));
+        }
+
+        // A header typed, then Enter: the table to fill in, from its first row.
+        fx(() -> engine.executeScript("editorView.dispatch({changes: {from: editorView.state.doc.length, insert: '\\n\\n'}, "
+                + "selection: {anchor: editorView.state.doc.length + 2}})"));
+        typeIn(page, "| i | x | x < 3 |");
+        key(page, KeyCode.ENTER);
+        assertEquals("1,0", focused(engine));
+        assertTrue(text(engine).endsWith("Calificaciones:\n\n| i | x | x < 3 |\n| --- | --- | --- |\n|  |  |  |"), text(engine));
+
+        // ↑ from the text right below a table goes into its last row; Esc leaves it, below.
+        int below = fx(() -> ((Number) engine.executeScript("editorView.state.doc.line(8).from")).intValue());
+        fx(() -> engine.executeScript("editorView.focus(); editorView.dispatch({selection: {anchor: " + below + "}})"));
+        assertEquals("", fx(() -> engine.executeScript("editorView.state.doc.line(8).text")), "the empty line below the first table");
+        key(page, KeyCode.UP);
+        assertEquals("3,0", focused(engine));
+        key(page, KeyCode.ESCAPE);
+        assertEquals("", focused(engine));
+        assertEquals(8, cursorLine(engine));
+        shot(stage, "t7-tables");
+
+        fx(() -> run(app::save));
+        assertEquals(text(engine), Files.readString(note));
+        assertEquals(List.of(), fx(() -> List.copyOf(app.editor.errors)));
+        fx(() -> run(stage::close));
+    }
+
+    private static int tableCount(WebEngine engine) throws Exception {
+        return fx(() -> ((Number) engine.executeScript("document.querySelectorAll('.cm-table').length")).intValue());
+    }
+
+    /** The mouse on a node, as JavaFX sends it. */
+    private static void mouse(Node node, EventType<MouseEvent> type) throws Exception {
+        fx(() -> run(() -> node.fireEvent(new MouseEvent(type, 4, 4, 0, 0, MouseButton.PRIMARY, type == MouseEvent.MOUSE_CLICKED ? 1 : 0,
+                false, false, false, false, false, false, false, false, false, true, null))));
+        Thread.sleep(300);
+    }
+
     /**
      * Home shows this school period's subjects, and apart from them the free notebooks, which have no
      * period; the earlier subjects fold away until asked for.
@@ -1299,6 +1590,62 @@ class AppSmokeTest {
     private static CheckBox checkBox(Stage stage, String text) {
         return stage.getScene().getRoot().lookupAll(".check-box").stream().map(CheckBox.class::cast)
                 .filter(b -> text.equals(b.getText())).findFirst().orElseThrow();
+    }
+
+    /** The note as the editor has it now. */
+    private static String text(WebEngine engine) throws Exception {
+        return fx(() -> (String) engine.executeScript("editorView.state.doc.toString()"));
+    }
+
+    /** The first table's grid as shown: its rows, / between them, and | between cells. */
+    private static String grid(WebEngine engine) throws Exception {
+        return fx(() -> (String) engine.executeScript(
+                "[...document.querySelector('.cm-table tbody').rows].map(r => [...r.cells].map(c => c.textContent).join('|')).join('/')"));
+    }
+
+    /** The cell being written in, as row,column; "" when it is no cell. */
+    private static String focused(WebEngine engine) throws Exception {
+        return fx(() -> (String) engine.executeScript(
+                "(c => c.matches('th, td') ? c.parentElement.rowIndex + ',' + c.cellIndex : '')(document.activeElement)"));
+    }
+
+    /** A click near the end of a cell of the first table, where its text ends. */
+    private static void clickCell(WebView page, int row, int col) throws Exception {
+        String[] xy = fx(() -> (String) page.getEngine().executeScript(("(() => { const c = document.querySelector('.cm-table tbody').rows[%d].cells[%d]; "
+                + "c.scrollIntoView({block: 'nearest'}); const r = c.getBoundingClientRect(); return (r.right - 6) + ',' + (r.top + r.height / 2); })()")
+                .formatted(row, col))).split(",");
+        click(page, Double.parseDouble(xy[0]), Double.parseDouble(xy[1]));
+    }
+
+    /** A button of the bar of the nth table, by what it says. */
+    private static void bar(WebEngine engine, int table, String label) throws Exception {
+        fx(() -> engine.executeScript(("[...document.querySelectorAll('.cm-table')[%d].querySelectorAll('.cm-table-head button')]"
+                + ".find(b => b.textContent === '%s').click()").formatted(table, label)));
+        Thread.sleep(150);
+    }
+
+    /** An option of the ⋯ menu of the nth table. */
+    private static void menu(WebEngine engine, int table, String option) throws Exception {
+        fx(() -> engine.executeScript("document.querySelectorAll('.cm-table')[%d].querySelector('.more').click()".formatted(table)));
+        Thread.sleep(150);
+        fx(() -> engine.executeScript("[...document.querySelectorAll('.table-menu .option')].find(o => o.querySelector('.name').textContent === '%s').click()"
+                .formatted(option)));
+        Thread.sleep(150);
+    }
+
+    /** Text typed on the keyboard, a key at a time. */
+    private static void typeIn(WebView page, String text) throws Exception {
+        fx(() -> run(() -> {
+            for (char ch : text.toCharArray()) {
+                String s = String.valueOf(ch);
+                KeyCode code = ch == ' ' ? KeyCode.SPACE : Character.isLetterOrDigit(ch) && ch < 128
+                        ? KeyCode.getKeyCode(s.toUpperCase()) : KeyCode.UNDEFINED;
+                page.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED, "", "", code, false, false, false, false));
+                page.fireEvent(new KeyEvent(KeyEvent.KEY_TYPED, s, "", KeyCode.UNDEFINED, false, false, false, false));
+                page.fireEvent(new KeyEvent(KeyEvent.KEY_RELEASED, "", "", code, false, false, false, false));
+            }
+        }));
+        Thread.sleep(200);
     }
 
     /** The card of a notebook on Home. */

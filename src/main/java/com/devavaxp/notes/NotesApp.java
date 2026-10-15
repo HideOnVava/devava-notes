@@ -6,11 +6,13 @@ import com.devavaxp.notes.NotebookView.Entry;
 import javafx.animation.PauseTransition;
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.css.PseudoClass;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
 import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
+import javafx.geometry.Side;
 import javafx.geometry.VPos;
 import javafx.scene.Node;
 import javafx.scene.Scene;
@@ -23,6 +25,7 @@ import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.ContextMenu;
+import javafx.scene.control.CustomMenuItem;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
@@ -327,7 +330,8 @@ public final class NotesApp extends Application {
                 {"Ctrl+F", "Buscar y reemplazar dentro de la nota"},
                 {"Ctrl+B, Ctrl+I", "Negrita y cursiva; la barra sobre la nota tiene lo demás"},
                 {"```java", "Un bloque de código al escribir ``` y su lenguaje, y luego Enter"},
-                {"Ctrl+V", "Pegar texto, o una imagen como una captura de pantalla"},
+                {"Ctrl+V", "Pegar texto, una imagen como una captura de pantalla, o celdas de Excel como tabla"},
+                {"Tab, Enter", "En una tabla: la celda siguiente y la de abajo, que agrega filas al final"},
                 {"[[", "Enlazar otra nota: escribe [[ y elige su título"},
                 {"Ctrl+clic", "Abrir el [[enlace]] que está bajo el ratón"},
                 {"#tema", "Etiquetar la nota desde su texto"}};
@@ -1030,6 +1034,7 @@ public final class NotesApp extends Application {
                 formatSeparator(),
                 formatButton("Lista", Icons.of("list", 15), "Lista con viñetas", () -> editor.format("list")),
                 formatButton("Casilla", Icons.of("task", 15), "Lista de pendientes, con casillas para marcar", () -> editor.format("check")),
+                tableButton(),
                 formatSeparator(),
                 formatButton("Enlace", Icons.of("link", 15), "Enlace a otra nota: elige su título", () -> editor.format("link")),
                 formatButton("Imagen", Icons.of("image", 15), "Agrega una imagen desde un archivo", this::chooseImages),
@@ -1040,6 +1045,40 @@ public final class NotesApp extends Application {
         formatBar.getStyleClass().add("format-bar");
         formatBar.setAlignment(Pos.CENTER_LEFT);
         formatBar.widthProperty().addListener((o, was, width) -> fitFormatBar());
+    }
+
+    private static final PseudoClass ON = PseudoClass.getPseudoClass("on");
+
+    /** Tabla: a grid of squares, as Word's, to choose how many columns and rows a new table starts with. */
+    private Button tableButton() {
+        Button table = formatButton("Tabla", Icons.of("table", 15), "Tabla: elige cuántas columnas y filas", () -> { });
+        Label size = new Label("Elige columnas y filas");
+        size.getStyleClass().add("sizes-title");
+        GridPane squares = new GridPane();
+        squares.setHgap(3);
+        squares.setVgap(3);
+        ContextMenu menu = new ContextMenu(new CustomMenuItem(new VBox(8, size, squares), false));
+        menu.getStyleClass().add("table-sizes");
+        for (int r = 1; r <= 8; r++) {
+            for (int c = 1; c <= 8; c++) {
+                int columns = c, rows = r;
+                Region square = new Region();
+                square.getStyleClass().add("size-square");
+                square.setOnMouseEntered(e -> {
+                    size.setText(columns + (columns == 1 ? " columna × " : " columnas × ") + rows + (rows == 1 ? " fila" : " filas"));
+                    squares.getChildren().forEach(s -> s.pseudoClassStateChanged(ON,
+                            GridPane.getColumnIndex(s) < columns && GridPane.getRowIndex(s) < rows));
+                });
+                square.setOnMouseClicked(e -> {
+                    menu.hide();
+                    editor.insertTable(columns, rows);
+                    editor.focus();
+                });
+                squares.add(square, c - 1, r - 1);
+            }
+        }
+        table.setOnAction(e -> menu.show(table, Side.BOTTOM, 0, 4));
+        return table;
     }
 
     private Button formatButton(String text, Node graphic, String tip, Runnable action) {
