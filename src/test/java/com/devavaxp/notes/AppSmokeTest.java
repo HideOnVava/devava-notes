@@ -1461,7 +1461,9 @@ class AppSmokeTest {
 
     /**
      * Renaming a note takes its [[links]] along: in the notes whose link meant it, in its notebook
-     * and in others, the open one too; not where another notebook has its own note by that name.
+     * and in others, the open one too (read in Vista previa, its link found); not where another
+     * notebook has its own note by the old name, and not where the new name leads to another note,
+     * which the user is told.
      */
     @Test
     void renamingANoteKeepsItsLinks(@TempDir Path home) throws Exception {
@@ -1470,42 +1472,102 @@ class AppSmokeTest {
         Stage stage = window[0];
         WebEngine engine = fx(() -> app.editor.view.getEngine());
         Path ed = fx(() -> app.createNotebook("Estructura de Datos", NotebookType.PROGRAMMING));
+        Path physics = fx(() -> app.createNotebook("Física", NotebookType.CLASS_NOTES));
         Path ideas = fx(() -> app.createNotebook("Ideas", NotebookType.GENERAL));
         Path other = fx(() -> app.createNotebook("Otra materia", NotebookType.CLASS_NOTES));
-        Path stacks = Files.writeString(ed.resolve("Pilas.md"), "Una pila.\n");
-        Path review = Files.writeString(ed.resolve("Repaso.md"), "Ver [[Pilas]] y [[pilas|la pila]], no `[[Pilas]]`.\n");
+        Path stacks = Files.writeString(ed.resolve("Pilas.md"), "Una pila: [[Pilas]] soy yo.\n");
+        Path review = Files.writeString(ed.resolve("Repaso.md"), "Ver [[Pilas]] y [[pilas|la pila]], no `[[Pilas]]`.\r\n");
+        Files.writeString(physics.resolve("Pilas y colas.md"), "Las de Física.\n");
+        Path lab = Files.writeString(physics.resolve("Lab.md"), "En el lab, [[Pilas]].\n");
         Path idea = Files.writeString(ideas.resolve("Proyecto.md"), "Usa [[Pilas]].\n");
+        Path locked = Files.writeString(ideas.resolve("Bloqueada.md"), "También [[Pilas]].\n");
+        Files.setAttribute(locked, "dos:readonly", true);   // as a note another program holds
+        Files.write(ideas.resolve("Latin.md"), "Ni un enlace, y en Latin-1: ñ".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
         Files.writeString(other.resolve("Pilas.md"), "Otras pilas.\n");
         Path own = Files.writeString(other.resolve("Tarea.md"), "Sobre [[Pilas]] de esta materia.\n");
         fx(() -> run(() -> {
             app.openNotebook(ed);
             app.openNote(review);
+            app.toggleMode();
         }));
-        waitFor("the note in the editor", () -> text(engine).startsWith("Ver [[Pilas]]"));
+        waitFor("the note read", () -> fx(() -> "Pilas".equals(engine.executeScript("document.querySelector('#reading a.wikilink')?.dataset.note"))));
 
-        Platform.runLater(() -> app.renameNote(stacks));   // it stays in showAndWait() until the dialog closes
+        Platform.runLater(() -> app.renameNote(stacks));   // it stays in showAndWait() until the dialogs close
         waitFor("the dialog to rename", () -> fx(() -> dialog(stage) != null));
         Stage dialog = fx(() -> dialog(stage));
         fx(() -> run(() -> {
             ((TextField) dialog.getScene().lookup(".text-field")).setText("Pilas y colas");
             ((Button) ((DialogPane) dialog.getScene().getRoot().lookup(".dialog-pane")).lookupButton(ButtonType.OK)).fire();
         }));
-        // Asked on JavaFX's thread: the rename and the links it changes are done by then.
-        waitFor("the note renamed", () -> fx(() -> Files.exists(ed.resolve("Pilas y colas.md"))));
-        assertEquals("Ver [[Pilas y colas]] y [[Pilas y colas|la pila]], no `[[Pilas]]`.\n", Files.readString(review));
+        // Física's [[Pilas]] stays: there [[Pilas y colas]] is Física's own note. The user is told.
+        waitFor("what is told", () -> fx(() -> dialog(stage) != null && texts(dialog(stage)).contains("Algunos enlaces siguen como [[Pilas]]")));
+        Stage told = fx(() -> dialog(stage));
+        String said = fx(() -> String.join(" ", texts(told)));
+        assertTrue(said.contains("En “Lab”, [[Pilas y colas]] llevaría a otra nota que se llama igual: ahí quedó [[Pilas]]."), said);
+        assertTrue(said.contains("No se pudieron cambiar en “Bloqueada”: cámbialos a [[Pilas y colas]] a mano."), said);
+        assertFalse(said.contains("Latin"), "a note with no such link is not mentioned, even one it cannot read: " + said);
+        shot(told, "h5-links-kept");
+        fx(() -> run(() -> ((Button) ((DialogPane) told.getScene().getRoot().lookup(".dialog-pane")).lookupButton(ButtonType.OK)).fire()));
+
+        waitFor("the note renamed", () -> fx(() -> Files.exists(ed.resolve("Pilas y colas.md")) && dialog(stage) == null));
+        assertEquals("Ver [[Pilas y colas]] y [[Pilas y colas|la pila]], no `[[Pilas]]`.\r\n", Files.readString(review));
+        assertEquals("Una pila: [[Pilas y colas]] soy yo.\n", Files.readString(ed.resolve("Pilas y colas.md")), "its own link to itself");
         assertEquals("Usa [[Pilas y colas]].\n", Files.readString(idea));
+        assertEquals("En el lab, [[Pilas]].\n", Files.readString(lab), "where the new title is another note's");
+        assertEquals("También [[Pilas]].\n", Files.readString(locked), "the note that could not be written");
+        Files.setAttribute(locked, "dos:readonly", false);
         assertEquals("Sobre [[Pilas]] de esta materia.\n", Files.readString(own), "the [[Pilas]] of a notebook with its own");
+        // The open note, read: its links lead to the renamed note, which is there.
+        waitFor("the note read again", () -> fx(() -> (Boolean) engine.executeScript(
+                "(a => a.dataset.note === 'Pilas y colas' && !a.classList.contains('missing'))(document.querySelector('#reading a.wikilink'))")));
+        fx(() -> run(app::toggleMode));
         assertTrue(text(engine).startsWith("Ver [[Pilas y colas]]"), "the open note, as it is now: " + text(engine));
+
+        // Back to the old name, and nothing is left to tell.
+        Path renamed = ed.resolve("Pilas y colas.md");
+        Platform.runLater(() -> app.renameNote(renamed));
+        waitFor("the dialog to rename", () -> fx(() -> dialog(stage) != null));
+        Stage again = fx(() -> dialog(stage));
+        fx(() -> run(() -> {
+            ((TextField) again.getScene().lookup(".text-field")).setText("Pilas");
+            ((Button) ((DialogPane) again.getScene().getRoot().lookup(".dialog-pane")).lookupButton(ButtonType.OK)).fire();
+        }));
+        waitFor("the old name back", () -> fx(() -> Files.exists(ed.resolve("Pilas.md")) && dialog(stage) == null));
+        assertEquals("Usa [[Pilas]].\n", Files.readString(idea));
+        assertEquals("En el lab, [[Pilas]].\n", Files.readString(lab));
+
+        // A name a [[link]] cannot hold, [[Pilas [1]]] being one to "Pilas [1": the links stay, and the user is told.
+        Platform.runLater(() -> app.renameNote(ed.resolve("Pilas.md")));
+        waitFor("the dialog to rename", () -> fx(() -> dialog(stage) != null));
+        Stage bracket = fx(() -> dialog(stage));
+        fx(() -> run(() -> {
+            ((TextField) bracket.getScene().lookup(".text-field")).setText("Pilas [1]");
+            ((Button) ((DialogPane) bracket.getScene().getRoot().lookup(".dialog-pane")).lookupButton(ButtonType.OK)).fire();
+        }));
+        waitFor("what is told", () -> fx(() -> dialog(stage) != null && texts(dialog(stage)).contains("Algunos enlaces siguen como [[Pilas]]")));
+        Stage cannot = fx(() -> dialog(stage));
+        assertTrue(fx(() -> String.join(" ", texts(cannot))).contains("Un [[enlace]] no puede llevar a “Pilas [1]”"));
+        fx(() -> run(() -> ((Button) ((DialogPane) cannot.getScene().getRoot().lookup(".dialog-pane")).lookupButton(ButtonType.OK)).fire()));
+        waitFor("that rename done", () -> fx(() -> Files.exists(ed.resolve("Pilas [1].md")) && dialog(stage) == null));
+        assertEquals("Usa [[Pilas]].\n", Files.readString(idea));
 
         // A newer version on GitHub: its button in the bar.
         fx(() -> run(() -> app.showUpdate(new Updates.Release("9.9.9", Updates.RELEASES + "tag/v9.9.9"))));
-        assertTrue(fx(() -> texts(stage)).contains("Versión 9.9.9"));
+        assertTrue(fx(() -> texts(stage)).contains("Nueva versión 9.9.9"));
         shot(stage, "h3-update");
         fx(() -> run(app::showHome));
-        assertTrue(fx(() -> texts(stage)).contains("Versión 9.9.9"), "on Home too");
+        assertTrue(fx(() -> texts(stage)).contains("Nueva versión 9.9.9"), "on Home too");
         shot(stage, "h4-update-home");
+        fx(() -> run(() -> app.setDark(true)));
+        shot(stage, "h6-update-dark");
+        fx(() -> run(() -> app.setDark(false)));
 
         // Ayuda says the version and leads to Reportar un problema.
+        Platform.runLater(app::showHelp);
+        waitFor("Ayuda", () -> fx(() -> dialog(stage) != null));
+        assertTrue(fx(() -> texts(dialog(stage))).contains("Devava Notes dev · devava XP Studios"));
+        fx(() -> run(() -> ((Button) ((DialogPane) dialog(stage).getScene().getRoot().lookup(".dialog-pane")).lookupButton(ButtonType.CLOSE)).fire()));
+        waitFor("Ayuda closed", () -> fx(() -> dialog(stage) == null));
         dialogShot(stage, "h1-help", app::showHelp, "");
         dialogShot(stage, "h2-report", app::reportProblem, "");
         assertEquals(List.of(), fx(() -> List.copyOf(app.editor.errors)));
@@ -1537,8 +1599,9 @@ class AppSmokeTest {
         Path fp = fx(() -> app.createNotebook("Fundamentos de Programación", NotebookType.CLASS_NOTES));
         Vault.setMeta(fp, "period", before.toString());
         fx(() -> run(app::showHome));
-        assertTrue(fx(() -> texts(stage)).containsAll(List.of("Cuadernos libres", "Nuevo cuaderno libre",
-                "Para lo que no es de una materia: ideas, proyectos, la residencia…")));   // what they are for, while there are none
+        // Home's cards are in a scroll pane, whose content is there once a pulse has drawn it.
+        waitFor("what free notebooks are for, while there are none", () -> fx(() -> texts(stage)).containsAll(List.of("Cuadernos libres",
+                "Nuevo cuaderno libre", "Para lo que no es de una materia: ideas, proyectos, la residencia…")));
         fx(() -> app.createNotebook("Ideas", NotebookType.GENERAL));
         Path contests = fx(() -> app.createNotebook("Concursos", NotebookType.COMPETITIVE_PROGRAMMING));
         Vault.setMeta(contests, "period", before.toString());   // as 2.0 let any notebook have one
@@ -1566,7 +1629,7 @@ class AppSmokeTest {
         waitFor("the free notebook", () -> Files.isDirectory(residency) && Vault.type(residency) == NotebookType.GENERAL);
         assertEquals("", Vault.meta(residency, "period"));
         fx(() -> run(app::showHome));
-        assertTrue(fx(() -> texts(stage)).containsAll(List.of("Residencia Profesional", "3 cuadernos", "1 materia")));
+        waitFor("the new free notebook on Home", () -> fx(() -> texts(stage)).containsAll(List.of("Residencia Profesional", "3 cuadernos", "1 materia")));
 
         fx(() -> run(() -> stage.getScene().getRoot().lookupAll(".button").stream().map(Button.class::cast)
                 .filter(b -> b.getText() != null && b.getText().startsWith("Semestres anteriores")).findFirst().orElseThrow().fire()));

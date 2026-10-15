@@ -117,12 +117,10 @@ final class Drawing {
                 try {
                     Vault.write(library, message.substring(8));
                 } catch (IOException ex) {
-                    errors.add("the library: " + ex.getMessage());
+                    failed("the library: " + ex.getMessage());
                 }
             } else if (message.startsWith("error:")) {
-                errors.add(message.substring(6));
-                System.err.println("[draw.js] " + message.substring(6));
-                ErrorLog.add("[draw.js] " + message.substring(6));
+                failed(message.substring(6));
             }
         });
         engine.setPromptHandler(prompt -> {   // Pegar, in Excalidraw's menu: the text, or the pictures pasted here
@@ -175,7 +173,7 @@ final class Drawing {
             try {
                 call("addImage", Base64.getEncoder().encodeToString(NotesApp.png(clip.getImage())), "image/png", true);
             } catch (IOException e) {
-                errors.add("the pasted picture: " + e.getMessage());
+                failed("the pasted picture: " + e.getMessage());
             }
         }
     }
@@ -187,8 +185,15 @@ final class Drawing {
         try {
             call("addImage", Base64.getEncoder().encodeToString(Files.readAllBytes(file)), type, pasted);
         } catch (IOException e) {
-            errors.add(file + ": " + e.getMessage());
+            failed(file + ": " + e.getMessage());
         }
+    }
+
+    /** What failed in the window: for the tests, on stderr and in the error log. */
+    private void failed(String what) {
+        errors.add(what);
+        System.err.println("[draw.js] " + what);
+        ErrorLog.add("[draw.js] " + what);
     }
 
     /** Closes the window, after asking when that loses what was drawn. */

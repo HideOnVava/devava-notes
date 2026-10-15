@@ -161,7 +161,14 @@ public final class NotesApp extends Application {
     static final String VERSION = Objects.requireNonNullElse(NotesApp.class.getPackage().getImplementationVersion(), "dev");
 
     public static void main(String[] args) {
+        System.setProperty("java.net.useSystemProxies", "true");   // the proxy Windows has (a school's network), as browsers do
         launch(args);
+    }
+
+    /** As the app ends: another launch may open at once. */
+    @Override
+    public void stop() {
+        Instance.release();
     }
 
     @Override
@@ -177,9 +184,9 @@ public final class NotesApp extends Application {
         Updates.check(VERSION, release -> Platform.runLater(() -> showUpdate(release)));
     }
 
-    /** A newer version on GitHub: its button in the bar, "Versión 2.2.0", to its page. */
+    /** A newer version on GitHub: its button in the bar, "Nueva versión 2.2.0", to its page. */
     void showUpdate(Updates.Release release) {
-        update.setText("Versión " + release.version());
+        update.setText("Nueva versión " + release.version());
         update.setTooltip(new Tooltip("Hay una versión nueva de Devava Notes: descárgala e instálala sobre esta; tus notas se quedan"));
         update.setOnAction(e -> openLink(release.page()));
         update.setVisible(true);
@@ -401,7 +408,8 @@ public final class NotesApp extends Application {
      */
     void reportProblem() {
         Label about = new Label("Se abre GitHub con una plantilla para contar qué pasó, con la versión de la app y las últimas líneas de su"
-                + " registro de errores. Revisa el texto antes de publicarlo: cualquiera puede verlo. Con «Ver el registro» puedes adjuntarlo completo.");
+                + " registro de errores. Revisa el texto antes de publicarlo: cualquiera puede verlo. Hace falta una cuenta de GitHub, que es"
+                + " gratis. Con «Ver el registro» puedes adjuntarlo completo.");
         about.setWrapText(true);
         about.setPrefWidth(460);
         Dialog<ButtonType> dialog = new Dialog<>();
@@ -414,19 +422,36 @@ public final class NotesApp extends Application {
         ButtonType chosen = dialog.showAndWait().orElse(ButtonType.CANCEL);
         Path file = ErrorLog.file();
         if (chosen == open) {
-            openLink(issueLink(VERSION, file == null ? "" : ErrorLog.tail(file, 600)));
+            openLink(issueLink(VERSION, file == null ? "" : ErrorLog.tail(file, 1500)));
         } else if (chosen == log) {
-            if (file != null && Files.exists(file)) showInFolder(file);
-            else error("Aún no hay registro", "No se ha registrado ningún error.");
+            if (file == null || !Files.exists(file)) {
+                error("Aún no hay registro", "No se ha registrado ningún error.");
+                return;
+            }
+            try {
+                Desktop.getDesktop().open(file.toFile());   // in the Notepad, say
+            } catch (IOException | RuntimeException e) {
+                showInFolder(file.getParent());   // no program for .log files: its folder
+            }
         }
     }
 
-    /** The link to a new issue of the app on GitHub, its text a template with the version, the system and those lines of the log. */
+    /** How long a link may be for Windows to pass it whole to the browser (rundll32, which JavaFX opens links with). */
+    static final int LONGEST_LINK = 2000;
+
+    /**
+     * The link to a new issue of the app on GitHub, its text a template with the version, the system
+     * and the last lines of the log that fit in such a link.
+     */
     static String issueLink(String version, String log) {
-        String body = "**Qué pasó**\n\n\n**Qué esperabas**\n\n\n**Cómo repetirlo**\n1. \n\n---\nDevava Notes " + version + " · "
-                + System.getProperty("os.name") + " " + System.getProperty("os.version") + " · Java " + System.getProperty("java.version")
-                + (log.isEmpty() ? "" : "\n\n<details><summary>Registro de errores</summary>\n\n```\n" + log + "\n```\n</details>");
-        return "https://github.com/HideOnVava/devava-notes/issues/new?body=" + URLEncoder.encode(body, StandardCharsets.UTF_8).replace("+", "%20");
+        while (true) {
+            String body = "**Qué pasó**\n\n\n**Qué esperabas**\n\n\n**Cómo repetirlo**\n1. \n\n---\nDevava Notes " + version + " · "
+                    + System.getProperty("os.name") + " " + System.getProperty("os.version") + " · Java " + System.getProperty("java.version")
+                    + (log.isEmpty() ? "" : "\n\n<details><summary>Registro de errores</summary>\n\n```\n" + log + "\n```\n</details>");
+            String link = "https://github.com/HideOnVava/devava-notes/issues/new?body=" + URLEncoder.encode(body, StandardCharsets.UTF_8).replace("+", "%20");
+            if (link.length() <= LONGEST_LINK || log.isEmpty()) return link;
+            log = log.indexOf('\n') < 0 ? "" : log.substring(log.indexOf('\n') + 1);   // the oldest line goes
+        }
     }
 
     private CheckMenuItem themeItem() {
@@ -1367,10 +1392,11 @@ public final class NotesApp extends Application {
                     noteTitle.setText(Vault.title(renamed));
                     fitHeader();
                 }
+                refreshTitles();   // first: a note shown again shows its links as they are now
                 relink(before, p, renamed);
                 loadEntries(true);
                 browser.update();
-                refreshTitles();
+                if (reading && note != null) editor.setReading(true);
             } catch (IOException e) {
                 error("No se pudo cambiar el nombre de la nota", reason(e));
             }
@@ -1379,35 +1405,49 @@ public final class NotesApp extends Application {
 
     /**
      * After a rename, each [[link]] that led to the note leads to its new title: in every note whose
-     * [[old title]] meant this one, a note of its own notebook first (as openTitle finds it).
+     * [[old title]] meant this one (Vault.linkTarget). Not where [[new title]] would lead to another
+     * note, nor when the new title cannot be a link: those keep the old one, and the user is told.
      */
     private void relink(List<Vault.Place> before, Path old, Path renamed) {
         String from = Vault.title(old), to = Vault.title(renamed);
         if (from.equalsIgnoreCase(to)) return;   // links ignore letter case: they still lead to it
-        Map<Path, Path> own = new HashMap<>();   // a notebook's note with that title
-        Path first = null;
+        List<Vault.Place> after = vault.everyNote();
+        Map<Path, Path> meant = new HashMap<>(), will = new HashMap<>();   // by notebook: where [[from]] led, where [[to]] will lead
+        List<String> failed = new ArrayList<>(), elsewhere = new ArrayList<>();
+        boolean linkable = !to.contains("]]") && !to.endsWith("]");   // [[Tarea [1]]] reads as a link to "Tarea [1"
+        boolean unlinkable = false;
         for (Vault.Place place : before) {
-            if (!place.title().equalsIgnoreCase(from)) continue;
-            own.putIfAbsent(place.notebook(), place.note());
-            if (first == null) first = place.note();
-        }
-        List<String> failed = new ArrayList<>();
-        for (Vault.Place place : before) {
-            if (!old.equals(own.getOrDefault(place.notebook(), first))) continue;
+            Path dir = place.notebook();
+            if (!old.equals(meant.computeIfAbsent(dir, d -> Vault.linkTarget(before, from, d)))) continue;
             Path file = place.note().equals(old) ? renamed : place.note();
             try {
-                String text = Vault.read(file), linked = Vault.relink(text, from, to);
-                if (linked.equals(text)) continue;
-                Vault.write(file, linked);
-                if (file.equals(note)) display(note, Note.parse(linked), Files.getLastModifiedTime(note));
+                // Read loosely first: a note that is not UTF-8 matters only if it has such a link.
+                String loose = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
+                if (Vault.relink(loose, from, to).equals(loose)) continue;
+                if (!linkable) {
+                    unlinkable = true;
+                } else if (!renamed.equals(will.computeIfAbsent(dir, d -> Vault.linkTarget(after, to, d)))) {
+                    elsewhere.add(Vault.title(file));
+                } else {
+                    String text = Vault.read(file), linked = Vault.relink(text, from, to);
+                    Vault.write(file, linked);
+                    if (file.equals(note)) display(note, Note.parse(linked), Files.getLastModifiedTime(note));
+                }
             } catch (IOException e) {
                 failed.add(Vault.title(file));
             }
         }
-        if (!failed.isEmpty()) {
-            error("Algunos enlaces siguen con el nombre anterior", String.format("No se pudieron cambiar los [[%s]] de: %s. Cámbialos a [[%s]] a mano.",
-                    from, String.join(", ", failed), to));
-        }
+        List<String> why = new ArrayList<>();
+        if (unlinkable) why.add(String.format("Un [[enlace]] no puede llevar a “%s”: un título con «]]», o que termina en «]», no cabe entre"
+                + " los corchetes. Usa otro nombre.", to));
+        if (!elsewhere.isEmpty()) why.add(String.format("En %s, [[%s]] llevaría a otra nota que se llama igual: ahí quedó [[%s]]. Cámbialo a mano"
+                + " o usa otro nombre.", quoted(elsewhere), to, from));
+        if (!failed.isEmpty()) why.add(String.format("No se pudieron cambiar en %s: cámbialos a [[%s]] a mano.", quoted(failed), to));
+        if (!why.isEmpty()) error(String.format("Algunos enlaces siguen como [[%s]]", from), String.join("\n\n", why));
+    }
+
+    private static String quoted(List<String> titles) {
+        return titles.stream().map(t -> "“" + t + "”").collect(Collectors.joining(", "));
     }
 
     void trashNote(Path p) {
@@ -1573,10 +1613,9 @@ public final class NotesApp extends Application {
 
     /** A [[link]]: the note with that title (in this notebook first), or else a new one here. */
     private void openTitle(String title) {
-        Optional<Vault.Place> found = vault.everyNote().stream().filter(p -> p.title().equalsIgnoreCase(title))
-                .min(Comparator.comparing((Vault.Place p) -> !p.notebook().equals(notebook)));
-        if (found.isPresent()) {
-            go(found.get());
+        Path found = Vault.linkTarget(vault.everyNote(), title, notebook);
+        if (found != null) {
+            go(new Vault.Place(found.getParent(), found));
         } else if (notebook != null) {
             try {
                 createNote(type.kinds().get(0), title, "");

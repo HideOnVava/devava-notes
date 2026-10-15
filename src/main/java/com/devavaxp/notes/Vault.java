@@ -145,6 +145,20 @@ final class Vault {
         }
     }
 
+    /**
+     * The note a [[title]] written in a notebook leads to: that notebook's own note with that title
+     * (in any letter case), else the first one of all; null when there is none.
+     */
+    static Path linkTarget(List<Place> places, String title, Path notebook) {
+        Path first = null;
+        for (Place p : places) {
+            if (!p.title().equalsIgnoreCase(title)) continue;
+            if (p.notebook().equals(notebook)) return p.note();
+            if (first == null) first = p.note();
+        }
+        return first;
+    }
+
     /** Every note of every notebook: for Quick open, Search and the titles [[ offers. */
     List<Place> everyNote() {
         List<Place> all = new ArrayList<>();
