@@ -1,9 +1,9 @@
 {
   "name": "devava-notes-editor",
   "private": true,
-  "description": "CodeMirror 6 for the WebView of Devava Notes. After changing main.js: npm install, npm run build, and commit the bundle.",
+  "description": "CodeMirror 6 and Excalidraw for the WebViews of Devava Notes. After changing main.js or draw.js: npm install, npm run build, and commit the bundles.",
   "scripts": {
-    "build": "esbuild main.js --bundle --minify --format=iife --target=safari16 --outfile=../src/main/resources/com/devavaxp/notes/editor.js && node copy-katex.mjs"
+    "build": "esbuild main.js --bundle --minify --format=iife --target=safari16 --outfile=../src/main/resources/com/devavaxp/notes/editor.js && node copy-katex.mjs && node build-draw.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",
@@ -14,10 +14,16 @@
     "@codemirror/search": "^6.7.2",
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.13",
+    "@excalidraw/excalidraw": "^0.18.1",
     "@lezer/highlight": "^1.2.5",
-    "katex": "^0.18.9"
+    "katex": "^0.18.9",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "w3c-keyname": "^2.2.8"
   },
   "devDependencies": {
-    "esbuild": "^0.28.2"
+    "esbuild": "^0.28.2",
+    "ttf2woff": "^3.0.0",
+    "wawoff2": "^2.0.1"
   }
 }

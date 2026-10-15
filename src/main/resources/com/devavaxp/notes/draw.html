@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<!-- The drawing window: only the app's own files run here, as on the editor's page. -->
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src file:; style-src file: 'unsafe-inline'; img-src file: data: blob:; font-src file: data:; connect-src file: data: blob:">
+<link rel="stylesheet" href="draw.css">
+<style>
+html, body, #root {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+}
+/* The library's Exportar downloads, which a WebView does not do (its file is in the notes' folder
+   already), and Publicar sends it to Excalidraw's website */
+[data-testid="lib-dropdown--export"], [data-testid="lib-dropdown--remove"] {
+    display: none !important;
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="draw.js"></script>
+</body>
+</html>

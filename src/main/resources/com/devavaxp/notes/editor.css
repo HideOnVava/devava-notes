@@ -148,6 +148,26 @@ html, body {
     visibility: hidden;
 }
 
+/* After a drawing's link: the button that opens it to draw on it again */
+#editor .cm-draw-edit {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-left: 8px;
+    padding: 0 8px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--bg);
+    color: var(--accent);
+    font: 600 12px/1.6 var(--font);
+    vertical-align: 1px;
+    cursor: pointer;
+}
+
+#editor .cm-draw-edit:hover {
+    border-color: var(--accent);
+}
+
 /* A heading's #s hang in the margin: its text starts where the paragraphs' does */
 #editor .cm-hmark {
     display: inline-block;
@@ -661,6 +681,20 @@ html, body {
     border: none;
     border-top: 1px solid var(--border);
     margin: 1.5em 0;
+}
+
+#reading img.drawing {
+    cursor: pointer;
+}
+
+#reading img.drawing:hover {
+    outline: 2px solid var(--accent-soft);
+}
+
+/* In the dark, a drawing turns dark as Excalidraw turns its own: its whites dark, its colors kept. But
+   not one with pictures in it (Java marks its URL), whose pictures would turn into negatives */
+:root[data-theme="dark"] #reading img.drawing:not([src*="&pictures"]) {
+    filter: invert(93%) hue-rotate(180deg);
 }
 
 #reading img {

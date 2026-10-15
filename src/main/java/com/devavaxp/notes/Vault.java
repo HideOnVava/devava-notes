@@ -7,6 +7,9 @@ import com.google.gson.JsonParser;
 
 import javax.swing.filechooser.FileSystemView;
 import java.awt.Desktop;
+import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -28,6 +31,7 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import java.util.zip.InflaterInputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
@@ -205,6 +209,59 @@ final class Vault {
         return Files.write(unique(dir, name, ".png"), png);
     }
 
+    /**
+     * Saves a new drawing into the notebook's attachments folder as "Dibujo 2026-10-14 15.30.12.excalidraw.png":
+     * Excalidraw's name for a PNG that holds the drawing itself, so that it can be drawn on again.
+     */
+    static Path saveDrawing(Path notebook, byte[] png) throws IOException {
+        Path dir = Files.createDirectories(notebook.resolve("attachments"));
+        String name = "Dibujo " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH.mm.ss"));
+        Path file = unique(dir, name, ".excalidraw.png");
+        write(file, png);
+        return file;
+    }
+
+    /** The drawings' personal library (Excalidraw's), which every drawing window shares. */
+    Path library() {
+        return root.resolve("Biblioteca de dibujos.excalidrawlib");
+    }
+
+    /** Whether a picture is a drawing made in the app, which it can open to draw on again. */
+    static boolean isDrawing(Path file) {
+        return file.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".excalidraw.png");
+    }
+
+    /**
+     * Whether a drawing holds pictures (a screenshot, a photo), which the dark theme leaves as they are
+     * instead of inverting them with the drawing. Excalidraw keeps the scene in a tEXt chunk of the PNG,
+     * as JSON whose "encoded" text is the scene deflated, one byte per character; its files are its pictures.
+     */
+    static boolean hasPictures(Path drawing) {
+        try (DataInputStream in = new DataInputStream(new BufferedInputStream(Files.newInputStream(drawing)))) {
+            in.skipNBytes(8);   // the PNG signature
+            while (true) {
+                int length = in.readInt();
+                String type = new String(in.readNBytes(4), StandardCharsets.ISO_8859_1);
+                if (type.equals("IEND")) return false;
+                if (!type.equals("tEXt")) {
+                    in.skipNBytes(length + 4L);   // its data and CRC
+                    continue;
+                }
+                String text = new String(in.readNBytes(length), StandardCharsets.ISO_8859_1);
+                in.skipNBytes(4);
+                if (!text.startsWith(SCENE)) continue;
+                JsonObject meta = JsonParser.parseString(text.substring(SCENE.length())).getAsJsonObject();
+                byte[] scene = meta.get("encoded").getAsString().getBytes(StandardCharsets.ISO_8859_1);
+                if (meta.get("compressed").getAsBoolean()) scene = new InflaterInputStream(new ByteArrayInputStream(scene)).readAllBytes();
+                return !JsonParser.parseString(new String(scene, StandardCharsets.UTF_8)).getAsJsonObject().getAsJsonObject("files").isEmpty();
+            }
+        } catch (IOException | RuntimeException e) {
+            return false;   // no scene to read: shown as any other drawing
+        }
+    }
+
+    private static final String SCENE = "application/vnd.excalidraw+json\0";
+
     static boolean isImage(Path file) {
         return file.getFileName().toString().toLowerCase(Locale.ROOT).matches(".*\\.(png|jpe?g|gif|bmp|svg)");
     }
@@ -278,14 +335,18 @@ final class Vault {
 
     /** Writes atomically, retrying for a moment: OneDrive can hold a file while it syncs it. */
     static void write(Path note, String text) throws IOException {
-        Path temp = note.resolveSibling("." + note.getFileName() + ".tmp");
+        write(note, text.getBytes(StandardCharsets.UTF_8));
+    }
+
+    static void write(Path file, byte[] bytes) throws IOException {
+        Path temp = file.resolveSibling("." + file.getFileName() + ".tmp");
         for (int attempt = 1; ; attempt++) {
             try {
-                Files.writeString(temp, text, StandardCharsets.UTF_8);
+                Files.write(temp, bytes);
                 try {
-                    Files.move(temp, note, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                    Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
                 } catch (AtomicMoveNotSupportedException e) {
-                    Files.move(temp, note, StandardCopyOption.REPLACE_EXISTING);
+                    Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
                 }
                 return;
             } catch (IOException e) {

@@ -1,0 +1,175 @@
+{
+  "labels": {
+    "sloppiness": "Estilo de dibujo",
+    "changeStroke": "Cambiar el color del trazo",
+    "changeBackground": "Cambiar el color de fondo",
+    "arrowhead_crowfoot_many": "Pata de gallo (muchos)",
+    "arrowhead_crowfoot_one": "Pata de gallo (uno)",
+    "arrowhead_crowfoot_one_or_many": "Pata de gallo (uno o muchos)",
+    "more_options": "Más opciones",
+    "arrowtypes": "Tipo de flecha",
+    "arrowtype_sharp": "Flecha recta",
+    "arrowtype_round": "Flecha curva",
+    "arrowtype_elbowed": "Flecha en codo",
+    "clearCanvas": "Limpiar lienzo",
+    "toggleGrid": "Mostrar u ocultar la cuadrícula",
+    "loadScene": "Cargar escena desde un archivo",
+    "showFonts": "Mostrar el selector de fuentes",
+    "theme": "Tema",
+    "link": {
+      "hint": "Escribe o pega tu enlace aquí",
+      "goToElement": "Ir al objeto enlazado"
+    },
+    "lineEditor": {
+      "editArrow": "Editar flecha"
+    },
+    "followUs": "Síguenos",
+    "discordChat": "Chat de Discord",
+    "zoomToFitViewport": "Ajustar a la vista",
+    "zoomToFitSelection": "Ajustar la vista a la selección",
+    "zoomToFit": "Ajustar la vista a todos los elementos",
+    "installPWA": "Instalar Excalidraw localmente (PWA)",
+    "autoResize": "Ajustar el tamaño del texto automáticamente",
+    "imageCropping": "Recortar imagen",
+    "unCroppedDimension": "Tamaño sin recortar",
+    "copyElementLink": "Copiar enlace al objeto",
+    "linkToElement": "Enlazar a un objeto",
+    "wrapSelectionInFrame": "Envolver la selección en un marco"
+  },
+  "elementLink": {
+    "title": "Enlazar a un objeto",
+    "desc": "Haz clic en una figura del lienzo o pega un enlace.",
+    "notFound": "El objeto enlazado no está en el lienzo."
+  },
+  "search": {
+    "title": "Buscar en el lienzo",
+    "noMatch": "No hay coincidencias...",
+    "singleResult": "resultado",
+    "multipleResults": "resultados",
+    "placeholder": "Buscar texto en el lienzo..."
+  },
+  "buttons": {
+    "copyLink": "Copiar enlace",
+    "systemMode": "Modo del sistema",
+    "embed": "Activar o desactivar la incrustación"
+  },
+  "errors": {
+    "saveLibraryError": "No se pudo guardar la biblioteca. Guárdala en un archivo para no perder los cambios.",
+    "imageToolNotSupported": "Las imágenes están desactivadas.",
+    "brave_measure_text_error": {
+      "line4": "Si desactivar esta opción no arregla cómo se ven los textos, abre un <issueLink>reporte</issueLink> en nuestro GitHub o escríbenos en <discordLink>Discord</discordLink>"
+    },
+    "libraryElementTypeError": {
+      "embeddable": "Los elementos incrustados no se pueden agregar a la biblioteca.",
+      "image": "¡Pronto se podrán agregar imágenes a la biblioteca!"
+    }
+  },
+  "toolBar": {
+    "frame": "Herramienta de marco"
+  },
+  "element": {
+    "rectangle": "Rectángulo",
+    "diamond": "Rombo",
+    "ellipse": "Elipse",
+    "arrow": "Flecha",
+    "line": "Línea",
+    "freedraw": "Dibujo libre",
+    "text": "Texto",
+    "image": "Imagen",
+    "group": "Grupo",
+    "frame": "Marco",
+    "magicframe": "De boceto a código",
+    "embeddable": "Contenido web incrustado",
+    "selection": "Selección",
+    "iframe": "IFrame"
+  },
+  "hints": {
+    "dismissSearch": "Esc para cerrar la búsqueda",
+    "arrowTool": "Haz clic para poner varios puntos, o arrastra para una sola línea. Presiona {{arrowShortcut}} otra vez para cambiar el tipo de flecha.",
+    "createFlowchart": "Mantén CtrlOrCmd y una flecha del teclado para crear un diagrama de flujo",
+    "enterCropEditor": "Haz doble clic en la imagen o presiona Enter para recortarla",
+    "leaveCropEditor": "Haz clic fuera de la imagen o presiona Enter o Esc para terminar de recortar"
+  },
+  "shareDialog": {
+    "or": "O"
+  },
+  "helpDialog": {
+    "createFlowchart": "Crear un diagrama de flujo a partir de un elemento",
+    "navigateFlowchart": "Moverse por un diagrama de flujo",
+    "cropStart": "Recortar imagen",
+    "cropFinish": "Terminar de recortar la imagen"
+  },
+  "imageExportDialog": {
+    "tooltip": {
+      "embedScene": "Los datos de la escena se guardan en el PNG/SVG exportado, para poder restaurarla desde él.\nEl archivo será más grande."
+    }
+  },
+  "stats": {
+    "shapes": "Figuras",
+    "fullTitle": "Propiedades del lienzo y de las figuras",
+    "generalStats": "General",
+    "elementProperties": "Propiedades de la figura"
+  },
+  "toast": {
+    "copyToClipboardAsSvg": "Se copió {{exportSelection}} al portapapeles como SVG\n({{exportColorScheme}})",
+    "unableToEmbed": "Por ahora no se permite incrustar esta URL. Abre un reporte en GitHub para pedir que se permita",
+    "unrecognizedLinkFormat": "El enlace que incrustaste no tiene el formato esperado. Intenta pegar el código para incrustar que da el sitio de origen",
+    "elementLinkCopied": "Enlace copiado al portapapeles"
+  },
+  "colorPicker": {
+    "shades": "Tonos",
+    "noShades": "No hay tonos para este color"
+  },
+  "overwriteConfirm": {
+    "action": {
+      "exportToImage": {
+        "description": "Exporta los datos de la escena como una imagen, desde la que podrás importarla después."
+      },
+      "excalidrawPlus": {
+        "title": "Excalidraw+",
+        "description": "Guarda la escena en tu espacio de trabajo de Excalidraw+."
+      }
+    },
+    "modal": {
+      "loadFromFile": {
+        "description": "Cargar desde un archivo <bold>reemplazará lo que tienes ahora</bold>.<br></br>Puedes respaldar tu dibujo antes con una de las opciones de abajo."
+      }
+    }
+  },
+  "quickSearch": {
+    "placeholder": "Búsqueda rápida"
+  },
+  "fontList": {
+    "badge": {
+      "old": "antigua"
+    },
+    "sceneFonts": "En esta escena",
+    "availableFonts": "Fuentes disponibles",
+    "empty": "No se encontraron fuentes"
+  },
+  "userList": {
+    "empty": "No se encontraron usuarios",
+    "hint": {
+      "text": "Haz clic en un usuario para seguirlo",
+      "followStatus": "Estás siguiendo a este usuario",
+      "inCall": "El usuario está en una llamada de voz",
+      "micMuted": "El micrófono del usuario está silenciado",
+      "isSpeaking": "El usuario está hablando"
+    }
+  },
+  "commandPalette": {
+    "title": "Paleta de comandos",
+    "shortcuts": {
+      "select": "Elegir",
+      "confirm": "Confirmar",
+      "close": "Cerrar"
+    },
+    "recents": "Usados recientemente",
+    "search": {
+      "placeholder": "Busca en los menús y comandos, y descubre funciones escondidas",
+      "noMatch": "No hay comandos que coincidan..."
+    },
+    "itemNotAvailable": "El comando no está disponible...",
+    "shortcutHint": "Para la paleta de comandos, usa {{shortcut}}"
+  }
+}

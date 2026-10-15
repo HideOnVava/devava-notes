@@ -50,6 +50,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
@@ -565,8 +566,12 @@ class AppSmokeTest {
         fx(() -> engine.executeScript("[...document.querySelectorAll('.lang-menu .option')].at(-1).click()"));
         fx(() -> engine.executeScript("const f = document.querySelector('.lang-menu .find'); f.value = 'kot'; f.dispatchEvent(new Event('input'))"));
         shot(window[0], "s5-more-languages");
-        fx(() -> engine.executeScript("document.querySelector('.lang-menu .list .option').click()"));
+        key(app, KeyCode.ENTER);   // the first one found
         waitFor("a Kotlin block", () -> Files.readString(note).contains("```kotlin\nStack<Integer> pila = new Stack<>();\n```\n"));
+        fx(() -> engine.executeScript("document.querySelector('.cm-card-head .chip').click()"));
+        waitFor("the menu of languages", () -> fx(() -> Boolean.TRUE.equals(engine.executeScript("!!document.querySelector('.lang-menu')"))));
+        key(app, KeyCode.ESCAPE);
+        waitFor("the menu closed with Esc", () -> fx(() -> Boolean.FALSE.equals(engine.executeScript("!!document.querySelector('.lang-menu')"))));
         assertEquals(List.of(), fx(() -> List.copyOf(app.editor.errors)));
         fx(() -> run(window[0]::close));
     }
@@ -893,7 +898,7 @@ class AppSmokeTest {
                     + "const r = box.getBoundingClientRect(); return (r.left + 60) + ',' + (r.top + Math.min(11, r.height / 2)); })()").formatted(line)));
             if (spot.isEmpty()) continue;   // a ``` line: the head or the foot of its card
             String[] xy = spot.split(",");
-            click(app, Double.parseDouble(xy[0]), Double.parseDouble(xy[1]));
+            click(app.editor.view, Double.parseDouble(xy[0]), Double.parseDouble(xy[1]));
             int landed = fx(() -> ((Number) engine.executeScript("editorView.state.doc.lineAt(editorView.state.selection.main.head).number")).intValue());
             if (landed != line) missed.add(line + "→" + landed);
         }
@@ -941,11 +946,11 @@ class AppSmokeTest {
                 (() => { const top = document.querySelector('.cm-card-top').getBoundingClientRect(),
                                bottom = document.querySelector('.cm-card-bottom').getBoundingClientRect();
                          return [top.left + 200, top.top + 4, bottom.left + 200, bottom.bottom - 4].join(','); })()"""))).split(",");
-        click(app, Double.parseDouble(gaps[0]), Double.parseDouble(gaps[1]));
+        click(app.editor.view, Double.parseDouble(gaps[0]), Double.parseDouble(gaps[1]));
         assertEquals("10:0", cursor(engine), "a click above the card");
         assertTrue(fx(() -> (Boolean) engine.executeScript("!!document.querySelector('.cm-card-top.here')")));
         shot(window[0], "k1-before-card");
-        click(app, Double.parseDouble(gaps[2]), Double.parseDouble(gaps[3]));
+        click(app.editor.view, Double.parseDouble(gaps[2]), Double.parseDouble(gaps[3]));
         assertEquals("14:3", cursor(engine), "a click below the card");
         fx(() -> run(() -> ((JSObject) engine.executeScript("window")).call("insertText", "Entre el código y la imagen")));
         waitFor("the text between the card and the picture", () -> Files.readString(note).contains("}\n```\nEntre el código y la imagen\n![](<attachments/salida.png>)"));
@@ -965,17 +970,193 @@ class AppSmokeTest {
                 "(() => { const h = editorView.state.selection.main.head, l = editorView.state.doc.lineAt(h); return l.number + ':' + (h - l.from); })()"));
     }
 
-    /** A click of the mouse on the editor's page, at a point of the page. */
-    private static void click(NotesApp app, double x, double y) throws Exception {
+    /** A click of the mouse on a page, at a point of the page: the mouse moves there, and clicks. */
+    private static void click(WebView page, double x, double y) throws Exception {
         fx(() -> run(() -> {
-            WebView page = app.editor.view;
             Point2D scene = page.localToScene(x, y), screen = page.localToScreen(x, y);   // a MouseEvent is made in the scene's coordinates
-            for (EventType<MouseEvent> type : List.of(MouseEvent.MOUSE_PRESSED, MouseEvent.MOUSE_RELEASED, MouseEvent.MOUSE_CLICKED)) {
-                page.fireEvent(new MouseEvent(type, scene.getX(), scene.getY(), screen.getX(), screen.getY(), MouseButton.PRIMARY, 1, false, false, false, false,
-                        type == MouseEvent.MOUSE_PRESSED, false, false, false, false, true, null));
+            for (EventType<MouseEvent> type : List.of(MouseEvent.MOUSE_MOVED, MouseEvent.MOUSE_PRESSED, MouseEvent.MOUSE_RELEASED, MouseEvent.MOUSE_CLICKED)) {
+                boolean moved = type == MouseEvent.MOUSE_MOVED;
+                page.fireEvent(new MouseEvent(type, scene.getX(), scene.getY(), screen.getX(), screen.getY(), moved ? MouseButton.NONE : MouseButton.PRIMARY,
+                        moved ? 0 : 1, false, false, false, false, type == MouseEvent.MOUSE_PRESSED, false, false, false, false, !moved, null));
             }
         }));
         Thread.sleep(120);
+    }
+
+    /** A drawing for a note, made in the app: inserted at the cursor, shown in the reading view, and drawn on again. */
+    @Test
+    void drawsAPictureForTheNote(@TempDir Path home) throws Exception {
+        Stage[] window = new Stage[1];
+        NotesApp app = open(home, window);
+        Stage stage = window[0];
+        WebEngine engine = fx(() -> app.editor.view.getEngine());
+        Path notebook = fx(() -> app.createNotebook("Estructura de Datos", NotebookType.PROGRAMMING));
+        fx(() -> run(() -> app.openNotebook(notebook)));
+        Path note = fx(() -> app.createNote(kind(NotebookType.PROGRAMMING, "lecture"), "Pilas y colas", ""));
+        fx(() -> run(() -> ((JSObject) engine.executeScript("window")).call("insertText", "Una pila y una cola:\n\n")));
+
+        // The drawing window, with Excalidraw in Spanish.
+        fx(() -> run(() -> button(stage, "Dibujo").fire()));
+        waitFor("Excalidraw in the drawing window", () -> fx(() -> app.drawing != null && app.drawing.opened || app.drawing != null && !app.drawing.errors.isEmpty()));
+        Drawing drawing = fx(() -> app.drawing);
+        assertEquals(List.of(), fx(() -> List.copyOf(drawing.errors)));
+        WebEngine draw = fx(() -> drawing.view.getEngine());
+        Thread.sleep(1500);   // its fonts and its toolbar
+        shot(drawing.stage, "x1-drawing-new");
+        fx(() -> draw.executeScript("""
+                drawingAPI.updateScene({elements: drawingElements([
+                    {type: 'rectangle', x: 80, y: 80, width: 220, height: 110, label: {text: 'Pila'}},
+                    {type: 'arrow', x: 310, y: 135, width: 160, height: 0},
+                    {type: 'ellipse', x: 480, y: 80, width: 200, height: 110, label: {text: 'Cola'}}]), captureUpdate: 'IMMEDIATELY'})"""));
+        Thread.sleep(600);
+        shot(drawing.stage, "x2-drawing");
+        String count = "drawingAPI.getSceneElements().length", images = "drawingAPI.getSceneElements().filter(e => e.type === 'image').length";
+        int drawn = ((Number) fx(() -> draw.executeScript(count))).intValue();
+
+        // Its menu, without links that open nowhere here.
+        fx(() -> draw.executeScript("document.querySelector('.dropdown-menu-button').click()"));
+        Thread.sleep(300);
+        shot(drawing.stage, "x6-drawing-menu");
+        String menu = (String) fx(() -> draw.executeScript("document.querySelector('.dropdown-menu').textContent"));
+        assertFalse(menu.contains("GitHub") || menu.contains("Discord"), menu);
+        fx(() -> draw.executeScript("document.querySelector('.dropdown-menu-button').click()"));
+
+        // Its keyboard shortcuts, which read keys JavaFX's WebKit leaves out (keys.js): a tool's letter, Ctrl+A,
+        // Ctrl+Z. And its clipboard, through Java as in the editor: shapes copied and pasted, with Ctrl+V and with
+        // Pegar in its menu, and the same for pictures: a screenshot, and an image file.
+        double width = fx(() -> drawing.view.getWidth()), height = fx(() -> drawing.view.getHeight());
+        click(drawing.view, width / 2, height * 0.7);   // an empty spot of the canvas
+        key(drawing.view, KeyCode.R);
+        assertEquals("rectangle", fx(() -> draw.executeScript("drawingAPI.getAppState().activeTool.type")));
+        key(drawing.view, KeyCode.V);
+        assertEquals("selection", fx(() -> draw.executeScript("drawingAPI.getAppState().activeTool.type")));
+        Path diagram = home.resolve("diagrama.png");
+        BufferedImage green = new BufferedImage(120, 80, BufferedImage.TYPE_INT_RGB);
+        for (int x = 0; x < 120; x++) for (int y = 0; y < 80; y++) green.setRGB(x, y, 0x2E9E5B);
+        ImageIO.write(green, "png", diagram.toFile());
+        WritableImage screenshot = new WritableImage(160, 90);
+        for (int x = 0; x < 160; x++) for (int y = 0; y < 90; y++) screenshot.getPixelWriter().setArgb(x, y, 0xFF2B4FD8);
+        Map<DataFormat, Object> saved = fx(AppSmokeTest::clipboard);
+        try {
+            press(drawing.view, KeyCode.A);
+            press(drawing.view, KeyCode.C);
+            assertTrue(fx(() -> Clipboard.getSystemClipboard().getString()).contains("\"rectangle\""), "the shapes on the clipboard");
+            press(drawing.view, KeyCode.V);
+            waitFor("the shapes pasted", () -> fx(() -> ((Number) draw.executeScript(count)).intValue() == 2 * drawn));
+            press(drawing.view, KeyCode.Z);
+            waitFor("the paste undone", () -> fx(() -> ((Number) draw.executeScript(count)).intValue() == drawn));
+            pasteFromMenu(draw, width / 2, height * 0.7);
+            waitFor("the shapes pasted from the menu", () -> fx(() -> ((Number) draw.executeScript(count)).intValue() == 2 * drawn));
+            press(drawing.view, KeyCode.Z);
+            waitFor("that paste undone", () -> fx(() -> ((Number) draw.executeScript(count)).intValue() == drawn));
+
+            fx(() -> Clipboard.getSystemClipboard().setContent(Map.of(DataFormat.IMAGE, screenshot)));
+            press(drawing.view, KeyCode.V);
+            waitFor("the screenshot in the drawing", () -> fx(() -> ((Number) draw.executeScript(images)).intValue() == 1));
+            fx(() -> Clipboard.getSystemClipboard().setContent(Map.of(DataFormat.FILES, List.of(diagram.toFile()))));
+            pasteFromMenu(draw, width * 0.25, height * 0.7);
+            waitFor("the image file in the drawing", () -> fx(() -> ((Number) draw.executeScript(images)).intValue() == 2));
+            Thread.sleep(500);
+            assertEquals(2, ((Number) fx(() -> draw.executeScript(images))).intValue(), "each picture once");
+            assertEquals(List.of((int) (width / 2), (int) (height * 0.7), (int) (width * 0.25), (int) (height * 0.7)), fx(() -> draw.executeScript("""
+                    (s => drawingAPI.getSceneElements().filter(e => e.type === 'image').flatMap(i => [
+                        Math.trunc((i.x + i.width / 2 + s.scrollX) * s.zoom.value + s.offsetLeft),
+                        Math.trunc((i.y + i.height / 2 + s.scrollY) * s.zoom.value + s.offsetTop)]))(drawingAPI.getAppState())
+                    .join()""")).toString().lines().flatMap(l -> Stream.of(l.split(","))).map(Integer::valueOf).toList(),
+                    "each picture where the mouse was");
+        } finally {
+            fx(() -> Clipboard.getSystemClipboard().setContent(saved));
+        }
+        Thread.sleep(400);
+        shot(drawing.stage, "x7-drawing-with-picture");
+
+        // Shapes kept in the library (Añadir a la biblioteca): in a file of the notes' folder, for every drawing.
+        fx(() -> draw.executeScript("drawingAPI.updateLibrary({libraryItems: [{id: 'pila', status: 'unpublished', created: 1, "
+                + "elements: drawingAPI.getSceneElements().filter(e => e.type === 'rectangle')}], merge: true})"));
+        Path library = home.resolve("Biblioteca de dibujos.excalidrawlib");
+        waitFor("the library kept", () -> Files.exists(library) && Files.readString(library).contains("\"id\": \"pila\""));
+        fx(() -> run(() -> button(drawing.stage, "Insertar en la nota").fire()));
+        waitFor("the drawing in the note", () -> Files.readString(note).contains("![](<attachments/Dibujo "));
+        Path picture;
+        try (Stream<Path> files = Files.list(notebook.resolve("attachments"))) {
+            picture = files.filter(Vault::isDrawing).findFirst().orElseThrow();
+        }
+        byte[] png = Files.readAllBytes(picture);
+        assertEquals((byte) 0x89, png[0]);
+        assertTrue(new String(png, java.nio.charset.StandardCharsets.ISO_8859_1).contains("application/vnd.excalidraw+json"), "the drawing inside the PNG");
+        assertTrue(Files.readString(note).contains("Una pila y una cola:\n\n![](<attachments/" + picture.getFileName() + ">)"), Files.readString(note));
+        waitFor("the button to draw on it again", () -> fx(() -> ((Number) engine.executeScript("document.querySelectorAll('.cm-draw-edit').length")).intValue() == 1));
+        shot(stage, "x5-editing-with-drawing");
+
+        // Read: the drawing shows, and a click opens it to draw on it again.
+        fx(() -> run(app::toggleMode));
+        waitFor("the drawing shown", () -> fx(() -> ((Number) engine.executeScript(
+                "(document.querySelector('#reading img.drawing') || {}).naturalWidth || 0")).intValue() > 400));
+        waitFor("the drawing at the size it was drawn", () -> fx(() -> (Boolean) engine.executeScript(
+                "(i => i.style.width === i.naturalWidth / 2 + 'px')(document.querySelector('#reading img.drawing'))")));
+        shot(stage, "x3-note-with-drawing");
+        String filter = "getComputedStyle(document.querySelector('#reading img.drawing')).filter";
+        fx(() -> run(() -> app.setDark(true)));
+        waitFor("the reading view in dark", () -> fx(() -> "dark".equals(engine.executeScript("document.documentElement.dataset.theme"))));
+        assertEquals("none", fx(() -> engine.executeScript(filter)), "a drawing with pictures, as it is");
+        shot(stage, "x8-dark-drawing-with-pictures");
+        fx(() -> run(() -> app.setDark(false)));
+        fx(() -> engine.executeScript("document.querySelector('#reading img.drawing').click()"));
+        waitFor("the drawing opened again", () -> fx(() -> app.drawing != drawing && app.drawing != null && app.drawing.opened));
+        Drawing again = fx(() -> app.drawing);
+        WebEngine redraw = fx(() -> again.view.getEngine());
+        assertTrue(((Number) fx(() -> redraw.executeScript("drawingAPI.getSceneElements().length"))).intValue() >= 3);
+        fx(() -> redraw.executeScript("drawingAPI.updateLibrary({libraryItems: [], merge: true}).then(items => window.kept = items.map(i => i.id).join())"));
+        waitFor("the library in the next drawing", () -> fx(() -> "pila".equals(redraw.executeScript("window.kept"))));
+        waitFor("its pictures selected", () -> fx(() -> (Boolean) redraw.executeScript("""
+                drawingAPI.updateScene({appState: {selectedElementIds: Object.fromEntries(
+                    drawingAPI.getSceneElements().filter(e => e.type === 'image').map(e => [e.id, true]))}}),
+                Object.keys(drawingAPI.getAppState().selectedElementIds).length === 2""")));   // Excalidraw selects on its next frame
+        key(again.view, KeyCode.DELETE);   // with no click first
+        assertEquals(0, ((Number) fx(() -> redraw.executeScript(images))).intValue(), "the pictures deleted with Supr");
+        fx(() -> redraw.executeScript("drawingAPI.updateScene({elements: [...drawingAPI.getSceneElements(), "
+                + "...drawingElements([{type: 'text', x: 80, y: 230, text: 'LIFO y FIFO'}, {type: 'text', x: 80, y: 280, text: '¿Último en entrar?', fontFamily: 3}])]})"));
+        assertEquals(Boolean.TRUE, fx(() -> redraw.executeScript("""
+                drawingAPI.getSceneElements().filter(e => e.type === 'text' && !e.containerId).every(e => {
+                    const c = document.createElement('canvas').getContext('2d');
+                    c.font = e.fontSize + 'px ' + (e.fontFamily === 3 ? 'Cascadia' : 'Excalifont');
+                    return Math.abs(e.width - c.measureText(e.text).width) < 1;
+                })""")), "texts measured in the fonts they are drawn in");
+        long before = Files.getLastModifiedTime(picture).toMillis();
+        Thread.sleep(50);
+        fx(() -> run(() -> button(again.stage, "Guardar dibujo").fire()));
+        waitFor("the drawing saved again", () -> Files.getLastModifiedTime(picture).toMillis() > before);
+        waitFor("the reading view with it", () -> fx(() -> (Boolean) engine.executeScript(
+                "(document.querySelector('#reading img.drawing') || {}).complete === true")));
+        Thread.sleep(400);
+        shot(stage, "x4-note-redrawn");
+        fx(() -> run(() -> app.setDark(true)));
+        waitFor("the drawing turned dark", () -> fx(() -> String.valueOf(engine.executeScript(filter)).contains("invert")));
+        shot(stage, "x9-dark-drawing");
+        assertEquals(List.of(), fx(() -> List.copyOf(again.errors)));
+        assertEquals(List.of(), fx(() -> List.copyOf(app.editor.errors)));
+        fx(() -> run(stage::close));
+    }
+
+    /** The links Excalidraw opens in a window of their own (Explorar bibliotecas) go to the browser once, without this computer's paths. */
+    @Test
+    void opensTheDrawingWindowsLinksInTheBrowser(@TempDir Path home) throws Exception {
+        Stage[] window = new Stage[1];
+        open(home, window);
+        Stage stage = window[0];
+        List<String> links = new CopyOnWriteArrayList<>();
+        Drawing drawing = fx(() -> new Drawing(stage, "Dibujo nuevo", "Insertar en la nota", null, false, home.resolve("b.excalidrawlib"), links::add, png -> {}));
+        fx(() -> run(drawing.stage::show));
+        waitFor("Excalidraw", () -> fx(() -> drawing.opened));
+        WebEngine draw = fx(() -> drawing.view.getEngine());
+        fx(() -> draw.executeScript("document.querySelector('.default-sidebar-trigger').click()"));
+        waitFor("the library", () -> fx(() -> (Boolean) draw.executeScript("[...document.querySelectorAll('a, button')].some(b => b.textContent === 'Explorar bibliotecas')")));
+        fx(() -> draw.executeScript("[...document.querySelectorAll('a, button')].find(b => b.textContent === 'Explorar bibliotecas').click()"));
+        waitFor("the link", () -> !links.isEmpty());
+        Thread.sleep(1000);
+        assertEquals(List.of("https://libraries.excalidraw.com/"), links);
+        assertEquals(List.of(), fx(() -> List.copyOf(drawing.errors)));
+        fx(() -> run(stage::close));
     }
 
     /** Home shows this school period's notebooks; the earlier ones fold away until asked for. */
@@ -1098,20 +1279,40 @@ class AppSmokeTest {
 
     /** A key, alone, as the keyboard sends it to the editor. */
     private static void key(NotesApp app, KeyCode key) throws Exception {
+        key(app.editor.view, key);
+    }
+
+    /** A key, alone, as the keyboard sends it to a page. */
+    private static void key(WebView page, KeyCode key) throws Exception {
         fx(() -> run(() -> {
-            app.editor.view.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED, "", "", key, false, false, false, false));
-            app.editor.view.fireEvent(new KeyEvent(KeyEvent.KEY_RELEASED, "", "", key, false, false, false, false));
+            page.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED, "", "", key, false, false, false, false));
+            page.fireEvent(new KeyEvent(KeyEvent.KEY_RELEASED, "", "", key, false, false, false, false));
         }));
         Thread.sleep(150);
     }
 
-    /** Ctrl + the key, as the keyboard sends it to the editor. */
-    private static void press(NotesApp app, KeyCode key) throws Exception {
+    /** Pegar, in the menu Excalidraw opens with a right click at a point of its canvas. */
+    private static void pasteFromMenu(WebEngine draw, double x, double y) throws Exception {
+        fx(() -> draw.executeScript("(c => { for (const type of ['pointermove', 'contextmenu']) c.dispatchEvent(new PointerEvent(type, "
+                + "{bubbles: true, cancelable: true, button: type === 'contextmenu' ? 2 : -1, clientX: " + x + ", clientY: " + y + "})); })"
+                + "(document.querySelector('.excalidraw__canvas.interactive'))"));
+        waitFor("Excalidraw's menu", () -> fx(() -> (Boolean) draw.executeScript("!!document.querySelector('.context-menu')")));
+        fx(() -> draw.executeScript("[...document.querySelectorAll('.context-menu-item__label')].find(l => l.textContent === 'Pegar').closest('button').click()"));
+        Thread.sleep(300);
+    }
+
+    /** Ctrl + the key, as the keyboard sends it to a page. */
+    private static void press(WebView page, KeyCode key) throws Exception {
         fx(() -> run(() -> {
-            app.editor.view.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED, "", "", key, false, true, false, false));
-            app.editor.view.fireEvent(new KeyEvent(KeyEvent.KEY_RELEASED, "", "", key, false, true, false, false));
+            page.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED, "", "", key, false, true, false, false));
+            page.fireEvent(new KeyEvent(KeyEvent.KEY_RELEASED, "", "", key, false, true, false, false));
         }));
         Thread.sleep(300);
+    }
+
+    /** Ctrl + the key, as the keyboard sends it to the editor. */
+    private static void press(NotesApp app, KeyCode key) throws Exception {
+        press(app.editor.view, key);
     }
 
     /** What the clipboard holds now, to put it back after the test. */

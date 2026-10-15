@@ -69,6 +69,7 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
 import java.nio.charset.CharacterCodingException;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.FileAlreadyExistsException;
@@ -91,6 +92,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.TreeMap;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -162,7 +164,7 @@ public final class NotesApp extends Application {
         this.stage = stage;
         this.vault = vault;
         editor = new Editor(this::edited, this::openLink, this::openTitle, tag -> browser.showTag(tag), this::paste,
-                this::languageChosen);
+                this::languageChosen, this::editDrawing);
         browser = new NotebookView(this);
         properties = new PropertiesPanel(this::propertiesChanged, this::openLink, this::usedValues);
         autosave.setOnFinished(e -> save());
@@ -1002,6 +1004,7 @@ public final class NotesApp extends Application {
                 formatSeparator(),
                 formatButton("Enlace", Icons.of("link", 15), "Enlace a otra nota: elige su título", () -> editor.format("link")),
                 formatButton("Imagen", Icons.of("image", 15), "Agrega una imagen desde un archivo", this::chooseImages),
+                formatButton("Dibujo", Icons.of("draw", 15), "Dibuja un diagrama o un esquema, y ponlo en la nota", this::newDrawing),
                 formatButton("Fórmula", Icons.of("sigma", 15), "Fórmula matemática, como en LaTeX", () -> editor.format("math")),
                 formatSeparator(),
                 block);
@@ -1051,6 +1054,60 @@ public final class NotesApp extends Application {
         if (room <= 0 || formatBar.prefWidth(-1) <= room) return;
         formatButtons.stream().filter(b -> b != blockButton).forEach(b -> b.setContentDisplay(ContentDisplay.GRAPHIC_ONLY));
         if (formatBar.prefWidth(-1) > room) blockButton.setContentDisplay(ContentDisplay.GRAPHIC_ONLY);
+    }
+
+    /** The drawing window open now, for the tests. */
+    Drawing drawing;
+
+    /** A new drawing, in the drawing window; once done, saved in attachments/ and put in the note at the cursor. */
+    void newDrawing() {
+        if (note == null) return;
+        Path at = notebook;
+        openDrawing("Dibujo nuevo", "Insertar en la nota", null, png -> {
+            try {
+                Path file = Vault.saveDrawing(at, png);
+                if (!at.equals(notebook)) return;
+                setReading(false);
+                editor.insert(imageLink(file));
+                editor.focus();
+            } catch (IOException e) {
+                error("No se pudo guardar el dibujo", reason(e));
+            }
+        });
+    }
+
+    /** A drawing of the open note (as it links it, or as the reading view shows it), to draw on it again. */
+    private void editDrawing(String src) {
+        if (note == null) return;
+        Path file;
+        try {
+            String path = src.replaceFirst("\\?.*$", "");
+            file = (path.startsWith("file:") ? Path.of(URI.create(path)) : note.getParent().resolve(path.replaceAll("^<|>$", ""))).normalize();
+        } catch (IllegalArgumentException e) {
+            return;
+        }
+        if (!file.startsWith(notebook.normalize()) || !Vault.isDrawing(file) || !Files.isRegularFile(file)) return;   // only the notebook's own drawings
+        byte[] png;
+        try {
+            png = Files.readAllBytes(file);
+        } catch (IOException e) {
+            error("No se pudo abrir el dibujo", reason(e));
+            return;
+        }
+        openDrawing("Editar dibujo", "Guardar dibujo", png, edited -> {
+            try {
+                Vault.write(file, edited);
+                if (reading) editor.setReading(true);   // the view, with the drawing as it is now
+            } catch (IOException e) {
+                error("No se pudo guardar el dibujo", reason(e));
+            }
+        });
+    }
+
+    /** The drawing window, with the library of shapes every drawing shares; its links open in the browser. */
+    private void openDrawing(String title, String action, byte[] png, Consumer<byte[]> onDone) {
+        drawing = new Drawing(stage, title, action, png, dark, vault.library(), this::openLink, onDone);
+        drawing.stage.show();
     }
 
     /** Pictures from files, saved in attachments/ and put in the note at the cursor. */
@@ -1399,7 +1456,7 @@ public final class NotesApp extends Application {
         return "![](<attachments/" + image.getFileName() + ">)\n";
     }
 
-    private static byte[] png(Image image) throws IOException {
+    static byte[] png(Image image) throws IOException {
         int w = (int) image.getWidth(), h = (int) image.getHeight();
         int[] argb = new int[w * h];
         image.getPixelReader().getPixels(0, 0, w, h, PixelFormat.getIntArgbInstance(), argb, 0, w);

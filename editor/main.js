@@ -1,6 +1,7 @@
 // The page of Devava Notes' editor: CodeMirror 6 to write a note, and the reading view that Java
 // renders with commonmark-java. `npm run build` bundles it into
 // src/main/resources/com/devavaxp/notes/editor.js, which is committed.
+import "./keys.js";
 import {EditorSelection, EditorState, Prec, RangeSetBuilder, StateField, Transaction} from "@codemirror/state";
 import {
     Decoration, EditorView, MatchDecorator, ViewPlugin, WidgetType, drawSelection, dropCursor, highlightSpecialChars, keymap, placeholder
@@ -24,7 +25,7 @@ const words = {
     placeholder: "Empieza a escribir…", copy: "Copiar", copied: "Copiado", remove: "Quitar", sure: "¿Quitar?",
     code: "Código", choose: "Elegir lenguaje", change: "Cambiar el lenguaje del bloque", output: "Salida",
     outputLong: "Salida de consola", more: "Más lenguajes…", find: "Buscar un lenguaje", use: "Usar", current: "actual",
-    block: "Bloque de código",
+    block: "Bloque de código", drawEdit: "Editar dibujo", drawHint: "Clic para dibujar en él",
 };
 const phrases = {
     "Find": "Buscar", "Replace": "Reemplazar", "next": "siguiente", "previous": "anterior", "all": "todas",
@@ -108,6 +109,7 @@ const ICONS = {
     down: "M6 9l6 6 6-6",
     plus: "M12 5v14M5 12h14",
     terminal: "M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z M7 9l3 3-3 3 M12 15h5",
+    pen: "M4 20h4L19 9l-4-4L4 16v4z",
 };
 
 function icon(name) {
@@ -305,6 +307,44 @@ const cards = StateField.define({
         }),
     ],
 });
+
+// ---------- Drawings ----------
+
+// A drawing made in the app (a .excalidraw.png in attachments/), while writing: a button after its
+// link opens it in the drawing window, to draw on it again. Java finds the file next to the note.
+const DRAWING = /!\[[^\]\n]*\]\(<?(attachments\/[^)>\n]*\.excalidraw\.png)>?\)/gi;
+
+class EditDrawing extends WidgetType {
+    constructor(src) {
+        super();
+        this.src = src;
+    }
+
+    eq(other) {
+        return other.src === this.src;
+    }
+
+    toDOM() {
+        const edit = button("cm-draw-edit", icon("pen"), words.drawEdit);
+        edit.addEventListener("click", () => tell("draw:" + this.src));
+        return edit;
+    }
+}
+
+const drawingMatcher = new MatchDecorator({
+    regexp: DRAWING,
+    decorate: (add, from, to, match) => add(to, to, Decoration.widget({widget: new EditDrawing(match[1]), side: 1})),
+});
+
+const drawingLinks = ViewPlugin.fromClass(class {
+    constructor(view) {
+        this.decorations = drawingMatcher.createDeco(view);
+    }
+
+    update(u) {
+        this.decorations = drawingMatcher.updateDeco(u, this.decorations);
+    }
+}, {decorations: plugin => plugin.decorations});
 
 // ---------- Headings and lists, lined up ----------
 
@@ -703,7 +743,7 @@ const extensions = () => [
     closeBrackets(), highlightSelectionMatches(), placeholder(words.placeholder), EditorState.phrases.of(phrases),
     markdown({base: markdownLanguage, codeLanguages: language}),
     highlighters.map(h => syntaxHighlighting(h)),
-    cards, guard, lineUp,
+    cards, guard, lineUp, drawingLinks,
     Prec.high(keymap.of([
         {key: "Enter", run: closeFence},
         {key: "Mod-b", run: view => format(view, "bold")},
@@ -776,6 +816,14 @@ window.showReading = html => {
     reading.querySelectorAll(".math").forEach(math => katex.render(math.textContent, math,
         {displayMode: math.classList.contains("display"), throwOnError: false}));
     reading.querySelectorAll("pre > code").forEach(card);
+    reading.querySelectorAll("img").forEach(img => {
+        if (!/\.excalidraw\.png(\?|$)/i.test(img.getAttribute("src"))) return;
+        img.classList.add("drawing");
+        img.title = words.drawHint;
+        const drawn = () => img.style.width = img.naturalWidth / 2 + "px";   // its PNG is twice as big, to look sharp
+        if (img.complete && img.naturalWidth) drawn();
+        else img.addEventListener("load", drawn);
+    });
     editor.hidden = true;
     reading.hidden = false;
     reading.scrollTop = 0;
@@ -785,7 +833,9 @@ window.showReading = html => {
 // in the system browser, never inside this page.
 reading.addEventListener("click", e => {
     const note = e.target.closest(".wikilink"), tag = e.target.closest(".tag"), link = e.target.closest("a[href]");
-    if (note) tell("open:" + note.dataset.note);
+    const drawing = e.target.closest("img.drawing");
+    if (drawing) tell("draw:" + drawing.getAttribute("src"));
+    else if (note) tell("open:" + note.dataset.note);
     else if (tag) tell("tag:" + tag.dataset.tag);
     else if (link) tell("link:" + link.href);
     if (note || link) e.preventDefault();

@@ -14,6 +14,7 @@ import org.commonmark.ext.task.list.items.TaskListItemsExtension;
 import org.commonmark.parser.Parser;
 import org.commonmark.renderer.html.HtmlRenderer;
 
+import java.io.IOException;
 import java.net.URISyntaxException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -36,7 +37,7 @@ import java.util.regex.Pattern;
 /**
  * The open note, in one WebView page (editor.html): CodeMirror 6 to write it, or the note
  * rendered to read it. The page reports to Java only as alert() text ("ready", "changed",
- * "link:url", "open:title", "tag:name", "copy:text", "language:id", "error:message"), so no Java
+ * "link:url", "open:title", "tag:name", "copy:text", "language:id", "draw:src", "error:message"), so no Java
  * object is ever within reach of JavaScript.
  */
 final class Editor {
@@ -56,7 +57,7 @@ final class Editor {
     /** What editor.js reported as failing (also printed to stderr). */
     final List<String> errors = new ArrayList<>();
     private final WebEngine engine = view.getEngine();
-    private final String page = page();
+    private final String page = page("editor.html");
     /** The page said "ready" and has the note: until then, calls only keep what to show. */
     boolean ready;
     private boolean reading, dark;
@@ -72,10 +73,11 @@ final class Editor {
      * {@code onChange}: the text was edited. {@code onLink}: a link was followed (the page itself
      * never leaves). {@code onOpen}: a [[link]] to a note. {@code onTag}: a #tag. {@code onPaste}:
      * a paste in which the page found no text on the clipboard (a picture may be there).
-     * {@code onLanguage}: a language was chosen in a code block's menu.
+     * {@code onLanguage}: a language was chosen in a code block's menu. {@code onDraw}: a drawing of
+     * the note is to be drawn on again (its src, as the note links it or as the reading view shows it).
      */
     Editor(Runnable onChange, Consumer<String> onLink, Consumer<String> onOpen, Consumer<String> onTag, Runnable onPaste,
-           Consumer<String> onLanguage) {
+           Consumer<String> onLanguage, Consumer<String> onDraw) {
         engine.setOnAlert(e -> {
             String message = e.getData();
             if (message.equals("changed")) {
@@ -92,6 +94,8 @@ final class Editor {
                 Platform.runLater(onPaste);
             } else if (message.startsWith("language:")) {
                 Platform.runLater(() -> onLanguage.accept(message.substring(9)));
+            } else if (message.startsWith("draw:")) {
+                Platform.runLater(() -> onDraw.accept(message.substring(5)));
             } else if (message.startsWith("copy:")) {   // copy, cut and the Copy button of a code block (see main.js)
                 Clipboard.getSystemClipboard().setContent(Map.of(DataFormat.PLAIN_TEXT, message.substring(5)));
             } else if (message.startsWith("error:")) {
@@ -117,19 +121,19 @@ final class Editor {
     }
 
     /**
-     * The page: the copy next to the installed app's jar (build-windows.ps1 puts it there, since a
-     * page inside a jar can neither run its scripts nor show the notes' pictures), else the one
-     * among the classes.
+     * A page of the app (editor.html, draw.html): the copy next to the installed app's jar
+     * (build-windows.ps1 puts them there, since a page inside a jar can neither run its scripts nor
+     * show the notes' pictures), else the one among the classes.
      */
-    private static String page() {
+    static String page(String name) {
         try {
             Path copy = Path.of(Editor.class.getProtectionDomain().getCodeSource().getLocation().toURI())
-                    .resolveSibling("editor").resolve("editor.html");
+                    .resolveSibling("editor").resolve(name);
             if (Files.isRegularFile(copy)) return copy.toUri().toString();
         } catch (URISyntaxException | RuntimeException ignored) {
             // No location to look next to: the page among the classes.
         }
-        return Editor.class.getResource("editor.html").toExternalForm();
+        return Editor.class.getResource(name).toExternalForm();
     }
 
     /** Whether the WebView shows editor.html; it reports file:/C:/… as file:///C:/…, so both are compared that way. */
@@ -269,13 +273,27 @@ final class Editor {
                 "<img src=\"" + resolve(folder, m.group(1).replace("&amp;", "&")).replace("&", "&amp;") + "\""));
     }
 
-    /** attachments/a b.png (or a%20b.png), next to the note, as a file: URL; anything with a scheme stays as it is. */
+    /**
+     * attachments/a b.png (or a%20b.png), next to the note, as a file: URL; anything with a scheme
+     * stays as it is. A drawing's URL says when it was last saved, so the view shows it as drawn again,
+     * and whether it holds pictures, which the dark theme must not invert (editor.css).
+     */
     private static String resolve(Path folder, String src) {
         if (src.matches("^[a-zA-Z][a-zA-Z0-9+.-]*:.*")) return src;
         try {
-            return folder.resolve(URLDecoder.decode(src.replace("+", "%2B"), StandardCharsets.UTF_8)).normalize().toUri().toString();
+            Path file = folder.resolve(URLDecoder.decode(src.replace("+", "%2B"), StandardCharsets.UTF_8)).normalize();
+            if (!Vault.isDrawing(file)) return file.toUri().toString();
+            return file.toUri() + "?v=" + saved(file) + (Vault.hasPictures(file) ? "&pictures" : "");
         } catch (IllegalArgumentException e) {   // not a path this system accepts
             return src;
+        }
+    }
+
+    private static long saved(Path file) {
+        try {
+            return Files.getLastModifiedTime(file).toMillis();
+        } catch (IOException e) {
+            return 0;
         }
     }
 
