@@ -120,6 +120,22 @@
     -fx-border-color: -accent-hover;
 }
 
+/* A newer version on GitHub, in the bar */
+.button.update {
+    -fx-background-color: -accent-soft;
+    -fx-border-color: transparent;
+    -fx-text-fill: -accent-text;
+    -fx-font-weight: bold;
+}
+
+.button.update:hover {
+    -fx-background-color: -accent-soft-hover;
+}
+
+.button.update .icon {
+    -fx-stroke: -accent-text;
+}
+
 .button.danger {
     -fx-background-color: -danger;
     -fx-border-color: transparent;

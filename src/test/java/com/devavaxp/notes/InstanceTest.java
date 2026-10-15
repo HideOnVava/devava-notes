@@ -44,6 +44,22 @@ class InstanceTest {
         assertTrue(link.length() < 2000, "a link Windows opens whole: " + link.length());
     }
 
+    /** GitHub's latest release, read from its answer, is newer number by number; only the app's own pages count. */
+    @Test
+    void aNewerVersionOnGitHub() {
+        assertTrue(Updates.newer("2.2.0", "2.1.0"));
+        assertTrue(Updates.newer("2.10.0", "2.9.1"));
+        assertTrue(Updates.newer("3", "2.9.9"));
+        assertFalse(Updates.newer("2.1.0", "2.1.0"));
+        assertFalse(Updates.newer("2.1", "2.1.0"));
+        assertFalse(Updates.newer("2.0.9", "2.1.0"));
+        assertEquals(new Updates.Release("2.2.0", "https://github.com/HideOnVava/devava-notes/releases/tag/v2.2.0"), Updates.release(
+                "{\"tag_name\": \"v2.2.0\", \"html_url\": \"https://github.com/HideOnVava/devava-notes/releases/tag/v2.2.0\", \"draft\": false}").orElseThrow());
+        assertTrue(Updates.release("{\"tag_name\": \"v2.2.0\", \"html_url\": \"https://example.com/v2.2.0\"}").isEmpty());
+        assertTrue(Updates.release("{\"message\": \"Not Found\"}").isEmpty());
+        assertTrue(Updates.release("<html>").isEmpty());
+    }
+
     private static Path writeLines(Path file) throws Exception {
         return Files.writeString(file, "a\nb\nc\n");
     }

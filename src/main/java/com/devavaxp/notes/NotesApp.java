@@ -129,6 +129,8 @@ public final class NotesApp extends Application {
     private final HBox tools = new HBox(4);
     /** Bold, lists, links, formulas and code blocks with a click, above the note while it is written. */
     private final HBox formatBar = new HBox(2);
+    /** In the bar, once GitHub has a newer version: a button to its page, to download it and install it over this one. */
+    private final Button update = button("", "download", "update", e -> { });
     private final List<Button> formatButtons = new ArrayList<>();
     private Button blockButton;
     /** The notebook's language for new code blocks, in its bar; a click changes it. */
@@ -172,6 +174,16 @@ public final class NotesApp extends Application {
         }
         ErrorLog.start(Instance.local().resolve(ErrorLog.NAME), VERSION);
         show(stage, vault);
+        Updates.check(VERSION, release -> Platform.runLater(() -> showUpdate(release)));
+    }
+
+    /** A newer version on GitHub: its button in the bar, "Versión 2.2.0", to its page. */
+    void showUpdate(Updates.Release release) {
+        update.setText("Versión " + release.version());
+        update.setTooltip(new Tooltip("Hay una versión nueva de Devava Notes: descárgala e instálala sobre esta; tus notas se quedan"));
+        update.setOnAction(e -> openLink(release.page()));
+        update.setVisible(true);
+        update.setManaged(true);
     }
 
     /** The window, in front of the others; Windows brings forward one that was behind only while it is "always on top". */
@@ -187,6 +199,8 @@ public final class NotesApp extends Application {
         Locale.setDefault(Text.SPANISH);   // the stock dialogs' "Cancelar" and the calendars too
         this.stage = stage;
         this.vault = vault;
+        update.setVisible(false);
+        update.setManaged(false);
         editor = new Editor(this::edited, this::openLink, this::openTitle, tag -> browser.showTag(tag), this::paste,
                 this::languageChosen, this::editDrawing);
         browser = new NotebookView(this);
@@ -296,7 +310,7 @@ public final class NotesApp extends Application {
         note = null;
         Button add = button("Nueva materia", "plus", "primary", e -> newNotebook());
         add.setTooltip(new Tooltip("Ctrl+N"));
-        bar.getChildren().setAll(brand(), grow(), finder(), add, help(), options(
+        bar.getChildren().setAll(brand(), grow(), update, finder(), add, help(), options(
                 item("Buscar en todas las notas…", this::search),
                 item("Importar un cuaderno (ZIP)…", this::importNotebook),
                 item("Abrir la carpeta de datos", () -> showInFolder(vault.root)),
@@ -981,7 +995,7 @@ public final class NotesApp extends Application {
         title.setAlignment(Pos.CENTER_LEFT);
         editor.setCodeLanguage(codeLanguage(dir));
         showLanguage();
-        bar.getChildren().setAll(button("Inicio", "back", "flat", e -> showHome()), title, grow(), finder(), newButton(), help(),
+        bar.getChildren().setAll(button("Inicio", "back", "flat", e -> showHome()), title, grow(), update, finder(), newButton(), help(),
                 options(menu.toArray(MenuItem[]::new)));
         loadEntries(true);
         browser.open(type, entries);

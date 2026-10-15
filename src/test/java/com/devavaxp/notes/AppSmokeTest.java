@@ -494,7 +494,9 @@ class AppSmokeTest {
         // Another block at the end, in Java now, turned into the output of the program.
         fx(() -> engine.executeScript("document.querySelector('.cm-add-block').click()"));
         waitFor("a second block", () -> fx(() -> ((Number) engine.executeScript("document.querySelectorAll('.cm-card-head').length")).intValue() == 2));
+        Thread.sleep(400);   // its scroll into view, which closes menus, done
         fx(() -> engine.executeScript("[...document.querySelectorAll('.cm-card-head .chip')].at(-1).click()"));
+        waitFor("its menu of languages", () -> fx(() -> Boolean.TRUE.equals(engine.executeScript("!!document.querySelector('.lang-menu')"))));
         fx(() -> engine.executeScript("[...document.querySelectorAll('.lang-menu .option')].find(o => o.textContent.startsWith('Salida')).click()"));
         fx(() -> run(() -> page.call("insertText", "¡Guau!")));
         waitFor("the output saved", () -> Files.readString(session).contains("```output\n¡Guau!\n```"));
@@ -1488,11 +1490,20 @@ class AppSmokeTest {
             ((TextField) dialog.getScene().lookup(".text-field")).setText("Pilas y colas");
             ((Button) ((DialogPane) dialog.getScene().getRoot().lookup(".dialog-pane")).lookupButton(ButtonType.OK)).fire();
         }));
-        waitFor("the note renamed", () -> Files.exists(ed.resolve("Pilas y colas.md")));
+        // Asked on JavaFX's thread: the rename and the links it changes are done by then.
+        waitFor("the note renamed", () -> fx(() -> Files.exists(ed.resolve("Pilas y colas.md"))));
         assertEquals("Ver [[Pilas y colas]] y [[Pilas y colas|la pila]], no `[[Pilas]]`.\n", Files.readString(review));
         assertEquals("Usa [[Pilas y colas]].\n", Files.readString(idea));
         assertEquals("Sobre [[Pilas]] de esta materia.\n", Files.readString(own), "the [[Pilas]] of a notebook with its own");
         assertTrue(text(engine).startsWith("Ver [[Pilas y colas]]"), "the open note, as it is now: " + text(engine));
+
+        // A newer version on GitHub: its button in the bar.
+        fx(() -> run(() -> app.showUpdate(new Updates.Release("9.9.9", Updates.RELEASES + "tag/v9.9.9"))));
+        assertTrue(fx(() -> texts(stage)).contains("Versión 9.9.9"));
+        shot(stage, "h3-update");
+        fx(() -> run(app::showHome));
+        assertTrue(fx(() -> texts(stage)).contains("Versión 9.9.9"), "on Home too");
+        shot(stage, "h4-update-home");
 
         // Ayuda says the version and leads to Reportar un problema.
         dialogShot(stage, "h1-help", app::showHelp, "");
