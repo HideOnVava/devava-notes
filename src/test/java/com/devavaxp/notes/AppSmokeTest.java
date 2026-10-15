@@ -592,6 +592,7 @@ class AppSmokeTest {
         List<String> shown = fx(() -> texts(dialog));
         assertTrue(shown.containsAll(List.of("3ER SEMESTRE", "Estructura de Datos", "Programación · Java", "Crear “estruc” con otro nombre")),
                 shown.toString());
+        assertFalse(shown.contains("Libre") || shown.contains("Programación competitiva"), shown.toString());   // Nuevo cuaderno libre's
         fx(() -> run(() -> button(dialog, "Crear materia").fire()));
         Path ed = home.resolve("Estructura de Datos");
         waitFor("the notebook of Estructura de Datos", () -> Files.isDirectory(ed) && Vault.type(ed) == NotebookType.PROGRAMMING);
@@ -1159,7 +1160,10 @@ class AppSmokeTest {
         fx(() -> run(stage::close));
     }
 
-    /** Home shows this school period's notebooks; the earlier ones fold away until asked for. */
+    /**
+     * Home shows this school period's subjects, and apart from them the free notebooks, which have no
+     * period; the earlier subjects fold away until asked for.
+     */
     @Test
     void homeGroupsNotebooksBySchoolPeriod(@TempDir Path home) throws Exception {
         Stage[] window = new Stage[1];
@@ -1170,10 +1174,36 @@ class AppSmokeTest {
         Path fp = fx(() -> app.createNotebook("Fundamentos de Programación", NotebookType.CLASS_NOTES));
         Vault.setMeta(fp, "period", before.toString());
         fx(() -> run(app::showHome));
+        assertTrue(fx(() -> texts(stage)).containsAll(List.of("Cuadernos libres", "Nuevo cuaderno libre",
+                "Para lo que no es de una materia: ideas, proyectos, la residencia…")));   // what they are for, while there are none
+        fx(() -> app.createNotebook("Ideas", NotebookType.GENERAL));
+        Path contests = fx(() -> app.createNotebook("Concursos", NotebookType.COMPETITIVE_PROGRAMMING));
+        Vault.setMeta(contests, "period", before.toString());   // as 2.0 let any notebook have one
+        fx(() -> run(app::showHome));
         shot(stage, "p1-home-periods");
         List<String> shown = fx(() -> texts(stage));
-        assertTrue(shown.containsAll(List.of(now.toString(), "Programación Orientada a Objetos", "Semestres anteriores · 1 materia")), shown.toString());
+        assertTrue(shown.containsAll(List.of(now.toString(), "1 materia", "Programación Orientada a Objetos", "Cuadernos libres", "2 cuadernos",
+                "Ideas", "Concursos", "Semestres anteriores · 1 materia")), shown.toString());
         assertFalse(shown.contains("Fundamentos de Programación"));
+        assertTrue(fx(() -> y(stage, now.toString()) < y(stage, "Cuadernos libres") && y(stage, "Cuadernos libres") < y(stage, "Semestres anteriores · 1 materia")));
+        // Only a subject has a period to change.
+        assertFalse(fx(() -> menu(card(stage, "Ideas"))).contains("Cambiar periodo…"));
+        assertTrue(fx(() -> menu(card(stage, "Programación Orientada a Objetos"))).contains("Cambiar periodo…"));
+
+        // Nuevo cuaderno libre: a name, and a type that is no subject.
+        Platform.runLater(app::newFreeNotebook);   // it stays in showAndWait() until the dialog closes
+        waitFor("the dialog of Nuevo cuaderno libre", () -> fx(() -> dialog(stage) != null));
+        Stage dialog = fx(() -> dialog(stage));
+        List<String> offered = fx(() -> texts(dialog));
+        assertTrue(offered.containsAll(List.of("Libre", "Programación competitiva")) && !offered.contains("Materia"), offered.toString());
+        fx(() -> run(() -> ((TextField) dialog.getScene().lookup(".text-field")).setText("Residencia Profesional")));
+        shot(dialog, "p3-new-free-notebook");
+        fx(() -> run(() -> button(dialog, "Crear cuaderno").fire()));
+        Path residency = home.resolve("Residencia Profesional");
+        waitFor("the free notebook", () -> Files.isDirectory(residency) && Vault.type(residency) == NotebookType.GENERAL);
+        assertEquals("", Vault.meta(residency, "period"));
+        fx(() -> run(app::showHome));
+        assertTrue(fx(() -> texts(stage)).containsAll(List.of("Residencia Profesional", "3 cuadernos", "1 materia")));
 
         fx(() -> run(() -> stage.getScene().getRoot().lookupAll(".button").stream().map(Button.class::cast)
                 .filter(b -> b.getText() != null && b.getText().startsWith("Semestres anteriores")).findFirst().orElseThrow().fire()));
@@ -1269,6 +1299,29 @@ class AppSmokeTest {
     private static CheckBox checkBox(Stage stage, String text) {
         return stage.getScene().getRoot().lookupAll(".check-box").stream().map(CheckBox.class::cast)
                 .filter(b -> text.equals(b.getText())).findFirst().orElseThrow();
+    }
+
+    /** The card of a notebook on Home. */
+    private static Button card(Stage stage, String name) {
+        return stage.getScene().getRoot().lookupAll(".card").stream().map(Button.class::cast)
+                .filter(c -> c.getGraphic().lookupAll(".card-title").stream().anyMatch(t -> name.equals(((Labeled) t).getText())))
+                .findFirst().orElseThrow();
+    }
+
+    /** What a card's menu offers. */
+    private static List<String> menu(Button card) {
+        return card.getContextMenu().getItems().stream().map(MenuItem::getText).toList();
+    }
+
+    /** Where in the window the label or button that says this is, from the top. */
+    private static double y(Stage stage, String text) {
+        Deque<Node> nodes = new ArrayDeque<>(List.of(stage.getScene().getRoot()));
+        while (!nodes.isEmpty()) {
+            Node node = nodes.pop();
+            if (node instanceof Labeled l && text.equals(l.getText())) return node.localToScene(0, 0).getY();
+            if (node instanceof Parent p) nodes.addAll(p.getChildrenUnmodifiable());
+        }
+        throw new AssertionError("Nothing says " + text);
     }
 
     /** The button of the window that says this. */

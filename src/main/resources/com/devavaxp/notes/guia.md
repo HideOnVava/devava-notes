@@ -7,6 +7,8 @@ Esta nota es un ejemplo de lo que puede llevar una nota de Devava Notes. Bórral
 
 Cada materia tiene sus **apuntes**, **tareas**, **exámenes** y, en las de programación, **sesiones de código**. Agrega otra con **Nueva materia** en Inicio: búscala en la retícula de ISC y la app propone su tipo y su lenguaje.
 
+Lo que no es de una materia, como ideas, proyectos o la residencia, va en **Cuadernos libres**, que no tienen semestre: crea uno con **Nuevo cuaderno libre**. Esta nota está en uno.
+
 ## Escribir
 
 La barra sobre la nota pone **negritas**, *cursivas*, títulos, listas y casillas con un clic:

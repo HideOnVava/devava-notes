@@ -274,7 +274,7 @@ public final class NotesApp extends Application {
         add.setTooltip(new Tooltip("Ctrl+N"));
         bar.getChildren().setAll(brand(), grow(), finder(), add, help(), options(
                 item("Buscar en todas las notas…", this::search),
-                item("Importar una materia (ZIP)…", this::importNotebook),
+                item("Importar un cuaderno (ZIP)…", this::importNotebook),
                 item("Abrir la carpeta de datos", () -> showInFolder(vault.root)),
                 new SeparatorMenuItem(), themeItem()));
         root.setCenter(homeContent(true));
@@ -320,7 +320,7 @@ public final class NotesApp extends Application {
     /** The keyboard shortcuts, and where the notes are kept. */
     void showHelp() {
         String[][] keys = {
-                {"Ctrl+N", "Nueva materia en Inicio; nueva nota dentro de una materia"},
+                {"Ctrl+N", "Nueva materia en Inicio; nueva nota dentro de una materia o un cuaderno"},
                 {"Ctrl+O", "Abrir cualquier nota por su título"},
                 {"Ctrl+Shift+F", "Buscar en el texto de todas las notas"},
                 {"Ctrl+E", "Pasar entre Editar y Vista previa"},
@@ -384,16 +384,21 @@ public final class NotesApp extends Application {
             if (showErrors) error("No se pudieron abrir tus notas", vault.root + "\n\n" + reason(e));
         }
         if (notebooks.isEmpty()) return firstUse();
-        // On the left the notebooks by school period, the newest first, earlier periods folded away;
-        // on the right what is coming and what was written last.
+        // On the left the subjects by school period, the newest first, then the free notebooks, which
+        // have no period, and the earlier periods folded away; on the right what is coming and what
+        // was written last.
         Period now = Period.of(LocalDate.now());
         Map<Period, List<Vault.Notebook>> byPeriod = new TreeMap<>(Comparator.reverseOrder());
-        notebooks.forEach(nb -> byPeriod.computeIfAbsent(nb.period(), k -> new ArrayList<>()).add(nb));
+        List<Vault.Notebook> free = new ArrayList<>();
+        for (Vault.Notebook nb : notebooks) {
+            if (nb.type().course()) byPeriod.computeIfAbsent(nb.period(), k -> new ArrayList<>()).add(nb);
+            else free.add(nb);
+        }
         VBox main = new VBox(30), older = new VBox(30);
         int olderCount = 0;
         for (Map.Entry<Period, List<Vault.Notebook>> group : byPeriod.entrySet()) {
             boolean past = group.getKey().compareTo(now) < 0;
-            (past ? older : main).getChildren().add(periodSection(group.getKey(), group.getValue()));
+            (past ? older : main).getChildren().add(section(group.getKey().toString(), countNotebooks(group.getValue().size()), group.getValue()));
             if (past) olderCount += group.getValue().size();
         }
         if (main.getChildren().isEmpty()) {
@@ -401,6 +406,7 @@ public final class NotesApp extends Application {
             none.getChildren().add(button("Nueva materia", "plus", "primary", e -> newNotebook()));
             main.getChildren().add(none);
         }
+        main.getChildren().add(freeSection(free));
         if (!older.getChildren().isEmpty()) {
             Button toggle = button("Semestres anteriores · " + countNotebooks(olderCount), showOlder ? "down" : "right", "flat", e -> {
                 showOlder = !showOlder;
@@ -433,17 +439,31 @@ public final class NotesApp extends Application {
         return scroll;
     }
 
-    /** A school period on Home: its name, how many notebooks it has, and their cards. */
-    private Node periodSection(Period period, List<Vault.Notebook> notebooks) {
-        Label name = new Label(period.toString()), count = new Label(countNotebooks(notebooks.size()));
+    /** A section of Home, a school period or the free notebooks: its name, how many notebooks it has, and their cards. */
+    private VBox section(String title, String count, List<Vault.Notebook> notebooks, Node... end) {
+        Label name = new Label(title), counted = new Label(count);
         name.getStyleClass().add("period-title");
-        count.getStyleClass().add("period-count");
-        HBox head = new HBox(10, name, count);
+        counted.getStyleClass().add("period-count");
+        HBox head = new HBox(10, name, counted);
+        head.getChildren().addAll(end);
         head.setAlignment(Pos.BASELINE_LEFT);
         FlowPane cards = new FlowPane(14, 14);
         cards.setRowValignment(VPos.TOP);
         cards.getChildren().setAll(notebooks.stream().map(this::card).toList());
         return new VBox(12, head, cards);
+    }
+
+    /** The notebooks that are no subject (Libre, Programación competitiva), and the button to make one; it says what they are for while there are none. */
+    private Node freeSection(List<Vault.Notebook> notebooks) {
+        int n = notebooks.size();
+        Button add = button("Nuevo cuaderno libre", "plus", "flat", e -> newFreeNotebook());
+        VBox section = section("Cuadernos libres", n == 0 ? "" : n == 1 ? "1 cuaderno" : n + " cuadernos", notebooks, grow(), add);
+        if (n == 0) {
+            Label about = new Label("Para lo que no es de una materia: ideas, proyectos, la residencia…");
+            about.getStyleClass().add("hint");
+            section.getChildren().set(1, about);
+        }
+        return section;
     }
 
     private static String countNotebooks(int n) {
@@ -607,9 +627,9 @@ public final class NotesApp extends Application {
     private MenuItem[] notebookItems(Path dir) {
         List<MenuItem> items = new ArrayList<>(List.of(
                 item("Cambiar nombre…", () -> renameNotebook(dir)),
-                item("Cambiar tipo…", () -> changeType(dir)),
-                item("Cambiar periodo…", () -> changePeriod(dir)),
-                item("Lenguaje del código…", () -> chooseLanguage(dir))));
+                item("Cambiar tipo…", () -> changeType(dir))));
+        if (Vault.type(dir).course()) items.add(item("Cambiar periodo…", () -> changePeriod(dir)));   // a free notebook has none
+        items.add(item("Lenguaje del código…", () -> chooseLanguage(dir)));
         if (Vault.type(dir).equals(NotebookType.COMPETITIVE_PROGRAMMING)) items.add(item("Plantilla de C++…", () -> editTemplate(dir)));
         items.addAll(List.of(
                 item("Exportar como ZIP…", () -> exportNotebook(dir)),
@@ -753,7 +773,7 @@ public final class NotesApp extends Application {
     /** Adds a notebook someone shared as a ZIP, and opens it. */
     private void importNotebook() {
         FileChooser chooser = new FileChooser();
-        chooser.setTitle("Importar una materia");
+        chooser.setTitle("Importar un cuaderno");
         chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("ZIP", "*.zip"));
         File zip = chooser.showOpenDialog(stage);
         if (zip == null) return;
@@ -793,17 +813,26 @@ public final class NotesApp extends Application {
     }
 
     void newNotebook() {
-        askSubject().ifPresent(choice -> {
+        create(askSubject(), "No se pudo crear la materia");
+    }
+
+    /** Nuevo cuaderno libre: a notebook that is no subject, so it has no period. */
+    void newFreeNotebook() {
+        create(askFree(), "No se pudo crear el cuaderno");
+    }
+
+    private void create(Optional<NotebookChoice> asked, String failure) {
+        asked.ifPresent(choice -> {
             try {
-                openNotebook(createSubject(choice));
+                openNotebook(createNotebook(choice));
             } catch (IOException e) {
-                error("No se pudo crear la materia", reason(e));
+                error(failure, reason(e));
             }
         });
     }
 
     /** A new notebook as asked: its type, and its period, language and subject when it has them. */
-    private Path createSubject(NotebookChoice choice) throws IOException {
+    private Path createNotebook(NotebookChoice choice) throws IOException {
         Path dir = createNotebook(choice.name(), choice.type());
         if (choice.period() != null) Vault.setMeta(dir, "period", choice.period().toString());
         if (!choice.language().isEmpty()) Vault.setMeta(dir, "language", choice.language());
@@ -1795,6 +1824,12 @@ public final class NotesApp extends Application {
     }
 
     /**
+     * The subjects of the curriculum that Nueva materia and the first use offer: Residencia
+     * Profesional, Servicio Social and Actividades Complementarias are free notebooks instead.
+     */
+    private static final List<Reticula.Subject> SUBJECTS = Reticula.ISC.stream().filter(s -> s.type().course()).toList();
+
+    /**
      * "Nueva materia": a subject of the curriculum, found by typing part of its name, whose type and
      * language the app proposes; or any other name. The type, the language and the period can change.
      */
@@ -1818,7 +1853,7 @@ public final class NotesApp extends Application {
                 } else if (item instanceof Reticula.Subject s) {
                     setGraphic(subjectLine(tile(s.type(), 26), s.name(), kindLabel(s.type(), s.language()), color(s.type())));
                 } else if (item instanceof OtherName o) {
-                    setGraphic(subjectLine(tile(NotebookType.GENERAL, 26), "Crear “" + o.name() + "” con otro nombre", "", null));
+                    setGraphic(subjectLine(tile(NotebookType.CLASS_NOTES, 26), "Crear “" + o.name() + "” con otro nombre", "", null));
                 }
             }
         });
@@ -1826,6 +1861,7 @@ public final class NotesApp extends Application {
         ToggleGroup types = new ToggleGroup();
         HBox typeRow = new HBox(8);
         for (NotebookType t : NotebookType.ALL) {
+            if (!t.course()) continue;   // the others are free notebooks
             Label name = new Label(t.name()), about = new Label(t.description());
             name.getStyleClass().add("option-name");
             name.setWrapText(true);
@@ -1838,7 +1874,7 @@ public final class NotesApp extends Application {
             option.setUserData(t);
             option.setToggleGroup(types);
             option.setMaxHeight(Double.MAX_VALUE);
-            option.setPrefWidth(124);
+            option.setPrefWidth(184);   // three, as wide as the list above them
             typeRow.getChildren().add(option);
         }
         ComboBox<String> language = languageChoice("java");
@@ -1848,8 +1884,6 @@ public final class NotesApp extends Application {
             NotebookType t = (NotebookType) types.getSelectedToggle().getUserData();
             languageRow.setVisible(t.code());
             languageRow.setManaged(t.code());
-            periodRow.setVisible(t.course());
-            periodRow.setManaged(t.course());
         };
         types.selectToggle(types.getToggles().get(0));
         // A subject proposes its type and language; another type, without one, starts with that type's language.
@@ -1859,10 +1893,7 @@ public final class NotesApp extends Application {
                 was.setSelected(true);
                 return;
             }
-            if (!proposing[0]) {
-                NotebookType t = (NotebookType) now.getUserData();
-                selectLanguage(language, t == NotebookType.COMPETITIVE_PROGRAMMING ? "cpp" : t == NotebookType.DATABASES ? "plsql" : "java");
-            }
+            if (!proposing[0]) selectLanguage(language, now.getUserData() == NotebookType.DATABASES ? "plsql" : "java");
             rows.run();
         });
         results.getSelectionModel().selectedItemProperty().addListener((o, was, now) -> {
@@ -1880,12 +1911,12 @@ public final class NotesApp extends Application {
             String typed = find.getText().strip(), wanted = NotebookView.fold(typed);
             List<Object> items = new ArrayList<>();
             int semester = 0;
-            for (Reticula.Subject s : Reticula.ISC) {
+            for (Reticula.Subject s : SUBJECTS) {
                 if (!NotebookView.fold(s.name()).contains(wanted)) continue;
                 if (s.semester() != semester) items.add(Reticula.semester(semester = s.semester()));
                 items.add(s);
             }
-            if (!typed.isEmpty() && Reticula.ISC.stream().noneMatch(s -> NotebookView.fold(s.name()).equals(wanted))) {
+            if (!typed.isEmpty() && SUBJECTS.stream().noneMatch(s -> NotebookView.fold(s.name()).equals(wanted))) {
                 items.add("Otra");
                 items.add(new OtherName(typed));
             }
@@ -1928,9 +1959,28 @@ public final class NotesApp extends Application {
             NotebookType t = (NotebookType) types.getSelectedToggle().getUserData();
             Reticula.Subject subject = chosen instanceof Reticula.Subject s ? s : null;
             String name = subject != null ? subject.name() : ((OtherName) chosen).name();
-            return new NotebookChoice(name, t, t.course() ? period.getValue() : null, t.code() ? language.getValue() : "",
-                    subject == null ? null : subject.key());
+            return new NotebookChoice(name, t, period.getValue(), t.code() ? language.getValue() : "", subject == null ? null : subject.key());
         });
+    }
+
+    /** "Nuevo cuaderno libre": its name, and its type, of those that are no subject. */
+    private Optional<NotebookChoice> askFree() {
+        TextField name = new TextField();
+        name.setPromptText("Ideas, Proyecto integrador, Concursos…");
+        name.setPrefColumnCount(28);
+        ToggleGroup types = new ToggleGroup();
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Nuevo cuaderno libre");
+        dialog.setHeaderText("Nuevo cuaderno libre");
+        style(dialog);
+        ButtonType create = new ButtonType("Crear cuaderno", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().setAll(create, ButtonType.CANCEL);
+        List<NotebookType> free = List.of(NotebookType.GENERAL, NotebookType.COMPETITIVE_PROGRAMMING);
+        dialog.getDialogPane().setContent(new VBox(16, name, typeChoice(types, free, NotebookType.GENERAL)));
+        dialog.getDialogPane().lookupButton(create).disableProperty().bind(name.textProperty().map(String::isBlank));
+        Platform.runLater(name::requestFocus);
+        return dialog.showAndWait().filter(b -> b == create).map(b ->
+                new NotebookChoice(name.getText().strip(), (NotebookType) types.getSelectedToggle().getUserData(), null, "", null));
     }
 
     /** A line of the subjects: its type's mark, its name, and what the app proposes for it. */
@@ -1947,6 +1997,7 @@ public final class NotesApp extends Application {
     private static HBox labeled(String name, Node field) {
         Label label = new Label(name);
         label.getStyleClass().add("property-name");
+        label.setMinWidth(Region.USE_PREF_SIZE);
         HBox row = new HBox(10, label, field);
         row.setAlignment(Pos.CENTER_LEFT);
         return row;
@@ -1978,7 +2029,7 @@ public final class NotesApp extends Application {
         Map<Integer, VBox> sections = new LinkedHashMap<>();
         VBox list = new VBox(14);
         list.getStyleClass().add("first-use-list");
-        for (Reticula.Subject s : Reticula.ISC) {
+        for (Reticula.Subject s : SUBJECTS) {
             VBox section = sections.computeIfAbsent(s.semester(), n -> {
                 Label name = new Label(Reticula.semester(n).toUpperCase(Text.SPANISH));
                 name.getStyleClass().add("section-title");
@@ -2047,9 +2098,7 @@ public final class NotesApp extends Application {
     /** The first notebooks: the subjects ticked, and "Primeros pasos" with a note on how the app works. */
     private void startWith(List<Reticula.Subject> subjects, Period period) {
         try {
-            for (Reticula.Subject s : subjects) {
-                createSubject(new NotebookChoice(s.name(), s.type(), s.type().course() ? period : null, s.language(), s.key()));
-            }
+            for (Reticula.Subject s : subjects) createNotebook(new NotebookChoice(s.name(), s.type(), period, s.language(), s.key()));
             Path guide = createNotebook("Primeros pasos", NotebookType.GENERAL);
             try (var in = NotesApp.class.getResourceAsStream("guia.md")) {
                 Vault.createNote(guide, "Cómo usar Devava Notes", new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
@@ -2066,21 +2115,26 @@ public final class NotesApp extends Application {
         dialog.setTitle(title);
         dialog.setHeaderText(title);
         style(dialog);
-        VBox content = new VBox(12);
         ToggleGroup types = new ToggleGroup();
-        for (NotebookType each : NotebookType.ALL) {
+        ButtonType ok = new ButtonType("Cambiar", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().setAll(ok, ButtonType.CANCEL);
+        dialog.getDialogPane().setContent(typeChoice(types, NotebookType.ALL, selected));
+        return dialog.showAndWait().filter(b -> b == ok).map(b -> (NotebookType) types.getSelectedToggle().getUserData());
+    }
+
+    /** Types to pick one of, each with what it is for. */
+    private static VBox typeChoice(ToggleGroup group, List<NotebookType> types, NotebookType selected) {
+        VBox content = new VBox(12);
+        for (NotebookType each : types) {
             RadioButton option = new RadioButton(each.name());
             option.setUserData(each);
-            option.setToggleGroup(types);
+            option.setToggleGroup(group);
             option.setSelected(each.equals(selected));
             Label about = new Label(each.description());
             about.getStyleClass().add("type-description");
             content.getChildren().add(new VBox(2, option, about));
         }
-        ButtonType ok = new ButtonType("Cambiar", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().setAll(ok, ButtonType.CANCEL);
-        dialog.getDialogPane().setContent(content);
-        return dialog.showAndWait().filter(b -> b == ok).map(b -> (NotebookType) types.getSelectedToggle().getUserData());
+        return content;
     }
 
     /** A yes/no question whose "yes" loses or moves something, so it shows in red. */
