@@ -112,12 +112,72 @@ html, body {
     background: var(--code-bg);
 }
 
-/* A code block while writing: a card, with its language, Copiar and Quitar above numbered lines */
+/* A code block while writing: a card, with its language, Copiar and Quitar above numbered lines.
+   No vertical margins in the editor: CodeMirror cannot measure them, and its clicks and arrow keys
+   would land a line off below them. The space around a card is padding of its widgets. */
+#editor .cm-card-top {
+    position: relative;
+    padding-top: 10px;
+}
+
+#editor .cm-card-bottom {
+    position: relative;
+    padding-bottom: 10px;
+}
+
+/* The cursor right before or right after a card: a line where the text will go */
+#editor .cm-focused .cm-card-top.here::before, #editor .cm-focused .cm-card-bottom.here::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--accent);
+}
+
+#editor .cm-focused .cm-card-top.here::before {
+    top: 3px;
+}
+
+#editor .cm-focused .cm-card-bottom.here::after {
+    bottom: 3px;
+}
+
+#editor .cm-beside-card .cm-cursor {
+    visibility: hidden;
+}
+
+/* A heading's #s hang in the margin: its text starts where the paragraphs' does */
+#editor .cm-hmark {
+    display: inline-block;
+    box-sizing: border-box;
+    width: 34px;
+    margin-left: -34px;
+    padding-right: 7px;
+    text-align: right;
+    text-indent: 0;
+    font-size: 13px;
+    font-weight: 400;
+    white-space: pre;
+}
+
+/* A list item's mark (and its indent), in a box as wide as its level: its text and what wraps of it line up */
+#editor .cm-lprefix {
+    display: inline-block;
+    text-align: right;
+    text-indent: 0;
+    white-space: pre;
+}
+
+#editor .cm-add-row {
+    padding-top: 14px;
+}
+
 #editor .cm-card-head {
     display: flex;
     align-items: center;
     gap: 4px;
-    margin-top: 10px;
     padding: 5px 6px;
     border: 1px solid var(--border);
     border-bottom: none;
@@ -158,7 +218,6 @@ html, body {
 
 #editor .cm-card-foot {
     height: 8px;
-    margin-bottom: 10px;
     border: 1px solid var(--border);
     border-top: none;
     border-radius: 0 0 10px 10px;
@@ -237,7 +296,6 @@ html, body {
     gap: 8px;
     box-sizing: border-box;
     width: 100%;
-    margin-top: 14px;
     padding: 9px;
     border: 1.5px dashed var(--border);
     background: none;

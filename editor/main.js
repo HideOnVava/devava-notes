@@ -154,15 +154,21 @@ function say(b, now, then) {
 /** The code of a card: its lines between the fences. */
 const codeOf = (state, card) => state.sliceDoc(card.open.to + 1, card.close.from - 1);
 
-/** The top of a card: its language (a menu to change it), Copiar and Quitar. */
+// CodeMirror measures a block widget by its box, margins left out, and maps clicks and arrow keys
+// with those measures: the space around a card is padding inside its widgets. A click on a card
+// that is not on one of its buttons is the editor's, so the cursor goes where it lands.
+const onButton = e => e.target instanceof Element && e.target.closest("button") != null;
+
+/** The top of a card: its language (a menu to change it), Copiar and Quitar; a line above it when the cursor is right before it. */
 class Head extends WidgetType {
-    constructor(info) {
+    constructor(info, here) {
         super();
         this.info = info;
+        this.here = here;
     }
 
     eq(other) {
-        return other.info === this.info;
+        return other.info === this.info && other.here === this.here;
     }
 
     toDOM(view) {
@@ -193,18 +199,39 @@ class Head extends WidgetType {
             view.focus();
         });
         head.append(chip, element("span", "grow"), copy, remove);
-        return head;
+        return element("div", "cm-card-top" + (this.here ? " here" : ""), head);
+    }
+
+    get estimatedHeight() {
+        return 46;
+    }
+
+    ignoreEvent(e) {
+        return onButton(e);
     }
 }
 
-/** The bottom edge of a card. */
+/** The bottom edge of a card; a line below it when the cursor is right after it. */
 class Foot extends WidgetType {
-    eq() {
-        return true;
+    constructor(here) {
+        super();
+        this.here = here;
+    }
+
+    eq(other) {
+        return other.here === this.here;
     }
 
     toDOM() {
-        return element("div", "cm-card-foot");
+        return element("div", "cm-card-bottom" + (this.here ? " here" : ""), element("div", "cm-card-foot"));
+    }
+
+    get estimatedHeight() {
+        return 19;
+    }
+
+    ignoreEvent() {
+        return false;
     }
 }
 
@@ -217,7 +244,15 @@ class AddBlock extends WidgetType {
     toDOM(view) {
         const add = button("cm-add-block", icon("plus"), words.block);
         add.addEventListener("click", () => newBlock(view, view.state.doc.length));
-        return add;
+        return element("div", "cm-add-row", add);
+    }
+
+    get estimatedHeight() {
+        return 54;
+    }
+
+    ignoreEvent(e) {
+        return onButton(e);
     }
 }
 
@@ -231,6 +266,7 @@ const fence = Decoration.mark({});
  */
 function scan(state) {
     const {doc} = state, list = [], decorations = new RangeSetBuilder(), atomic = new RangeSetBuilder();
+    const cursor = state.selection.main.empty ? state.selection.main.head : -1;
     syntaxTree(state).iterate({
         enter: node => {
             if (node.name !== "FencedCode") return;
@@ -241,12 +277,12 @@ function scan(state) {
             }
             const card = {open, close, info: info ? doc.sliceString(info.from, info.to) : ""}, output = describe(card.info).output;
             list.push(card);
-            decorations.add(open.from, open.to, Decoration.replace({widget: new Head(card.info), block: true}));
+            decorations.add(open.from, open.to, Decoration.replace({widget: new Head(card.info, cursor === open.from), block: true}));
             for (let n = open.number + 1; n < close.number; n++) {
                 decorations.add(doc.line(n).from, doc.line(n).from, output ? outputLine
                     : Decoration.line({class: "cm-code cm-card-line", attributes: {"data-n": String(n - open.number)}}));
             }
-            decorations.add(close.from, close.to, Decoration.replace({widget: new Foot(), block: true}));
+            decorations.add(close.from, close.to, Decoration.replace({widget: new Foot(cursor === close.to), block: true}));
             atomic.add(open.from, open.to + 1, fence);   // a fence and the line break between it and the code
             atomic.add(close.from - 1, close.to, fence);
             return false;
@@ -258,12 +294,84 @@ function scan(state) {
 
 const cards = StateField.define({
     create: scan,
-    update: (value, tr) => tr.docChanged || syntaxTree(tr.state) !== syntaxTree(tr.startState) ? scan(tr.state) : value,
+    update: (value, tr) => tr.docChanged || tr.selection || syntaxTree(tr.state) !== syntaxTree(tr.startState) ? scan(tr.state) : value,
     provide: field => [
         EditorView.decorations.from(field, value => value.decorations),
         EditorView.atomicRanges.of(view => view.state.field(field).atomic),
+        // Right before or after a card, the line above or below it shows where typing goes, not the caret.
+        EditorView.editorAttributes.compute([field, "selection"], state => {
+            const {empty, head} = state.selection.main;
+            return {class: empty && state.field(field).list.some(c => head === c.open.from || head === c.close.to) ? "cm-beside-card" : ""};
+        }),
     ],
 });
+
+// ---------- Headings and lists, lined up ----------
+
+// A heading's #s hang in the margin, so its text starts where the text around it does. A list's
+// levels step in by 1.5em, and what wraps of an item, or continues it on the lines below, starts
+// where its text does.
+const headingMarks = Decoration.mark({class: "cm-hmark"});
+
+/** The innermost list item around a line, how deep it is, and where its text starts (in em). */
+function listItem(state, line) {
+    const indent = /^[ \t]*/.exec(line.text)[0].length;
+    if (indent === line.text.length) return null;
+    let item = null, depth = 0;
+    for (let n = syntaxTree(state).resolveInner(line.from + indent, 1); n; n = n.parent) {
+        if (n.name === "FencedCode" || n.name === "CodeBlock") return null;
+        if (n.name === "ListItem") {
+            item ??= n;
+            depth++;
+        }
+    }
+    if (!item) return null;
+    const task = item.getChild("Task")?.getChild("TaskMarker");
+    const column = depth * 1.5 + (item.parent?.name === "OrderedList" ? 0.7 : 0) + (task ? 1.4 : 0);
+    return {item, task, indent, column};
+}
+
+function layout(view) {
+    const {state} = view, builder = new RangeSetBuilder();
+    let done = 0;   // the last line decorated: a line can sit in two visible ranges
+    for (const {from, to} of view.visibleRanges) {
+        for (let pos = from; pos <= to;) {
+            const line = state.doc.lineAt(pos);
+            pos = line.to + 1;
+            if (line.number <= done) continue;
+            done = line.number;
+            const heading = /^#{1,6}[ \t]+/.exec(line.text);
+            if (heading && syntaxTree(state).resolveInner(line.from, 1).parent?.name.startsWith("ATXHeading")) {
+                builder.add(line.from, line.from + heading[0].length, headingMarks);
+                continue;
+            }
+            const list = listItem(state, line);
+            if (!list) continue;
+            const em = list.column + "em";
+            const first = state.doc.lineAt(list.item.from).number === line.number;
+            // the item's mark (with its task box), or the indent of a line that continues it
+            let end = line.from + list.indent;
+            if (first) {
+                end = (list.task && state.doc.lineAt(list.task.from).number === line.number ? list.task : list.item.firstChild).to;
+                while (end < line.to && /[ \t]/.test(state.sliceDoc(end, end + 1))) end++;
+            }
+            builder.add(line.from, line.from, Decoration.line({
+                attributes: {style: `padding-left: calc(6px + ${em}); text-indent: ${end > line.from ? `-${em}` : "0"}`}}));
+            if (end > line.from) builder.add(line.from, end, Decoration.mark({class: "cm-lprefix", attributes: {style: `min-width: ${em}`}}));
+        }
+    }
+    return builder.finish();
+}
+
+const lineUp = ViewPlugin.fromClass(class {
+    constructor(view) {
+        this.decorations = layout(view);
+    }
+
+    update(u) {
+        if (u.docChanged || u.viewportChanged || syntaxTree(u.startState) !== syntaxTree(u.state)) this.decorations = layout(u.view);
+    }
+}, {decorations: plugin => plugin.decorations});
 
 /** The card a head element of the page belongs to, as the note is now. */
 function cardOf(view, head) {
@@ -595,7 +703,7 @@ const extensions = () => [
     closeBrackets(), highlightSelectionMatches(), placeholder(words.placeholder), EditorState.phrases.of(phrases),
     markdown({base: markdownLanguage, codeLanguages: language}),
     highlighters.map(h => syntaxHighlighting(h)),
-    cards, guard,
+    cards, guard, lineUp,
     Prec.high(keymap.of([
         {key: "Enter", run: closeFence},
         {key: "Mod-b", run: view => format(view, "bold")},
@@ -618,6 +726,7 @@ const extensions = () => [
 const editor = document.getElementById("editor"), reading = document.getElementById("reading");
 const view = new EditorView({parent: editor, state: EditorState.create({extensions: extensions()})});
 view.scrollDOM.addEventListener("scroll", closeMenu);
+window.editorView = view;   // for the tests: where CodeMirror puts each line, and where a click lands
 
 /** Accents and case do not matter when searching, and a folded text keeps the positions of the original. */
 function fold(text) {

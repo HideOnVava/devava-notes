@@ -3,6 +3,8 @@ package com.devavaxp.notes;
 import com.devavaxp.notes.NotebookType.Kind;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
+import javafx.event.EventType;
+import javafx.geometry.Point2D;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.control.Button;
@@ -20,7 +22,10 @@ import javafx.scene.input.Clipboard;
 import javafx.scene.input.DataFormat;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
+import javafx.scene.input.MouseButton;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.web.WebEngine;
+import javafx.scene.web.WebView;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 import netscape.javascript.JSObject;
@@ -811,6 +816,166 @@ class AppSmokeTest {
         dialogShot(stage, "r8-dark-new-subject", app::newNotebook, "estruc");
         assertEquals(List.of(), fx(() -> List.copyOf(app.editor.errors)));
         fx(() -> run(stage::close));
+    }
+
+    /** A note with all that sits between lines of text: headings, pictures, code cards, lists. */
+    private static final String MIXED = """
+            ## Introducción
+
+            Este es un párrafo largo que debe ocupar más de una línea en el editor, para ver cómo se acomoda el texto cuando se pasa al siguiente renglón, igual que en una nota de clase de verdad.
+
+            ### Ejemplo sencillo
+            Aquí el ### intenta alinear todo lo de abajo. Este texto en sí mismo es el ejemplo: una vez llegas al límite de una línea y te pasas a la otra, a veces el texto sale un poco más a la izquierda que el resto.
+
+            ![](<attachments/captura.png>)
+
+            ```java
+            class Animal {
+                String sonido() { return "..."; }
+            }
+            ```
+            ![](<attachments/salida.png>)
+
+            ## Salida
+
+            ```output
+            ¡Guau!
+            ```
+            ```java
+            int x = 1;
+            ```
+
+            * Esto es el header de una lista
+              * Se supone que esto es un subtítulo del header.
+              No se tabula lo suficiente.
+            * Un elemento de lista muy largo, que tiene que ocupar más de una línea en el editor para comprobar que lo que se pasa al siguiente renglón empieza donde empieza su texto, y no debajo de su viñeta.
+
+            - [ ] Una tarea
+
+            ## Final
+            Última línea.""";
+
+    /**
+     * What is drawn is where the cursor goes: a click on any line puts the cursor on it, the arrows
+     * go through the lines one by one past headings, pictures, code cards and lists, a click in the
+     * gap around a card puts it right before or after the card, and headings and lists line up.
+     */
+    @Test
+    void putsTheCursorWhereItIsClicked(@TempDir Path home) throws Exception {
+        Stage[] window = new Stage[1];
+        NotesApp app = open(home, window);
+        WebEngine engine = fx(() -> app.editor.view.getEngine());
+        Path notebook = fx(() -> app.createNotebook("Pruebas", NotebookType.CLASS_NOTES));
+        Path note = notebook.resolve("Mezcla.md");
+        Files.writeString(note, MIXED);
+        fx(() -> run(() -> {
+            app.openNotebook(notebook);
+            app.openNote(note);
+        }));
+        fx(() -> run(() -> window[0].setHeight(1600)));   // the whole note in sight: CodeMirror draws only what is
+        waitFor("the cards", () -> fx(() -> ((Number) engine.executeScript("document.querySelectorAll('.cm-card-head').length")).intValue() == 3));
+        Thread.sleep(800);
+        int lines = fx(() -> ((Number) engine.executeScript("editorView.state.doc.lines")).intValue());
+
+        // CodeMirror's map of the note is where WebKit drew each line.
+        assertEquals("", fx(() -> engine.executeScript("""
+                [...editorView.contentDOM.querySelectorAll('.cm-line')].map(l => {
+                    const drift = Math.round(l.getBoundingClientRect().top - editorView.lineBlockAt(editorView.posAtDOM(l)).top - editorView.documentTop);
+                    return drift ? editorView.state.doc.lineAt(editorView.posAtDOM(l)).number + ': ' + drift + 'px' : '';
+                }).filter(d => d).join(', ')""")));
+
+        // A click on any line, where it is drawn, puts the cursor on that line.
+        List<String> missed = new ArrayList<>();
+        for (int n = 1; n <= lines; n++) {
+            int line = n;
+            String spot = (String) fx(() -> engine.executeScript(("(() => { const l = editorView.state.doc.line(%d), el = editorView.domAtPos(l.from).node; "
+                    + "const box = (el.nodeType === 3 ? el.parentNode : el).closest('.cm-line'); if (!box) return ''; "
+                    + "const r = box.getBoundingClientRect(); return (r.left + 60) + ',' + (r.top + Math.min(11, r.height / 2)); })()").formatted(line)));
+            if (spot.isEmpty()) continue;   // a ``` line: the head or the foot of its card
+            String[] xy = spot.split(",");
+            click(app, Double.parseDouble(xy[0]), Double.parseDouble(xy[1]));
+            int landed = fx(() -> ((Number) engine.executeScript("editorView.state.doc.lineAt(editorView.state.selection.main.head).number")).intValue());
+            if (landed != line) missed.add(line + "→" + landed);
+        }
+        assertEquals(List.of(), missed, "clicks that put the cursor on another line");
+
+        // Down and Up go through every line of text in order: the ``` lines are the cards' heads and feet.
+        List<Integer> text = new ArrayList<>();
+        List<String> all = MIXED.lines().toList();
+        for (int n = 1; n <= all.size(); n++) if (!all.get(n - 1).startsWith("```")) text.add(n);
+        fx(() -> run(app.editor::focus));
+        press(app, KeyCode.HOME);
+        List<Integer> down = new ArrayList<>(List.of(1)), up = new ArrayList<>();
+        for (int i = 0; i < 60; i++) {
+            key(app, KeyCode.DOWN);
+            int at = cursorLine(engine);
+            if (at != down.get(down.size() - 1)) down.add(at);
+        }
+        assertEquals(text, down, "the lines Down goes through");
+        up.add(down.get(down.size() - 1));
+        for (int i = 0; i < 60; i++) {
+            key(app, KeyCode.UP);
+            int at = cursorLine(engine);
+            if (at != up.get(up.size() - 1)) up.add(at);
+        }
+        assertEquals(text.reversed(), up, "the lines Up goes through");
+
+        // A heading's text starts where its paragraphs' does; a list steps in, and its lines line up.
+        String x = "(p => Math.round(editorView.coordsAtPos(p).left))";
+        String start = "(n => editorView.state.doc.line(n).from)";
+        String row = "(p => Math.round(editorView.coordsAtPos(editorView.moveToLineBoundary(editorView.state.selection.constructor.cursor(p), false).head).left))";
+        assertEquals(fx(() -> engine.executeScript(x + "(" + start + "(3))")), fx(() -> engine.executeScript(x + "(" + start + "(1) + 3)")),
+                "the text of ## Introducción and of its paragraph");
+        assertEquals(fx(() -> engine.executeScript(x + "(" + start + "(6))")), fx(() -> engine.executeScript(x + "(" + start + "(5) + 4)")),
+                "the text of ### Ejemplo sencillo and of its paragraph");
+        int outer = ((Number) fx(() -> engine.executeScript(x + "(" + start + "(26) + 2)"))).intValue();
+        int inner = ((Number) fx(() -> engine.executeScript(x + "(" + start + "(27) + 4)"))).intValue();
+        int more = ((Number) fx(() -> engine.executeScript(x + "(" + start + "(28) + 2)"))).intValue();
+        int wrapped = ((Number) fx(() -> engine.executeScript(row + "(" + start + "(30) - 2)"))).intValue();
+        int item = ((Number) fx(() -> engine.executeScript(x + "(" + start + "(29) + 2)"))).intValue();
+        assertTrue(inner - outer >= 20, "a sub-item steps in: " + outer + " → " + inner);
+        assertEquals(inner, more, "a line that continues the sub-item starts where its text does");
+        assertEquals(item, wrapped, "what wraps of a long item starts where its text does");
+        // A click in the gap above the first card puts the cursor right before it, one below it right after it.
+        String[] gaps = ((String) fx(() -> engine.executeScript("""
+                (() => { const top = document.querySelector('.cm-card-top').getBoundingClientRect(),
+                               bottom = document.querySelector('.cm-card-bottom').getBoundingClientRect();
+                         return [top.left + 200, top.top + 4, bottom.left + 200, bottom.bottom - 4].join(','); })()"""))).split(",");
+        click(app, Double.parseDouble(gaps[0]), Double.parseDouble(gaps[1]));
+        assertEquals("10:0", cursor(engine), "a click above the card");
+        assertTrue(fx(() -> (Boolean) engine.executeScript("!!document.querySelector('.cm-card-top.here')")));
+        shot(window[0], "k1-before-card");
+        click(app, Double.parseDouble(gaps[2]), Double.parseDouble(gaps[3]));
+        assertEquals("14:3", cursor(engine), "a click below the card");
+        fx(() -> run(() -> ((JSObject) engine.executeScript("window")).call("insertText", "Entre el código y la imagen")));
+        waitFor("the text between the card and the picture", () -> Files.readString(note).contains("}\n```\nEntre el código y la imagen\n![](<attachments/salida.png>)"));
+        shot(window[0], "k2-between");
+
+        assertEquals(List.of(), fx(() -> List.copyOf(app.editor.errors)));
+        fx(() -> run(window[0]::close));
+    }
+
+    private static int cursorLine(WebEngine engine) throws Exception {
+        return fx(() -> ((Number) engine.executeScript("editorView.state.doc.lineAt(editorView.state.selection.main.head).number")).intValue());
+    }
+
+    /** The cursor as line:column. */
+    private static String cursor(WebEngine engine) throws Exception {
+        return fx(() -> (String) engine.executeScript(
+                "(() => { const h = editorView.state.selection.main.head, l = editorView.state.doc.lineAt(h); return l.number + ':' + (h - l.from); })()"));
+    }
+
+    /** A click of the mouse on the editor's page, at a point of the page. */
+    private static void click(NotesApp app, double x, double y) throws Exception {
+        fx(() -> run(() -> {
+            WebView page = app.editor.view;
+            Point2D scene = page.localToScene(x, y), screen = page.localToScreen(x, y);   // a MouseEvent is made in the scene's coordinates
+            for (EventType<MouseEvent> type : List.of(MouseEvent.MOUSE_PRESSED, MouseEvent.MOUSE_RELEASED, MouseEvent.MOUSE_CLICKED)) {
+                page.fireEvent(new MouseEvent(type, scene.getX(), scene.getY(), screen.getX(), screen.getY(), MouseButton.PRIMARY, 1, false, false, false, false,
+                        type == MouseEvent.MOUSE_PRESSED, false, false, false, false, true, null));
+            }
+        }));
+        Thread.sleep(120);
     }
 
     /** Home shows this school period's notebooks; the earlier ones fold away until asked for. */
