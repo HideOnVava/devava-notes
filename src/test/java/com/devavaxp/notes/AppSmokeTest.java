@@ -135,6 +135,14 @@ class AppSmokeTest {
                 @Override String sonido() { return "¡Guau!"; }
             }""";
 
+    private static final String COLUMNS = """
+            | Columna | Tipo | Restricciones |
+            | --- | --- | --- |
+            | employee_id | NUMBER(6) | PRIMARY KEY |
+            | first_name | VARCHAR2(20) |  |
+            | hire_date | DATE | DEFAULT SYSDATE NOT NULL |
+            | department_id | NUMBER(4) | REFERENCES departments |""";
+
     private static final String CREATE = """
             CREATE TABLE employees (
               employee_id   NUMBER(6) PRIMARY KEY,
@@ -764,7 +772,8 @@ class AppSmokeTest {
         Files.writeString(exercise, "---\nkind: exercise\ntopics: [consultas/joins, consultas/group by]\nlevel: Medium\nstatus: Solved\ndate: "
                 + today + "\n---\n## Enunciado\n\n¿Cuántos empleados trabajan en cada departamento, incluidos los que no tienen ninguno?\n\n"
                 + "## Consulta\n\n```plsql\n" + QUERY + "\n```\n");
-        Files.writeString(db.resolve("EMPLOYEES.md"), "---\nkind: table\n---\n## Creación\n\n```plsql\n" + CREATE + "\n```\n");
+        Path employees = db.resolve("EMPLOYEES.md");
+        Files.writeString(employees, "---\nkind: table\n---\n## Columnas\n\n" + COLUMNS + "\n\n## Creación\n\n```plsql\n" + CREATE + "\n```\n");
         Files.writeString(db.resolve("Segundo examen.md"), "---\nkind: exam\ndate: " + today.plusDays(9) + "\ntopics: [plsql/cursores]\n---\n");
         Path partial = calculus.resolve("Derivadas parciales.md");
         Files.writeString(partial, PARTIAL.formatted(today.minusDays(1)));
@@ -800,6 +809,13 @@ class AppSmokeTest {
         dialogShot(stage, "r1-change-type", () -> menuItem(stage, "Cambiar tipo…").fire(), "");
         dialogShot(stage, "r2-language", () -> menuItem(stage, "Lenguaje del código…").fire(), "");
         dialogShot(stage, "r3-period", () -> menuItem(stage, "Cambiar periodo…").fire(), "");
+        fx(() -> run(() -> {
+            app.openNotebook(db);
+            app.browser.choose("Tablas", null);
+            app.openNote(employees);
+        }));
+        waitFor("the table's grid", () -> fx(() -> ((Number) engine.executeScript("document.querySelectorAll('.cm-table tbody tr').length")).intValue() == 5));
+        shot(stage, "readme-tabla");
         fx(() -> run(() -> {
             app.setDark(true);
             app.openNotebook(db);
@@ -1009,11 +1025,11 @@ class AppSmokeTest {
         shot(drawing.stage, "x1-drawing-new");
         fx(() -> draw.executeScript("""
                 drawingAPI.updateScene({elements: drawingElements([
-                    {type: 'rectangle', x: 80, y: 80, width: 220, height: 110, label: {text: 'Pila'}},
-                    {type: 'arrow', x: 310, y: 135, width: 160, height: 0},
-                    {type: 'ellipse', x: 480, y: 80, width: 200, height: 110, label: {text: 'Cola'}}]), captureUpdate: 'IMMEDIATELY'})"""));
+                    {type: 'rectangle', x: 80, y: 190, width: 220, height: 110, label: {text: 'Pila'}},
+                    {type: 'arrow', x: 310, y: 245, width: 160, height: 0},
+                    {type: 'ellipse', x: 480, y: 190, width: 200, height: 110, label: {text: 'Cola'}}]), captureUpdate: 'IMMEDIATELY'})"""));
         Thread.sleep(600);
-        shot(drawing.stage, "x2-drawing");
+        shot(drawing.stage, "readme-dibujo");
         String count = "drawingAPI.getSceneElements().length", images = "drawingAPI.getSceneElements().filter(e => e.type === 'image').length";
         int drawn = ((Number) fx(() -> draw.executeScript(count))).intValue();
 
@@ -1119,7 +1135,7 @@ class AppSmokeTest {
         key(again.view, KeyCode.DELETE);   // with no click first
         assertEquals(0, ((Number) fx(() -> redraw.executeScript(images))).intValue(), "the pictures deleted with Supr");
         fx(() -> redraw.executeScript("drawingAPI.updateScene({elements: [...drawingAPI.getSceneElements(), "
-                + "...drawingElements([{type: 'text', x: 80, y: 230, text: 'LIFO y FIFO'}, {type: 'text', x: 80, y: 280, text: '¿Último en entrar?', fontFamily: 3}])]})"));
+                + "...drawingElements([{type: 'text', x: 80, y: 340, text: 'LIFO y FIFO'}, {type: 'text', x: 80, y: 390, text: '¿Último en entrar?', fontFamily: 3}])]})"));
         assertEquals(Boolean.TRUE, fx(() -> redraw.executeScript("""
                 drawingAPI.getSceneElements().filter(e => e.type === 'text' && !e.containerId).every(e => {
                     const c = document.createElement('canvas').getContext('2d');

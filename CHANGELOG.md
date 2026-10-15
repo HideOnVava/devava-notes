@@ -5,6 +5,49 @@ Aquí están los cambios importantes de cada versión de Devava Notes. El format
 [versionado semántico](https://semver.org/lang/es/). Cada versión en GitHub toma su «Qué hay de
 nuevo» de la sección que le toca en este archivo.
 
+## [2.1.0] - 2026-10-15
+
+Tablas que se escriben en sus celdas, dibujos dentro de la app, y los cuadernos libres aparte de
+las materias.
+
+### Agregado
+- **Tablas** que se ven y se escriben como cuadrícula, igual que una hoja de cálculo: **Tab**
+  pasa a la celda siguiente, **Enter** a la de abajo (al final agrega una fila, y en una fila
+  nueva vacía sale de la tabla), y las flechas van de celda en celda y entran o salen de la
+  tabla. Arriba de cada una, **+ Fila**, **+ Columna**, un menú **⋯** para quitar una fila o
+  una columna o alinearla, **Copiar** (se pega con sus celdas en Word, Excel o Google Docs) y
+  **Quitar**. La nota guarda una tabla de Markdown normal, que otros programas leen.
+- Tres maneras de **crear una tabla**: **Tabla** en la barra de formato, con cuadros como en
+  Word para elegir columnas y filas; pegar celdas de Excel, Google Sheets, SQL Developer o una
+  página (`Ctrl+Z` deja lo pegado como texto); o escribir el encabezado, como
+  `| Paso | i | suma |`, y dar Enter. Las celdas pegadas dentro de una tabla la llenan desde
+  la celda donde estás.
+- **Dibujos** con Excalidraw, en español y en una ventana de la app: **Dibujo** en la barra
+  de formato, figuras, flechas y texto a mano, imágenes (**Imagen** o `Ctrl+V` de una
+  captura) para dibujar sobre ellas, **Mermaid a Excalidraw** para convertir el texto de un
+  diagrama, y una **biblioteca** de figuras que comparten todos tus dibujos. **Insertar en la
+  nota** lo guarda en `attachments`; un clic en el dibujo (o *Editar dibujo* al escribir) lo
+  vuelve a abrir. En el tema oscuro, el dibujo también se oscurece.
+- **Cuadernos libres** en Inicio, aparte de las materias, y **Nuevo cuaderno libre** para
+  crear uno (Libre o Programación competitiva).
+
+### Cambiado
+- Inicio agrupa y cuenta por periodo **solo las materias**: un periodo ya no cuenta como
+  materias tus cuadernos libres. *Nueva materia* y la primera vez ofrecen solo materias;
+  Residencia Profesional, Servicio Social y Actividades Complementarias son cuadernos libres.
+- Los `#` de un título cuelgan en el margen, así que su texto empieza donde el de sus
+  párrafos; las listas se sangran por nivel, y lo que sigue de un elemento empieza donde su
+  texto.
+- Un cuaderno libre ya no tiene *Cambiar periodo…*, y *Opciones* dice *Importar un cuaderno
+  (ZIP)…*.
+
+### Corregido
+- Un clic en una nota pone el cursor donde se hizo, también debajo de bloques de código,
+  títulos e imágenes, y ↑ y ↓ pasan por cada línea sin saltarse ninguna.
+- Enter y Esc en el buscador de lenguajes de un bloque de código.
+- Vista previa respeta la alineación de las columnas de una tabla (`:---:` no centraba), y una
+  tabla muy ancha se desplaza de lado en vez de salirse de la página.
+
 ## [2.0.0] - 2026-10-14
 
 La versión hecha para los estudiantes de Ingeniería en Sistemas Computacionales del Instituto
@@ -135,6 +178,7 @@ La primera versión de Devava Notes, para Windows.
 - Un instalador para Windows (por usuario, sin permisos de administrador) y un ZIP portable; no
   hay que instalar Java.
 
+[2.1.0]: https://github.com/HideOnVava/devava-notes/releases/tag/v2.1.0
 [2.0.0]: https://github.com/HideOnVava/devava-notes/releases/tag/v2.0.0
 [1.2.0]: https://github.com/HideOnVava/devava-notes/releases/tag/v1.2.0
 [1.1.0]: https://github.com/HideOnVava/devava-notes/releases/tag/v1.1.0

@@ -12,8 +12,9 @@ Cada materia del semestre tiene su cuaderno, que sabe lo que lleva: tus **apunte
 las **tareas y prácticas** con su fecha de entrega, los **exámenes**, y en las materias de
 programación, **sesiones de código** con el código y lo que imprimió. Las materias salen de la
 retícula de ISC: escribes «estruc» y la app propone *Estructura de Datos*, de Programación y en
-Java. Toda la app está en español, y tus notas son archivos de texto en tu computadora: sin
-cuentas, sin nube y sin instalar Java.
+Java. Tus notas llevan **tablas** que se escriben como en Excel y **dibujos** hechos sin salir
+de la app. Toda la app está en español, y tus notas son archivos de texto en tu computadora:
+sin cuentas, sin nube y sin instalar Java.
 
 | Inicio | Una sesión de código |
 | --- | --- |
@@ -26,6 +27,10 @@ cuentas, sin nube y sin instalar Java.
 | Una materia, en vista previa | Bases de datos, en tema oscuro |
 | --- | --- |
 | ![Apuntes de Cálculo Vectorial con sus fórmulas](docs/screenshots/materia.png) | ![Un ejercicio de Taller de Bases de Datos con su consulta en PL/SQL](docs/screenshots/bases-de-datos-oscuro.png) |
+
+| Una tabla, escrita en sus celdas | Un dibujo |
+| --- | --- |
+| ![Las columnas de la tabla EMPLOYEES de Taller de Bases de Datos, como cuadrícula](docs/screenshots/tabla.png) | ![Una pila y una cola dibujadas en Excalidraw, dentro de la app](docs/screenshots/dibujo.png) |
 
 ## Descarga
 
@@ -46,7 +51,7 @@ Las versiones para macOS y Linux vienen después.
    agrega más con **Nueva materia**.
 2. **Escribe.** **Nueva nota** (`Ctrl+N`) ofrece lo que lleva cada materia: un apunte, una
    sesión de código, una tarea o un examen. La barra sobre la nota pone negritas, listas,
-   fórmulas, imágenes y bloques de código con un clic.
+   tablas, fórmulas, imágenes, dibujos y bloques de código con un clic.
 3. **Llena sus datos** arriba del texto (la entrega de una tarea, los temas de un examen):
    Inicio te dice lo que se acerca, y lo atrasado sale en rojo.
 
@@ -67,7 +72,7 @@ información → Ejecutar de todas formas** la abre, y Windows lo recuerda. GitH
 compila cada versión desde el código de su etiqueta, así que el registro de la compilación
 muestra exactamente qué lleva cada archivo, y cada versión publica sus sumas SHA-256.
 
-## Tipos de materia
+## Tipos de cuaderno
 
 Cada tipo trae sus datos (arriba de la nota), sus plantillas para las notas nuevas y sus vistas
 (a la izquierda). Cada vista muestra sus notas como lista o como tabla, con columnas para
@@ -95,8 +100,10 @@ ordenar.
   fijadas.
 
 En Inicio, las materias se agrupan por periodo escolar (*Ene–Jun*, *Verano*, *Ago–Dic*) y los
-semestres anteriores quedan plegados; *Cambiar periodo…* mueve una materia a otro. **Lo que se
-acerca** junta las entregas y los exámenes de todas tus materias.
+semestres anteriores quedan plegados; *Cambiar periodo…* mueve una materia a otro. Libre y
+Programación competitiva son **cuadernos libres**: no tienen semestre, van en su propia sección
+y se crean con **Nuevo cuaderno libre**. **Lo que se acerca** junta las entregas y los exámenes
+de todas tus materias.
 
 ## Escribir
 
@@ -108,6 +115,15 @@ Las notas son Markdown, pero no hace falta saberlo: la barra sobre la nota lo es
   con colores y con números de línea. Un bloque de **Salida** guarda lo que imprimió el
   programa, y **+ Bloque de código** agrega otro en el lenguaje de la materia. Quien sabe
   Markdown puede escribir ```` ```java ```` y Enter.
+- **Tablas** como cuadrícula: se escribe en sus celdas, **Tab** pasa a la siguiente y **Enter**
+  a la de abajo (al final agrega una fila). Créala con **Tabla** en la barra (eliges columnas y
+  filas), pegando celdas de Excel, Google Sheets o SQL Developer, o escribiendo su encabezado
+  (`| Nombre | Edad |`) y Enter. Arriba de cada una: **+ Fila**, **+ Columna**, **⋯** para
+  quitar o alinear, **Copiar** (se pega con sus celdas en Word, Excel o Google Docs) y
+  **Quitar**.
+- **Dibujos** con Excalidraw, sin salir de la app: **Dibujo** en la barra abre una ventana para
+  dibujar diagramas y esquemas, con imágenes y capturas para dibujar encima, Mermaid y una
+  biblioteca de figuras. Un clic en el dibujo lo vuelve a abrir.
 - **Fórmulas**: `$e^{i\pi} + 1 = 0$` en el texto, o en su propia línea entre `$$`, dibujadas
   por KaTeX.
 - **Enlaces** entre notas: escribe `[[` y elige su título. `Ctrl+clic` sigue un enlace al
@@ -118,7 +134,7 @@ Las notas son Markdown, pero no hace falta saberlo: la barra sobre la nota lo es
   archivo a la nota; se guarda en la carpeta `attachments` de la materia.
 - **Temas sugeridos**: en las materias de la retícula, el menú ▾ de *Temas* propone los de la
   materia (herencia y polimorfismo en POO, pilas y colas en Estructura de Datos…).
-- Tablas, listas de pendientes (`- [ ]`) y tachado, como en GitHub.
+- Listas de pendientes (`- [ ]`) y tachado, como en GitHub.
 
 ## Atajos de teclado
 
@@ -130,7 +146,8 @@ Las notas son Markdown, pero no hace falta saberlo: la barra sobre la nota lo es
 | `Ctrl+E` | Pasar entre Editar y Vista previa |
 | `Ctrl+F` | Buscar y reemplazar en la nota |
 | `Ctrl+B`, `Ctrl+I` | Negrita, cursiva |
-| `Ctrl+V` | Pegar texto, o una imagen |
+| `Ctrl+V` | Pegar texto, una imagen, o celdas de Excel como tabla |
+| `Tab`, `Enter` | En una tabla: la celda siguiente, la de abajo |
 | `[[` | Enlazar otra nota, con sus títulos sugeridos |
 | `Ctrl+clic` | Seguir el `[[enlace]]` bajo el ratón, al escribir |
 | `Ctrl+Z` / `Ctrl+Y` | Deshacer / rehacer |
@@ -138,16 +155,21 @@ Las notas son Markdown, pero no hace falta saberlo: la barra sobre la nota lo es
 ## Dónde quedan tus notas
 
 Todo queda en una carpeta `Devava Notes` dentro de tu carpeta Documentos (también si OneDrive
-la sincroniza). Cada materia es una carpeta, y cada nota un archivo `.md` con su título:
+la sincroniza). Cada materia o cuaderno es una carpeta, y cada nota un archivo `.md` con su
+título:
 
 ```
 Documentos\Devava Notes\
-├── settings.json                 el tema
+├── settings.json                        el tema
+├── Biblioteca de dibujos.excalidrawlib  las figuras que guardas para tus dibujos
 └── Estructura de Datos\
-    ├── .notebook.json            su tipo, su lenguaje, su periodo y su materia en la retícula
-    ├── attachments\              las imágenes de sus notas
+    ├── .notebook.json                   su tipo, su lenguaje, su periodo y su materia en la retícula
+    ├── attachments\                     las imágenes y los dibujos de sus notas
     └── Sesión 5 · Pilas.md
 ```
+
+Un dibujo es un PNG (`Dibujo ….excalidraw.png`) que lleva adentro lo dibujado: cualquier visor
+de imágenes lo abre, y la app lo vuelve a abrir para seguir dibujando.
 
 Los datos de una nota son su encabezado YAML, así que los archivos se abren en cualquier editor
 de Markdown (Obsidian incluido), y las notas escritas en otro lado aparecen en la app. Sus
@@ -171,10 +193,10 @@ Deque<Character> pila = new ArrayDeque<>();
 - Cada cambio se guarda solo, un momento después, y cada archivo se escribe completo o no se
   escribe: un apagón nunca deja media nota.
 - Borrar una nota o una materia la manda a la Papelera de reciclaje.
-- Las carpetas que crees a mano son materias de tipo Libre.
+- Las carpetas que crees a mano son cuadernos libres.
 - **Para compartir una materia** (tus apuntes con tus compañeros, por ejemplo): en su menú,
-  *Exportar como ZIP…*. Quien recibe el ZIP la agrega con *Opciones → Importar una materia
-  (ZIP)…* en Inicio, y se abre tal como estaba, con su tipo y sus imágenes.
+  *Exportar como ZIP…*. Quien recibe el ZIP la agrega con *Opciones → Importar un cuaderno
+  (ZIP)…* en Inicio, y se abre tal como estaba, con su tipo, sus imágenes y sus dibujos.
 - Para guardar las notas en otro lugar, abre la app con `-Dnotes.home=<carpeta>` (desde el
   código) o define la variable de entorno `JAVA_TOOL_OPTIONS=-Dnotes.home=<carpeta>` (la app
   instalada).
@@ -185,7 +207,7 @@ Deque<Character> pila = new ArrayDeque<>();
 
 Java 21, JavaFX 21 (con WebView), Maven (con su wrapper), Gson y commonmark-java. El editor es
 CodeMirror 6, con KaTeX para las fórmulas, empaquetado por esbuild en un solo script que carga
-el WebView. Las pruebas usan JUnit 5; el compilador corre con `-Xlint:all` y la compilación
+el WebView; la ventana de dibujo es Excalidraw (con React), empaquetado aparte en `draw.js`. Las pruebas usan JUnit 5; el compilador corre con `-Xlint:all` y la compilación
 debe quedar sin advertencias. El código y sus comentarios están en inglés; lo que ve el
 estudiante, en español.
 
@@ -195,9 +217,10 @@ estudiante, en español.
 ./mvnw verify -Dsmoke=true         # también abre la ventana real y guarda capturas en target/smoke
 ```
 
-El código del editor está en [`editor/main.js`](editor/main.js). Después de cambiarlo, vuelve a
-empaquetarlo (con Node.js 20 o más nuevo) y sube el resultado,
-`src/main/resources/com/devavaxp/notes/editor.js`:
+El código del editor está en [`editor/main.js`](editor/main.js), y el de la ventana de dibujo en
+[`editor/draw.js`](editor/draw.js). Después de cambiarlos, vuelve a empaquetarlos (con Node.js
+20 o más nuevo) y sube el resultado, `editor.js`, `draw.js`, `draw.css` y las fuentes de
+`src/main/resources/com/devavaxp/notes/`:
 
 ```bash
 cd editor
@@ -232,16 +255,16 @@ español, que necesita el [WiX Toolset 3.x](https://github.com/wixtoolset/wix3/r
 
 GitHub Actions compila, prueba y publica cada versión
 ([`.github/workflows/release.yml`](.github/workflows/release.yml)), así que cada descarga sale
-de una compilación limpia de un commit etiquetado. Para publicar, por ejemplo, la versión 2.1.0:
+de una compilación limpia de un commit etiquetado. Para publicar, por ejemplo, la versión 2.2.0:
 
-1. Pon `<version>2.1.0</version>` en `pom.xml`.
-2. Agrega una sección `## [2.1.0] - <fecha>` a [`CHANGELOG.md`](CHANGELOG.md) (es el «Qué hay
+1. Pon `<version>2.2.0</version>` en `pom.xml`.
+2. Agrega una sección `## [2.2.0] - <fecha>` a [`CHANGELOG.md`](CHANGELOG.md) (es el «Qué hay
    de nuevo» de la versión) y su enlace al final del archivo.
 3. Sube los cambios, y luego la etiqueta:
 
    ```bash
-   git tag v2.1.0
-   git push origin v2.1.0
+   git tag v2.2.0
+   git push origin v2.2.0
    ```
 
 Correr el workflow a mano desde la pestaña *Actions* es un ensayo: compila y prueba todo y
@@ -249,6 +272,7 @@ guarda los archivos como artefactos, sin publicar nada.
 
 ## Licencia
 
-[MIT](LICENSE) © 2026 devava XP Studios. La app incluye CodeMirror y KaTeX (MIT),
-commonmark-java (BSD-2-Clause), Gson (Apache-2.0) y un runtime de Java con JavaFX (GPL-2.0 con
-la Classpath Exception); ver [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+[MIT](LICENSE) © 2026 devava XP Studios. La app incluye CodeMirror, KaTeX, Excalidraw, React y
+Mermaid (MIT) con sus librerías, las fuentes de Excalidraw (SIL OFL 1.1), commonmark-java
+(BSD-2-Clause), Gson (Apache-2.0) y un runtime de Java con JavaFX (GPL-2.0 con la Classpath
+Exception); ver [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
