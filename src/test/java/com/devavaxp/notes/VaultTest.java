@@ -9,6 +9,7 @@ import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -53,6 +54,33 @@ class VaultTest {
                 ```
                 | [[Estructuras lineales|pila]] | celda |""", Vault.relink(text, "Pilas", "Estructuras lineales"));
         assertEquals(text, Vault.relink(text, "Colas", "Otra"));
+    }
+
+    /** A note's [[links]], as the reading view sees them: by their title alone, and none in code, escaped or empty. */
+    @Test
+    void linksOfANote() {
+        assertEquals(List.of("Pilas", "pilas", "Pilas y colas", "Pilas"), Vault.links("""
+                Ver [[Pilas]], [[ pilas | la pila ]] y [[Pilas y colas]]; [[Pilas]] otra vez.
+                `[[Colas]]` en código, \\[[Colas]] tal cual, [[]] y [[ |nada]].
+
+                ```java
+                // [[Colas]]
+                ```"""));
+    }
+
+    /** The notes whose [[links]] lead to a note: by its title in any case, from any notebook but one with a note of that title of its own. */
+    @Test
+    void notesThatLinkHere() {
+        Path ed = Path.of("ED"), poo = Path.of("POO"), other = Path.of("Otra");
+        Path stack = ed.resolve("Pilas.md"), queue = ed.resolve("Colas.md"), recursion = ed.resolve("Recursividad.md"), code = ed.resolve("Código.md");
+        Path inheritance = poo.resolve("Herencia.md"), theirs = other.resolve("Pilas.md"), use = other.resolve("Uso.md");
+        List<Vault.Place> places = List.of(new Vault.Place(ed, code), new Vault.Place(ed, queue), new Vault.Place(ed, stack),
+                new Vault.Place(ed, recursion), new Vault.Place(other, theirs), new Vault.Place(other, use), new Vault.Place(poo, inheritance));
+        Map<Path, String> texts = Map.of(stack, "[[Pilas]], ella misma", queue, "Como [[Pilas]]", recursion, "Usa [[pilas|la pila]]",
+                code, "`[[Pilas]]`", inheritance, "Ver [[Pilas]]", theirs, "", use, "[[Pilas]] de aquí");
+        assertEquals(List.of(new Vault.Place(ed, queue), new Vault.Place(ed, recursion), new Vault.Place(poo, inheritance)),
+                Vault.linkingTo(places, stack, p -> Vault.links(texts.get(p))));
+        assertEquals(List.of(new Vault.Place(other, use)), Vault.linkingTo(places, theirs, p -> Vault.links(texts.get(p))));
     }
 
     @Test

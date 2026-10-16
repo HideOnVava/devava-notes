@@ -30,6 +30,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.function.IntConsumer;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -38,7 +39,7 @@ import java.util.regex.Pattern;
  * The open note, in one WebView page (editor.html): CodeMirror 6 to write it, or the note
  * rendered to read it. The page reports to Java only as alert() text ("ready", "changed",
  * "link:url", "open:title", "tag:name", "copy:text", "table:markdown", "language:id", "draw:src",
- * "print:html", "error:message"), so no Java object is ever within reach of JavaScript.
+ * "print:html", "back:n", "error:message"), so no Java object is ever within reach of JavaScript.
  */
 final class Editor {
 
@@ -70,6 +71,8 @@ final class Editor {
     private String language = "";
     /** What waits for a note's HTML for paper (printable), until the page sends it. */
     private Consumer<String> onPrintable;
+    /** The notes that link to the open note, shown at its end: each its title, a tab, and its notebook when another. */
+    private List<String> backlinks = List.of();
 
     /**
      * {@code onChange}: the text was edited. {@code onLink}: a link was followed (the page itself
@@ -77,9 +80,10 @@ final class Editor {
      * a paste in which the page found no text on the clipboard (a picture may be there).
      * {@code onLanguage}: a language was chosen in a code block's menu. {@code onDraw}: a drawing of
      * the note is to be drawn on again (its src, as the note links it or as the reading view shows it).
+     * {@code onBacklink}: one of the notes that link here (by its place in setBacklinks) was clicked.
      */
     Editor(Runnable onChange, Consumer<String> onLink, Consumer<String> onOpen, Consumer<String> onTag, Runnable onPaste,
-           Consumer<String> onLanguage, Consumer<String> onDraw) {
+           Consumer<String> onLanguage, Consumer<String> onDraw, IntConsumer onBacklink) {
         engine.setOnAlert(e -> {
             String message = e.getData();
             if (message.equals("changed")) {
@@ -98,6 +102,8 @@ final class Editor {
                 Platform.runLater(() -> onLanguage.accept(message.substring(9)));
             } else if (message.startsWith("draw:")) {
                 Platform.runLater(() -> onDraw.accept(message.substring(5)));
+            } else if (message.matches("back:\\d{1,6}")) {
+                Platform.runLater(() -> onBacklink.accept(Integer.parseInt(message.substring(5))));
             } else if (message.startsWith("copy:")) {   // copy, cut and the Copy button of a code block (see main.js)
                 Clipboard.getSystemClipboard().setContent(Map.of(DataFormat.PLAIN_TEXT, message.substring(5)));
             } else if (message.startsWith("table:")) {   // Copiar of a table: cells for Word, Excel or Docs, Markdown for the rest
@@ -157,6 +163,7 @@ final class Editor {
         call("setTitles", String.join("\n", titles));
         call("setCodeLanguage", language);
         open(text, base);
+        call("setBacklinks", String.join("\n", backlinks));
     }
 
     private void report(String error) {
@@ -172,6 +179,12 @@ final class Editor {
         if (!ready) return;
         call("setText", text);
         if (reading) call("showReading", html());
+    }
+
+    /** The notes that link to the open note, at its end: each its title, and its notebook ("" when the note's own). */
+    void setBacklinks(List<String[]> titlesAndNotebooks) {
+        backlinks = titlesAndNotebooks.stream().map(t -> t[0] + "\t" + t[1]).toList();
+        if (ready) call("setBacklinks", String.join("\n", backlinks));
     }
 
     /** The titles offered after [[, and known when a [[link]] is drawn (an unknown one looks missing). */
@@ -240,6 +253,11 @@ final class Editor {
     /** A new diagram (a ```mermaid block with this code), after the block with the cursor or where the cursor is. */
     void insertDiagram(String code) {
         if (ready && !reading) call("insertDiagram", code);
+    }
+
+    /** A callout of a kind ("definition"): around the selected lines, else a new one to write in. */
+    void insertCallout(String type) {
+        if (ready && !reading) call("insertCallout", type);
     }
 
     /** A table of a note as Word, Excel and Docs paste it: with its borders. */

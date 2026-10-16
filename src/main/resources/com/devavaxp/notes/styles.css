@@ -1055,6 +1055,16 @@
     -fx-text-fill: -danger;
 }
 
+/* For a moment after Ctrl+ or Ctrl−, over the note: how big its text is now */
+.size-badge {
+    -fx-background-color: -text;
+    -fx-background-radius: 8;
+    -fx-text-fill: -surface;
+    -fx-padding: 6 12;
+    -fx-font-size: 13px;
+    -fx-opacity: 0.9;
+}
+
 .properties {
     -fx-background-color: -surface;
     -fx-border-color: transparent transparent -border transparent;

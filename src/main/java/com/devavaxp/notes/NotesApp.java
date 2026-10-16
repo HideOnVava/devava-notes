@@ -53,6 +53,7 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
 import javafx.scene.input.KeyEvent;
+import javafx.scene.input.ScrollEvent;
 import javafx.scene.input.TransferMode;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.FlowPane;
@@ -100,6 +101,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.TreeMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -149,6 +152,16 @@ public final class NotesApp extends Application {
     private int paperJob;
     /** How long the page may take to give a note back for paper. */
     private final PauseTransition paperPatience = new PauseTransition(Duration.seconds(20));
+    /** The sizes of a note's text that Ctrl+ and Ctrl− step through (the editor's zoom), 1 the usual. */
+    private static final double[] TEXT_SIZES = {0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2};
+    /** The size of the note's text, remembered in settings.json. */
+    private double textSize = 1;
+    /** For a moment after a change of size, over the note: how big its text is now. */
+    private final Label sizeBadge = new Label();
+    private final PauseTransition sizeShown = new PauseTransition(Duration.millis(1400));
+    private long wheelStep;
+    /** The note's text and, over it, the size badge. */
+    private StackPane editorArea;
     private final PauseTransition autosave = new PauseTransition(Duration.millis(600));
     private SplitPane notebookView;
 
@@ -221,11 +234,28 @@ public final class NotesApp extends Application {
         update.setVisible(false);
         update.setManaged(false);
         editor = new Editor(this::edited, this::openLink, this::openTitle, tag -> browser.showTag(tag), this::paste,
-                this::languageChosen, this::editDrawing);
+                this::languageChosen, this::editDrawing, this::openBacklink);
         browser = new NotebookView(this);
         properties = new PropertiesPanel(this::propertiesChanged, this::openLink, this::usedValues);
         autosave.setOnFinished(e -> save());
         // Images dropped on the note go to attachments/ (the WebView would otherwise open the file).
+        textSize = nearestSize(vault.setting("textSize"));
+        editor.view.setZoom(textSize);
+        sizeBadge.getStyleClass().add("size-badge");
+        sizeBadge.setVisible(false);
+        sizeBadge.setMouseTransparent(true);
+        StackPane.setAlignment(sizeBadge, Pos.BOTTOM_RIGHT);
+        StackPane.setMargin(sizeBadge, new Insets(0, 24, 20, 0));
+        editorArea = new StackPane(editor.view, sizeBadge);
+        sizeShown.setOnFinished(e -> sizeBadge.setVisible(false));
+        editor.view.addEventFilter(ScrollEvent.SCROLL, e -> {   // Ctrl and the wheel, as in a browser: one step a notch
+            if (!e.isShortcutDown() || e.getDeltaY() == 0) return;
+            if (System.currentTimeMillis() - wheelStep > 120) {
+                stepTextSize(e.getDeltaY() > 0 ? 1 : -1);
+                wheelStep = System.currentTimeMillis();
+            }
+            e.consume();
+        });
         editor.view.addEventFilter(DragEvent.DRAG_OVER, e -> {
             if (note == null || reading || !e.getDragboard().hasFiles()) return;
             e.acceptTransferModes(TransferMode.COPY);
@@ -307,6 +337,11 @@ public final class NotesApp extends Application {
                 e.consume();
             } else if (PRINT.match(e) && note != null) {
                 print(note);
+                e.consume();
+            } else if (note != null && e.isShortcutDown() && !e.isAltDown() && textSizeKey(e) != null) {
+                int step = textSizeKey(e);
+                if (step == 0) setTextSize(1);
+                else stepTextSize(step);
                 e.consume();
             }
         });
@@ -391,10 +426,12 @@ public final class NotesApp extends Application {
                 {"Ctrl+Shift+F", "Buscar en el texto de todas las notas"},
                 {"Ctrl+E", "Pasar entre Editar y Vista previa"},
                 {"Ctrl+P", "Imprimir la nota; el botón de la impresora también la exporta a PDF"},
+                {"Ctrl++, Ctrl+−", "Agrandar o achicar el texto de la nota (también Ctrl y la rueda del ratón); Ctrl+0 lo deja como era"},
                 {"Ctrl+F", "Buscar y reemplazar dentro de la nota"},
                 {"Ctrl+B, Ctrl+I", "Negrita y cursiva; la barra sobre la nota tiene lo demás"},
                 {"```java", "Un bloque de código al escribir ``` y su lenguaje, y luego Enter"},
                 {"```mermaid", "Un diagrama escrito como texto, que se dibuja solo; el botón Diagrama trae ejemplos"},
+                {"> [!definition]", "Un recuadro de definición, ejemplo, importante o advertencia, como en Obsidian; el botón Recuadro los pone"},
                 {"Ctrl+V", "Pegar texto, una imagen como una captura de pantalla, o celdas de Excel como tabla"},
                 {"Tab, Enter", "En una tabla: la celda siguiente y la de abajo, que agrega filas al final"},
                 {"[[", "Enlazar otra nota: escribe [[ y elige su título"},
@@ -1130,9 +1167,10 @@ public final class NotesApp extends Application {
         }
         properties.show(kind, n);
         editor.open(n.body, p.getParent());
+        findBacklinks();
         notePane.setTop(new VBox(noteHeader, actionsRow, properties.node, formatBar));
         showFormatBar();
-        notePane.setCenter(editor.view);
+        notePane.setCenter(editorArea);
         browser.select(p);
         fitHeader();
     }
@@ -1151,6 +1189,7 @@ public final class NotesApp extends Application {
                 formatButton("Lista", Icons.of("list", 15), "Lista con viñetas", () -> editor.format("list")),
                 formatButton("Casilla", Icons.of("task", 15), "Lista de pendientes, con casillas para marcar", () -> editor.format("check")),
                 tableButton(),
+                calloutButton(),
                 formatSeparator(),
                 formatButton("Enlace", Icons.of("link", 15), "Enlace a otra nota: elige su título", () -> editor.format("link")),
                 formatButton("Imagen", Icons.of("image", 15), "Agrega una imagen desde un archivo", this::chooseImages),
@@ -1246,6 +1285,36 @@ public final class NotesApp extends Application {
                         Pendiente --> EnProceso : empieza
                         EnProceso --> Hecha : termina
                         Hecha --> [*]"""));
+
+    /** A callout the Recuadro button makes: what it is, what it is for, and the word the note keeps (Obsidian's). */
+    record CalloutStart(String name, String about, String type) {
+    }
+
+    static final List<CalloutStart> CALLOUTS = List.of(
+            new CalloutStart("Definición", "Lo que significa un término", "definition"),
+            new CalloutStart("Ejemplo", "Un caso que lo muestra", "example"),
+            new CalloutStart("Importante", "Lo que no hay que olvidar", "important"),
+            new CalloutStart("Advertencia", "Un error común, o algo con qué tener cuidado", "warning"));
+
+    /** Recuadro: a callout, as Obsidian has them; with text selected, the text goes in it. */
+    private Button calloutButton() {
+        Button callout = formatButton("Recuadro", Icons.of("callout", 15),
+                "Un recuadro de definición, ejemplo, importante o advertencia; con texto seleccionado, lo pone dentro", () -> { });
+        ContextMenu menu = new ContextMenu();
+        for (CalloutStart c : CALLOUTS) {
+            Label name = new Label(c.name()), about = new Label(c.about());
+            name.getStyleClass().add("menu-title");
+            about.getStyleClass().add("menu-about");
+            MenuItem item = new MenuItem(null, new VBox(1, name, about));
+            item.setOnAction(e -> {
+                editor.insertCallout(c.type());
+                editor.focus();
+            });
+            menu.getItems().add(item);
+        }
+        callout.setOnAction(e -> menu.show(callout, Side.BOTTOM, 0, 4));
+        return callout;
+    }
 
     /** Diagrama: one to start from, written as text (Mermaid), which the note shows drawn below it as it changes. */
     private Button diagramButton() {
@@ -1484,6 +1553,7 @@ public final class NotesApp extends Application {
                 relink(before, p, renamed);
                 loadEntries(true);
                 browser.update();
+                findBacklinks();
                 if (reading && note != null) editor.setReading(true);
             } catch (IOException e) {
                 error("No se pudo cambiar el nombre de la nota", reason(e));
@@ -2092,6 +2162,107 @@ public final class NotesApp extends Application {
         }
         loadEntries(false);
         browser.update();
+        findBacklinks();   // a note written elsewhere may link here now
+    }
+
+    // ------------------------------------------------------------------
+    // The size of a note's text
+    // ------------------------------------------------------------------
+
+    /** Ctrl and +, − or 0 (of the keyboard's rows or of its keypad): 1 bigger, −1 smaller, 0 the usual; null, another key. */
+    private static Integer textSizeKey(KeyEvent e) {
+        KeyCode k = e.getCode();
+        if (k == KeyCode.PLUS || k == KeyCode.EQUALS || k == KeyCode.ADD || "+".equals(e.getText())) return 1;
+        if (k == KeyCode.MINUS || k == KeyCode.SUBTRACT || "-".equals(e.getText())) return -1;
+        if (k == KeyCode.DIGIT0 || k == KeyCode.NUMPAD0) return 0;
+        return null;
+    }
+
+    /** The next size up (1) or down (−1). */
+    void stepTextSize(int step) {
+        int at = 0;
+        for (int i = 1; i < TEXT_SIZES.length; i++) if (Math.abs(TEXT_SIZES[i] - textSize) < Math.abs(TEXT_SIZES[at] - textSize)) at = i;
+        setTextSize(TEXT_SIZES[Math.max(0, Math.min(TEXT_SIZES.length - 1, at + step))]);
+    }
+
+    /** The note's text at this size (1 the usual), remembered for the next time; the badge says how big for a moment. */
+    void setTextSize(double size) {
+        textSize = size;
+        editor.view.setZoom(size);
+        sizeBadge.setText(String.format("Texto al %d %%", Math.round(size * 100)));
+        sizeBadge.setVisible(true);
+        sizeShown.playFromStart();
+        try {
+            vault.setSetting("textSize", String.valueOf(size));
+        } catch (IOException e) {
+            ErrorLog.add("No se pudo guardar el tamaño del texto: " + reason(e));
+        }
+    }
+
+    /** A remembered size as the step nearest to it; the usual when there is none, or it is no number. */
+    private static double nearestSize(String remembered) {
+        double best = 1;
+        try {
+            double wanted = Double.parseDouble(remembered);
+            for (double s : TEXT_SIZES) if (Math.abs(s - wanted) < Math.abs(best - wanted)) best = s;
+        } catch (NumberFormatException e) {
+            // never set: the usual size
+        }
+        return best;
+    }
+
+    // ------------------------------------------------------------------
+    // Notas que enlazan aquí
+    // ------------------------------------------------------------------
+
+    /** A note's [[links]] as last read, and when it was written then. */
+    private record Links(FileTime modified, List<String> titles) {
+    }
+
+    /** The notes that link to the open note, as shown at its end. */
+    private List<Vault.Place> backlinks = List.of();
+    private int backlinkJob;
+    /** Each note's links, read again only once it changes; only the linker's thread touches it. */
+    private final Map<Path, Links> linkCache = new HashMap<>();
+    private final ExecutorService linker = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "Devava Notes: links");
+        t.setDaemon(true);
+        return t;
+    });
+
+    /** Finds the notes whose [[links]] lead to the open note, away from the window, and shows them at its end. */
+    private void findBacklinks() {
+        Path p = note;
+        int ticket = ++backlinkJob;
+        if (p == null) return;
+        linker.execute(() -> {
+            List<Vault.Place> found = Vault.linkingTo(vault.everyNote(), p, this::linksOf);
+            Platform.runLater(() -> {
+                if (ticket != backlinkJob || !p.equals(note)) return;
+                backlinks = found;
+                editor.setBacklinks(found.stream().map(b -> new String[]{b.title(),
+                        b.notebook().equals(p.getParent()) ? "" : b.notebook().getFileName().toString()}).toList());
+            });
+        });
+    }
+
+    /** A note's [[links]] (on the linker's thread): read again only when it was written since. */
+    private List<String> linksOf(Path p) {
+        try {
+            FileTime modified = Files.getLastModifiedTime(p);
+            Links known = linkCache.get(p);
+            if (known != null && known.modified().equals(modified)) return known.titles();
+            List<String> titles = Vault.links(Vault.read(p));
+            linkCache.put(p, new Links(modified, titles));
+            return titles;
+        } catch (IOException e) {
+            return List.of();   // unreadable for now: no links from it
+        }
+    }
+
+    /** One of the notes that link here, opened. */
+    private void openBacklink(int i) {
+        if (i < backlinks.size()) go(backlinks.get(i));
     }
 
     // ------------------------------------------------------------------

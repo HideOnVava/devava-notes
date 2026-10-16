@@ -25,7 +25,12 @@ Una tabla, con **Tabla** en la barra o pegando celdas de Excel. Se escribe en su
 | Arreglo | O(n) | O(1) |
 | Pila | O(1) | O(n) |
 
-Para enlazar otra nota, escribe dos corchetes y elige su título; para etiquetar una nota, escribe una palabra con #, como #ejemplo.
+**Recuadro** pone una definición, un ejemplo, algo importante o una advertencia en un recuadro de su color:
+
+> [!definition] Pila
+> Una estructura donde el último en entrar es el primero en salir.
+
+Para enlazar otra nota, escribe dos corchetes y elige su título (también dentro de una tabla); al final de cada nota están las que la enlazan. Para etiquetar una nota, escribe una palabra con #, como #ejemplo.
 
 ## Código
 
@@ -56,4 +61,4 @@ flowchart LR
 
 ## Vista previa
 
-**Vista previa** (Ctrl+E) muestra la nota como queda: las fórmulas, el código con colores y las imágenes. Así sale también en papel: el botón de la impresora, junto a Vista previa, la exporta a PDF o la imprime (Ctrl+P). Tus notas se guardan solas, como archivos de texto que también abren otros programas; **Opciones → Abrir la carpeta de datos** te lleva a ellas.
+**Vista previa** (Ctrl+E) muestra la nota como queda: las fórmulas, el código con colores y las imágenes. Ctrl+ y Ctrl− agrandan o achican el texto. Así sale también en papel: el botón de la impresora, junto a Vista previa, la exporta a PDF o la imprime (Ctrl+P). Tus notas se guardan solas, como archivos de texto que también abren otros programas; **Opciones → Abrir la carpeta de datos** te lleva a ellas.

@@ -2,7 +2,7 @@
 // renders with commonmark-java. `npm run build` bundles it into
 // src/main/resources/com/devavaxp/notes/editor.js, which is committed.
 import "./keys.js";
-import {ChangeSet, EditorSelection, EditorState, Prec, RangeSetBuilder, StateField, Transaction} from "@codemirror/state";
+import {ChangeSet, EditorSelection, EditorState, Prec, RangeSetBuilder, StateEffect, StateField, Transaction} from "@codemirror/state";
 import {
     Decoration, EditorView, MatchDecorator, ViewPlugin, WidgetType, drawSelection, dropCursor, highlightSpecialChars, keymap, placeholder
 } from "@codemirror/view";
@@ -29,6 +29,7 @@ const words = {
     diagram: "Diagrama", diagramLong: "Diagrama (Mermaid)", diagramEmpty: "Escribe arriba el diagrama: su primera línea dice cuál es (flowchart, classDiagram, erDiagram…)",
     diagramType: "No se reconoce el diagrama: su primera línea dice cuál es (flowchart, classDiagram, erDiagram, sequenceDiagram, stateDiagram-v2…)",
     diagramLine: "Error en la línea", diagramMissing: "No se pudo cargar Mermaid para dibujar el diagrama",
+    backlinks: "Notas que enlazan aquí",
     table: "Tabla", row: "Fila", column: "Columna", tableMore: "Más: filas, columnas y alineación",
     rowAbove: "Insertar fila arriba", columnLeft: "Insertar columna a la izquierda", removeHeader: "Quitar el encabezado",
     left: "Alinear a la izquierda", center: "Centrar", right: "Alinear a la derecha",
@@ -122,6 +123,20 @@ const ICONS = {
     table: "M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z M3 10h18 M9 10v10",
     dots: "M5 12h.01 M12 12h.01 M19 12h.01",
     diagram: "M4 4h7v5H4z M13 15h7v5h-7z M7.5 9v3h9v3",
+    back: "M9 14l-5-5 5-5 M4 9h10a6 6 0 0 1 0 12h-3",
+    // a callout's kinds
+    book: "M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2V5z M4 19a2 2 0 0 1 2-2h13",
+    list: "M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01",
+    alert: "M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0z M12 7v6 M12 16.5h.01",
+    warning: "M12 3l9.5 17h-19z M12 10v4 M12 17h.01",
+    info: "M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0z M12 11v6 M12 7.5h.01",
+    bulb: "M9 18h6 M10 21h4 M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.3 1 2.1h5c0-.8.4-1.6 1-2.1A6 6 0 0 0 12 3z",
+    check: "M5 12.5l4.5 4.5L19 7",
+    help: "M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0z M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7 M12 17h.01",
+    x: "M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0z M9 9l6 6 M15 9l-6 6",
+    quote: "M5 7h5v5H7v1a3 3 0 0 0 3 3 M14 7h5v5h-3v1a3 3 0 0 0 3 3",
+    summary: "M6 3h9l4 4v14H6z M14 3v5h5 M9 13h7 M9 17h5",
+    todo: "M7 4h10a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z M8.5 12.5l2.5 2.5 4.5-5",
 };
 
 function icon(name) {
@@ -465,6 +480,178 @@ function redrawDiagrams() {
     document.querySelectorAll(".diagram[data-code]").forEach(box => drawDiagram(box, dark()).then(() => view.requestMeasure()));
 }
 
+// ---------- Callouts (Obsidian's) ----------
+
+// A quote whose first line starts with [!type] is a callout: a box of its kind's color, with its icon and its name,
+// or the title written after [!type]. The app writes Obsidian's words (definition, example, important, warning…),
+// which Obsidian reads too, and reads Spanish ones as well: [!advertencia] is a warning.
+const CALLOUT_WORDS = {
+    note: ["note", "Nota"], info: ["info", "Información"], definition: ["definition", "Definición"], todo: ["todo", "Pendiente"],
+    abstract: ["abstract", "Resumen"], summary: ["abstract", "Resumen"], tldr: ["abstract", "Resumen"],
+    tip: ["tip", "Consejo"], hint: ["tip", "Pista"], important: ["important", "Importante"],
+    success: ["success", "Hecho"], check: ["success", "Hecho"], done: ["success", "Hecho"],
+    question: ["question", "Pregunta"], help: ["question", "Ayuda"], faq: ["question", "Preguntas frecuentes"],
+    warning: ["warning", "Advertencia"], caution: ["warning", "Precaución"], attention: ["warning", "Atención"],
+    failure: ["failure", "Fallo"], fail: ["failure", "Fallo"], missing: ["failure", "Falta"],
+    danger: ["danger", "Peligro"], error: ["danger", "Error"], bug: ["bug", "Error de código"],
+    example: ["example", "Ejemplo"], quote: ["quote", "Cita"], cite: ["quote", "Cita"],
+    nota: ["note", "Nota"], informacion: ["info", "Información"], definicion: ["definition", "Definición"],
+    pendiente: ["todo", "Pendiente"], resumen: ["abstract", "Resumen"], consejo: ["tip", "Consejo"], pista: ["tip", "Pista"],
+    importante: ["important", "Importante"], hecho: ["success", "Hecho"], pregunta: ["question", "Pregunta"],
+    ayuda: ["question", "Ayuda"], advertencia: ["warning", "Advertencia"], precaucion: ["warning", "Precaución"],
+    cuidado: ["warning", "Cuidado"], atencion: ["warning", "Atención"], aviso: ["warning", "Aviso"],
+    fallo: ["failure", "Fallo"], peligro: ["danger", "Peligro"], ejemplo: ["example", "Ejemplo"], cita: ["quote", "Cita"],
+};
+const CALLOUT_ICONS = {
+    note: "pen", info: "info", definition: "book", todo: "todo", abstract: "summary", tip: "bulb", important: "alert",
+    success: "check", question: "help", warning: "warning", failure: "x", danger: "x", bug: "x", example: "list", quote: "quote",
+};
+
+/** A callout's kind by the word in its [!…], in any case and with or without accents: an unknown word is a note named as written. */
+function calloutKind(word) {
+    const [family, name] = CALLOUT_WORDS[fold(word)] ?? ["note", word.charAt(0).toUpperCase() + word.slice(1)];
+    return {family, name, icon: CALLOUT_ICONS[family]};
+}
+
+// The first line of a callout: its > and its [!type], folded (-) or not (+) in Obsidian.
+const CALLOUT_LINE = /^(\s*>[ \t]?)\[!([^\]\s]+)\]([+-]?)/;
+
+/** While writing, a callout's [!type] shows as its icon and name; a Backspace after it shows the word again. */
+class CalloutMark extends WidgetType {
+    constructor(kind) {
+        super();
+        this.kind = kind;
+    }
+
+    eq(other) {
+        return other.kind.family === this.kind.family && other.kind.name === this.kind.name;
+    }
+
+    toDOM() {
+        const mark = element("span", "cm-callout-mark", icon(this.kind.icon), this.kind.name);
+        mark.dataset.callout = this.kind.family;
+        return mark;
+    }
+
+    ignoreEvent() {
+        return false;
+    }
+}
+
+/** The callouts while writing: their lines in their kind's colors, as a box, and their [!type] as its icon and name. */
+function calloutDecorations(state) {
+    const builder = new RangeSetBuilder();
+    syntaxTree(state).iterate({
+        enter: node => {
+            if (node.name !== "Blockquote") return;   // a quote inside a list item is found further in
+            const first = state.doc.lineAt(node.from), m = CALLOUT_LINE.exec(first.text);
+            if (!m) return false;
+            const kind = calloutKind(m[2]), last = state.doc.lineAt(node.to);
+            for (let n = first.number; n <= last.number; n++) {
+                const line = state.doc.line(n), edges = (n === first.number ? " cm-callout-first" : "") + (n === last.number ? " cm-callout-last" : "");
+                builder.add(line.from, line.from, Decoration.line({class: "cm-callout" + edges, attributes: {"data-callout": kind.family}}));
+                if (n === first.number) builder.add(line.from + m[1].length, line.from + m[0].length, Decoration.replace({widget: new CalloutMark(kind)}));
+            }
+            return false;
+        }
+    });
+    return builder.finish();
+}
+
+const callouts = StateField.define({
+    create: calloutDecorations,
+    update: (value, tr) => tr.docChanged || syntaxTree(tr.state) !== syntaxTree(tr.startState) ? calloutDecorations(tr.state) : value,
+    provide: field => EditorView.decorations.from(field),
+});
+
+/**
+ * A callout of the reading view: its quote as a box of its kind's color, its first line (what follows
+ * its [!type], else its kind's name) as its title, with its icon.
+ */
+function callout(quote) {
+    const first = quote.firstElementChild, text = first?.tagName === "P" ? first.firstChild : null;
+    const m = text?.nodeType === Node.TEXT_NODE ? /^\[!([^\]\s]+)\][+-]?[ \t]*/.exec(text.data) : null;
+    if (!m) return;
+    const kind = calloutKind(m[1]), title = element("span", "");
+    text.data = text.data.slice(m[0].length);
+    for (let node = first.firstChild; node;) {   // the title: up to the end of the first line; the rest of it is text
+        const next = node.nextSibling;
+        if (node.nodeName === "BR") {
+            node.remove();
+            break;
+        }
+        if (node.nodeType === Node.TEXT_NODE && node.data.includes("\n")) {
+            title.append(node.data.slice(0, node.data.indexOf("\n")));
+            node.data = node.data.slice(node.data.indexOf("\n") + 1);
+            break;
+        }
+        title.append(node);
+        node = next;
+    }
+    if (!title.textContent.trim()) title.replaceChildren(kind.name);
+    if (!first.textContent.trim() && !first.querySelector("img")) first.remove();   // the first line was all there was
+    quote.classList.add("callout");
+    quote.dataset.callout = kind.family;
+    quote.prepend(element("div", "callout-title", icon(kind.icon), title));
+}
+
+// ---------- The notes that link here ----------
+
+// The notes whose [[links]] lead to this one (Java finds them once the note is open): at its end, while writing
+// it and in Vista previa; a click opens one. Each is its title and, when it is in another notebook, that one's name.
+let backlinks = [];
+const showBacklinks = StateEffect.define();
+
+function backlinkList(list) {
+    const box = element("div", "backlinks", element("span", "backlinks-title", icon("back"), words.backlinks));
+    list.forEach(({title, where}, i) => {
+        const link = button("backlink", title);
+        if (where) link.append(element("span", "where", where));
+        link.addEventListener("click", () => tell("back:" + i));
+        box.append(link);
+    });
+    return box;
+}
+
+class Backlinks extends WidgetType {
+    constructor(list) {
+        super();
+        this.list = list;
+    }
+
+    eq(other) {
+        return other.list === this.list;
+    }
+
+    toDOM() {
+        return element("div", "cm-backlinks", backlinkList(this.list));
+    }
+
+    get estimatedHeight() {
+        return 64;
+    }
+
+    ignoreEvent(e) {
+        return onButton(e);
+    }
+}
+
+const backlinkField = StateField.define({
+    create: () => backlinks,
+    update: (list, tr) => tr.effects.reduce((now, e) => e.is(showBacklinks) ? e.value : now, list),
+    provide: field => EditorView.decorations.compute(["doc", field], state => {
+        const list = state.field(field);
+        return list.length ? Decoration.set(Decoration.widget({widget: new Backlinks(list), block: true, side: 2}).range(state.doc.length))
+            : Decoration.none;
+    }),
+});
+
+/** The notes that link here at the end of the reading view, as they are now. */
+function readingBacklinks() {
+    reading.querySelector(":scope > .backlinks")?.remove();
+    if (backlinks.length) reading.append(backlinkList(backlinks));
+}
+
 // ---------- Drawings ----------
 
 // A drawing made in the app (a .excalidraw.png in attachments/), while writing: a button after its
@@ -745,10 +932,18 @@ class Grid extends WidgetType {
             view.focus();
         });
         card.addEventListener("input", e => {
-            if (!e.isComposing) typed(view, cellIn(e));
+            if (e.isComposing) return;
+            typed(view, cellIn(e));
+            offerCellLinks(view, cellIn(e));
         });
         card.addEventListener("compositionend", e => typed(view, cellIn(e)));
-        card.addEventListener("keydown", e => cellKey(view, e));
+        card.addEventListener("keydown", e => {
+            cellLinkKey(e);
+            cellKey(view, e);
+        });
+        card.addEventListener("focusout", () => setTimeout(() => {   // leaving the cell (not for its titles, which keep the focus in it)
+            if (cellLinks && document.activeElement !== cellLinks.cell) closeCellLinks();
+        }));
         card.addEventListener("paste", e => {
             const cell = cellIn(e);
             if (!cell) return;
@@ -1119,6 +1314,70 @@ function cellKey(view, e) {
     }
     e.preventDefault();
 }
+
+// What [[ offers while writing, in a cell too: under the caret, the titles that hold what follows the [[;
+// ↑ and ↓ choose one, Enter or Tab take it, Esc closes them.
+let cellLinks = null;
+
+function closeCellLinks() {
+    cellLinks?.box.remove();
+    cellLinks = null;
+}
+
+/** After typing in a cell: when its caret follows a [[ not closed yet, the titles that fit what follows it. */
+function offerCellLinks(view, cell) {
+    const {start, end} = cell ? caret(cell) : {};
+    const typed = cell && start === end ? /\[\[([^\]|\n]*)$/.exec(cell.textContent.slice(0, start)) : null;
+    const wanted = typed && fold(typed[1].trim());
+    const found = typed ? titles.filter(t => fold(t).includes(wanted)).sort((a, b) => fold(b).startsWith(wanted) - fold(a).startsWith(wanted)).slice(0, 30) : [];
+    if (!found.length) return closeCellLinks();
+    if (cellLinks?.cell !== cell) {
+        closeCellLinks();
+        cellLinks = {cell, view, box: element("div", "lang-menu cell-links")};
+        document.body.append(cellLinks.box);
+    }
+    Object.assign(cellLinks, {from: start - typed[1].length, found, at: 0});
+    cellLinks.box.replaceChildren(...found.map((title, i) => option(null, title, "", () => takeCellLink(i))));
+    markCellLink();
+    const r = getSelection().getRangeAt(0).getBoundingClientRect(), at = r.height ? r : cell.getBoundingClientRect(), box = cellLinks.box;
+    const down = at.bottom + 4 + box.offsetHeight <= window.innerHeight || at.top < box.offsetHeight + 8;
+    box.style.left = Math.max(8, Math.min(at.left, window.innerWidth - box.offsetWidth - 8)) + "px";
+    box.style.top = (down ? at.bottom + 4 : at.top - 4 - box.offsetHeight) + "px";
+}
+
+function markCellLink() {
+    [...cellLinks.box.children].forEach((o, i) => o.classList.toggle("current", i === cellLinks.at));
+    cellLinks.box.children[cellLinks.at]?.scrollIntoView({block: "nearest"});
+}
+
+/** One of the titles, written as the cell's [[link]], with the caret after it. */
+function takeCellLink(i) {
+    const {cell, view, from, found} = cellLinks, title = found[i], text = cell.textContent, {start} = caret(cell);
+    const closing = text.slice(start, start + 2) === "]]" ? "" : "]]";
+    closeCellLinks();
+    writeCell(view, cell, text.slice(0, from) + title + closing + text.slice(start), from + title.length + 2);
+}
+
+/** The keys of the titles under a cell's caret, before the cell's own (cellKey, which leaves a key already taken). */
+function cellLinkKey(e) {
+    if (!cellLinks || e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
+    const n = cellLinks.found.length;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        cellLinks.at = (cellLinks.at + (e.key === "ArrowDown" ? 1 : n - 1)) % n;
+        markCellLink();
+    } else if (e.key === "Enter" || e.key === "Tab") {
+        takeCellLink(cellLinks.at);
+    } else if (e.key === "Escape") {
+        closeCellLinks();
+    } else {
+        return;
+    }
+    e.preventDefault();
+}
+
+document.addEventListener("mousedown", e => {
+    if (cellLinks && !cellLinks.box.contains(e.target)) closeCellLinks();
+}, true);
 
 /** What the ⋯ of a table's bar offers, for the cell being written in (else the last one). */
 function tableMenu(view, chip, card) {
@@ -1620,7 +1879,7 @@ const extensions = () => [
     closeBrackets(), highlightSelectionMatches(), placeholder(words.placeholder), EditorState.phrases.of(phrases),
     markdown({base: markdownLanguage, codeLanguages: language}),
     highlighters.map(h => syntaxHighlighting(h)),
-    cards, tables, intoCell, guard, lineUp, drawingLinks,
+    cards, tables, intoCell, guard, lineUp, drawingLinks, callouts, backlinkField,
     Prec.high(keymap.of([
         {key: "Enter", run: view => closeFence(view) || startTable(view)},
         {key: "Mod-b", run: view => format(view, "bold")},
@@ -1648,7 +1907,10 @@ const extensions = () => [
 
 const editor = document.getElementById("editor"), reading = document.getElementById("reading");
 const view = new EditorView({parent: editor, state: EditorState.create({extensions: extensions()})});
-view.scrollDOM.addEventListener("scroll", closeMenu);
+view.scrollDOM.addEventListener("scroll", () => {
+    closeMenu();
+    closeCellLinks();
+});
 window.editorView = view;   // for the tests: where CodeMirror puts each line, and where a click lands
 
 /** Accents and case do not matter when searching, and a folded text keeps the positions of the original. */
@@ -1661,7 +1923,14 @@ function fold(text) {
 // Called by Java. What Java types goes in as typing does ("input.api"), beside cards too.
 window.setText = text => {
     closeMenu();
+    closeCellLinks();
+    backlinks = [];   // until Java finds this note's
     view.setState(EditorState.create({doc: text, extensions: extensions()}));
+};
+window.setBacklinks = lines => {
+    backlinks = lines ? lines.split("\n").map(line => ({title: line.split("\t")[0], where: line.split("\t")[1] ?? ""})) : [];
+    view.dispatch({effects: showBacklinks.of(backlinks)});
+    readingBacklinks();
 };
 window.getText = () => view.state.doc.toString();
 window.setTitles = lines => titles = lines ? lines.split("\n") : [];
@@ -1691,6 +1960,35 @@ window.newBlock = (code = "", lang = codeLanguage) => {   // after the card with
     newBlock(view, card ? card.close.to : head, code, lang);
 };
 window.insertDiagram = code => window.newBlock(code, DIAGRAM);
+// A callout ([!definition]…): with lines selected, around them; else a new one to write in, after the block (code,
+// table or quote) with the cursor, or where it is. A quote right before or after it would join it: a blank line between.
+const quoteLine = line => line != null && /^\s*>/.test(line.text);
+window.insertCallout = type => {
+    if (cellNow()) return;
+    const {state} = view, {from, to, empty} = state.selection.main, mark = `> [!${type}]`;
+    let change, caret;
+    if (!empty) {
+        const first = state.doc.lineAt(from), last = state.doc.lineAt(to);
+        const box = mark + "\n" + state.sliceDoc(first.from, last.to).split("\n").map(line => "> " + line).join("\n");
+        const before = first.number > 1 && quoteLine(state.doc.line(first.number - 1)) ? "\n" : "";
+        const after = last.number < state.doc.lines && quoteLine(state.doc.line(last.number + 1)) ? "\n" : "";
+        change = {from: first.from, to: last.to, insert: before + box + after};
+        caret = first.from + before.length + box.length;
+    } else {
+        let at = cursorAt();
+        const card = state.field(cards).list.find(c => c.open.from <= at && at <= c.close.to);
+        if (card) at = card.close.to;
+        for (let n = syntaxTree(state).resolveInner(at, -1); n; n = n.parent) if (n.name === "Blockquote") at = n.to;
+        const box = mark + "\n> ", place = ownLines(state, at, box);
+        const prev = place.insert.startsWith("\n") ? state.doc.lineAt(place.from) : place.from > 0 ? state.doc.lineAt(place.from - 1) : null;
+        const next = place.to < state.doc.length ? state.doc.lineAt(place.to + 1) : null;
+        const insert = place.insert.replace(box, (quoteLine(prev) ? "\n" : "") + box + (quoteLine(next) ? "\n" : ""));
+        change = {from: place.from, to: place.to, insert};
+        caret = place.from + insert.indexOf(box) + box.length;
+    }
+    view.dispatch({changes: change, selection: {anchor: caret}, scrollIntoView: true, userEvent: "input.callout"});
+    view.focus();
+};
 window.format = kind => {
     const cell = cellNow();
     if (cell) formatCell(view, cell, kind);
@@ -1717,6 +2015,7 @@ window.showReading = html => {
     closeMenu();
     render(reading, html, dark());
     reading.querySelectorAll("img.drawing").forEach(img => img.title = words.drawHint);
+    readingBacklinks();
     editor.hidden = true;
     reading.hidden = false;
     reading.scrollTop = 0;
@@ -1742,6 +2041,7 @@ function render(into, html, inDark) {
     into.innerHTML = html;   // commonmark-java already turned any HTML written in the note into text
     into.querySelectorAll(".math").forEach(math => katex.render(math.textContent, math,
         {displayMode: math.classList.contains("display"), throwOnError: false}));
+    into.querySelectorAll("blockquote").forEach(callout);
     const coming = [...into.querySelectorAll("pre > code")].map(code =>
         code.className.toLowerCase() === "language-" + DIAGRAM ? diagram(code, inDark) : card(code));
     into.querySelectorAll("img").forEach(img => {

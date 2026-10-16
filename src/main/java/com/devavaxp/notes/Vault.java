@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -214,6 +215,43 @@ final class Vault {
      * (Editor.setAside).
      */
     static String relink(String text, String from, String to) {
+        return relink(text, title -> title.equalsIgnoreCase(from) ? to : null);
+    }
+
+    /** The titles a note's text links to ([[title]], [[title|words]]), outside code, as written. */
+    static List<String> links(String text) {
+        List<String> titles = new ArrayList<>();
+        relink(text, title -> {
+            titles.add(title);
+            return null;
+        });
+        return titles;
+    }
+
+    /**
+     * The notes whose [[links]] lead to {@code note} (as linkTarget leads them, from their own
+     * notebook), each one's links as {@code linksOf} gives them (links of its text); those of its
+     * notebook first.
+     */
+    static List<Place> linkingTo(List<Place> places, Path note, Function<Path, List<String>> linksOf) {
+        String title = title(note);
+        List<Place> found = new ArrayList<>();
+        for (Place p : places) {
+            if (p.note().equals(note)) continue;
+            for (String t : linksOf.apply(p.note())) {
+                if (t.equalsIgnoreCase(title) && note.equals(linkTarget(places, t, p.notebook()))) {
+                    found.add(p);
+                    break;
+                }
+            }
+        }
+        Path home = note.getParent();
+        found.sort(Comparator.comparing(p -> !p.notebook().equals(home)));
+        return found;
+    }
+
+    /** A text with each [[link]] outside code given to {@code change}: the title to lead to instead, or null to leave it. */
+    private static String relink(String text, Function<String, String> change) {
         StringBuilder out = new StringBuilder();
         String fence = null;   // the ``` or ~~~ of the code block we are in
         int i = 0, n = text.length();
@@ -240,8 +278,9 @@ final class Vault {
             } else if (text.startsWith("[[", i)) {
                 int close = text.indexOf("]]", i + 2), line = text.indexOf('\n', i);
                 String[] parts = close > i + 2 && (line < 0 || close < line) ? text.substring(i + 2, close).split("\\|", 2) : null;
-                if (parts != null && parts[0].strip().equalsIgnoreCase(from)) {
-                    out.append("[[").append(to).append(parts.length > 1 ? "|" + parts[1] : "").append("]]");
+                String other = parts == null || parts[0].isBlank() ? null : change.apply(parts[0].strip());
+                if (other != null) {
+                    out.append("[[").append(other).append(parts.length > 1 ? "|" + parts[1] : "").append("]]");
                     i = close + 2;
                     continue;
                 }

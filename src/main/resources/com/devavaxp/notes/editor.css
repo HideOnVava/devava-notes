@@ -801,6 +801,196 @@ html, body {
     color: var(--muted);
 }
 
+/* A callout (> [!definition] …): a box in its kind's color, with its icon and its title */
+[data-callout] {
+    --c: #2B4FD8;
+    --c-bg: #EEF2FF;
+}
+
+[data-callout="abstract"], [data-callout="tip"] {
+    --c: #0E7490;
+    --c-bg: #E6F6F8;
+}
+
+[data-callout="success"] {
+    --c: #15803D;
+    --c-bg: #E8F6EC;
+}
+
+[data-callout="warning"], [data-callout="question"] {
+    --c: #B45309;
+    --c-bg: #FFF4E0;
+}
+
+[data-callout="important"], [data-callout="failure"], [data-callout="danger"], [data-callout="bug"] {
+    --c: #C8312B;
+    --c-bg: #FDECEC;
+}
+
+[data-callout="example"] {
+    --c: #7C3AED;
+    --c-bg: #F3EEFF;
+}
+
+[data-callout="quote"] {
+    --c: #596074;
+    --c-bg: #F3F4F8;
+}
+
+:root[data-theme="dark"] [data-callout] {
+    --c: #7F95FF;
+    --c-bg: #1E2747;
+}
+
+:root[data-theme="dark"] [data-callout="abstract"], :root[data-theme="dark"] [data-callout="tip"] {
+    --c: #5BC8D9;
+    --c-bg: #12313A;
+}
+
+:root[data-theme="dark"] [data-callout="success"] {
+    --c: #6EE7A0;
+    --c-bg: #14301F;
+}
+
+:root[data-theme="dark"] [data-callout="warning"], :root[data-theme="dark"] [data-callout="question"] {
+    --c: #FDBA74;
+    --c-bg: #3A2A12;
+}
+
+:root[data-theme="dark"] [data-callout="important"], :root[data-theme="dark"] [data-callout="failure"],
+:root[data-theme="dark"] [data-callout="danger"], :root[data-theme="dark"] [data-callout="bug"] {
+    --c: #F28B82;
+    --c-bg: #3A1C1C;
+}
+
+:root[data-theme="dark"] [data-callout="example"] {
+    --c: #C4A7FF;
+    --c-bg: #2A2045;
+}
+
+:root[data-theme="dark"] [data-callout="quote"] {
+    --c: #A1A8BB;
+    --c-bg: #22252F;
+}
+
+#reading blockquote.callout {
+    padding: 10px 16px;
+    border-left: 4px solid var(--c);
+    border-radius: 0 8px 8px 0;
+    background: var(--c-bg);
+    color: var(--text);
+}
+
+#reading .callout-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+    color: var(--c);
+    font-weight: 700;
+}
+
+#reading .callout-title .icon {
+    width: 17px;
+    height: 17px;
+}
+
+#reading blockquote.callout > :last-child {
+    margin-bottom: 0;
+}
+
+/* While writing, its lines are the box, and its [!type] its icon and name */
+#editor .cm-line.cm-callout {
+    border-left: 3px solid var(--c);
+    background: var(--c-bg);
+    padding-left: 12px;
+}
+
+#editor .cm-line.cm-callout-first {
+    padding-top: 4px;
+    border-top-right-radius: 8px;
+}
+
+#editor .cm-line.cm-callout-last {
+    padding-bottom: 4px;
+    border-bottom-right-radius: 8px;
+}
+
+#editor .cm-callout-mark {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    vertical-align: -0.12em;
+    color: var(--c);
+    font: 700 0.95em var(--font);
+}
+
+#editor .cm-callout-mark .icon {
+    width: 15px;
+    height: 15px;
+}
+
+/* The notes that link here, at the end of the note */
+.backlinks {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 28px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font: 13px/1.4 var(--font);
+}
+
+.backlinks-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 4px;
+    font-weight: 600;
+}
+
+.backlink {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg);
+    color: var(--accent);
+    font: inherit;
+    cursor: pointer;
+}
+
+.backlink:hover {
+    border-color: var(--accent);
+}
+
+.backlink .where {
+    color: var(--faint);
+}
+
+.backlink .where::before {
+    content: "· ";
+}
+
+#editor .cm-backlinks {
+    padding: 4px 0 28px;
+}
+
+#editor .cm-backlinks .backlinks {
+    margin-top: 16px;
+}
+
+/* The titles [[ offers in a table's cell */
+.cell-links .option.current {
+    background: var(--accent-soft);
+    color: var(--text);
+    font-weight: 400;
+}
+
 /* A table as wide as it needs, up to the page's width, past which it scrolls sideways */
 #reading table {
     display: block;

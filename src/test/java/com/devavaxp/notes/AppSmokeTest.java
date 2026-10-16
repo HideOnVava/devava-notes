@@ -26,6 +26,7 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
+import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.GridPane;
 import javafx.scene.web.WebEngine;
 import javafx.scene.web.WebView;
@@ -1809,6 +1810,212 @@ class AppSmokeTest {
         assertTrue(width.find() && Double.parseDouble(width.group(1)) > 100, paper.substring(0, Math.min(paper.length(), 400)));
         assertTrue(paper.contains(">Leer n<") && paper.contains(">Fin<"), "the texts of the diagram");
         fx(() -> run(window[0]::close));
+    }
+
+    /**
+     * Ctrl+ and Ctrl− (and Ctrl and the wheel) make the note's text bigger and smaller, Ctrl+0 as it
+     * was; the size stays for the next time, and a click still lands where it is pointed.
+     */
+    @Test
+    void textSizeStepsAndIsRemembered(@TempDir Path home) throws Exception {
+        Stage[] window = new Stage[1];
+        NotesApp app = open(home, window);
+        WebEngine engine = fx(() -> app.editor.view.getEngine());
+        Path ideas = fx(() -> app.createNotebook("Ideas", NotebookType.GENERAL));
+        Path note = Files.writeString(ideas.resolve("Lista.md"), "Primera línea\nSegunda línea\nTercera línea\nCuarta línea\n");
+        fx(() -> run(() -> {
+            app.openNotebook(ideas);
+            app.openNote(note);
+        }));
+        press(app, KeyCode.EQUALS);
+        assertEquals(1.1, fx(() -> app.editor.view.getZoom()), 1e-9);
+        assertTrue(fx(() -> texts(window[0])).contains("Texto al 110 %"), "how big, for a moment");
+        press(app, KeyCode.ADD);
+        press(app, KeyCode.ADD);
+        assertEquals(1.5, fx(() -> app.editor.view.getZoom()), 1e-9);
+        press(app, KeyCode.MINUS);
+        assertEquals(1.25, fx(() -> app.editor.view.getZoom()), 1e-9);
+        assertTrue(Files.readString(home.resolve("settings.json")).contains("\"textSize\": \"1.25\""), Files.readString(home.resolve("settings.json")));
+
+        // At 125 %, a click on the third line puts the cursor there
+        String[] xy = fx(() -> (String) engine.executeScript("(v => { const c = v.coordsAtPos(v.state.doc.line(3).from + 4); return c.left + ',' + (c.top + c.bottom) / 2; })(editorView)")).split(",");
+        click(app.editor.view, Double.parseDouble(xy[0]) * 1.25, Double.parseDouble(xy[1]) * 1.25);
+        assertEquals(3, cursorLine(engine));
+
+        // Ctrl and the wheel: a step a notch
+        fx(() -> run(() -> app.editor.view.fireEvent(new ScrollEvent(ScrollEvent.SCROLL, 300, 300, 300, 300, false, true, false, false, false, false,
+                0, -40, 0, -40, ScrollEvent.HorizontalTextScrollUnits.NONE, 0, ScrollEvent.VerticalTextScrollUnits.NONE, 0, 0, null))));
+        assertEquals(1.1, fx(() -> app.editor.view.getZoom()), 1e-9);
+        press(app, KeyCode.DIGIT0);
+        assertEquals(1.0, fx(() -> app.editor.view.getZoom()), 1e-9);
+        press(app, KeyCode.EQUALS);
+        fx(() -> run(window[0]::close));
+
+        // The next time, as it was left
+        Stage[] again = new Stage[1];
+        NotesApp reopened = open(home, again);
+        assertEquals(1.1, fx(() -> reopened.editor.view.getZoom()), 1e-9);
+        fx(() -> run(again[0]::close));
+    }
+
+    /**
+     * Callouts, as Obsidian writes them (> [!definition] …): a box of their kind's color with their icon
+     * and their name, or their own title, while writing and in Vista previa; Spanish words too, and an
+     * unknown one as a note named as written. Recuadro makes one, around the selected lines too.
+     */
+    @Test
+    void writesCallouts(@TempDir Path home) throws Exception {
+        Stage[] window = new Stage[1];
+        NotesApp app = open(home, window);
+        Stage stage = window[0];
+        WebEngine engine = fx(() -> app.editor.view.getEngine());
+        Path ed = fx(() -> app.createNotebook("Estructura de Datos", NotebookType.PROGRAMMING));
+        Path note = Files.writeString(ed.resolve("Pilas.md"), """
+                > [!definition]
+                > Una **pila** guarda sus datos uno sobre otro: sale primero el último en entrar.
+
+                > [!warning] Cuidado con **pop**
+                > En una pila vacía, falla.
+
+                > [!advertencia]
+                > En español también.
+
+                > [!ojo]
+                > Una palabra que no conoce.
+
+                > Una cita, sin más.
+
+                Texto suelto
+                """);
+        fx(() -> run(() -> {
+            app.openNotebook(ed);
+            app.openNote(note);
+        }));
+        waitFor("the callouts while writing", () -> fx(() -> ((Number) engine.executeScript("document.querySelectorAll('.cm-callout-mark').length")).intValue() == 4));
+        assertEquals("Definición|Advertencia|Advertencia|Ojo", fx(() -> engine.executeScript(
+                "[...document.querySelectorAll('.cm-callout-mark')].map(m => m.textContent).join('|')")));
+        assertEquals("definition,definition,warning,warning,warning,warning,note,note", fx(() -> engine.executeScript(
+                "[...document.querySelectorAll('.cm-line.cm-callout')].map(l => l.dataset.callout).join(',')")));
+        shot(stage, "callouts-1-writing");
+
+        // Recuadro: a new one to write in, after the text; and one around a selected line
+        fx(() -> engine.executeScript("editorView.dispatch({selection: {anchor: editorView.state.doc.length}})"));
+        fx(() -> run(() -> app.editor.insertCallout("example")));
+        fx(() -> run(() -> app.editor.insert("Un caso de pila")));
+        assertTrue(text(engine).contains("Texto suelto\n> [!example]\n> Un caso de pila"), text(engine));
+        fx(() -> engine.executeScript("(v => { const at = v.state.doc.toString().indexOf('Texto suelto'); v.dispatch({selection: {anchor: at, head: at + 5}}); })(editorView)"));
+        fx(() -> run(() -> app.editor.insertCallout("important")));
+        assertTrue(text(engine).contains("> [!important]\n> Texto suelto\n\n> [!example]"), "kept apart from the next one: " + text(engine));
+
+        // In a quote, a new one goes after it, apart
+        fx(() -> engine.executeScript("(v => v.dispatch({selection: {anchor: v.state.doc.toString().indexOf('sin más')}}))(editorView)"));
+        fx(() -> run(() -> app.editor.insertCallout("definition")));
+        assertTrue(text(engine).contains("> Una cita, sin más.\n\n> [!definition]\n> \n"), text(engine));
+        fx(() -> run(() -> app.editor.insert("Cola: FIFO")));
+
+        // Vista previa: boxes with their titles, the content kept; a plain quote stays a quote
+        fx(() -> run(app::toggleMode));
+        waitFor("the callouts of Vista previa", () -> fx(() -> ((Number) engine.executeScript("document.querySelectorAll('#reading blockquote.callout').length")).intValue() == 7));
+        assertEquals("definition:Definición|warning:Cuidado con pop|warning:Advertencia|note:Ojo|definition:Definición|important:Importante|example:Ejemplo",
+                fx(() -> engine.executeScript("[...document.querySelectorAll('#reading blockquote.callout')].map(q => q.dataset.callout + ':'"
+                        + " + q.querySelector('.callout-title').textContent).join('|')")));
+        assertTrue(fx(() -> (String) engine.executeScript("document.querySelector('#reading blockquote.callout p').innerHTML"))
+                .startsWith("Una <strong>pila</strong> guarda"), "the definition's text");
+        assertEquals(1, fx(() -> ((Number) engine.executeScript("document.querySelectorAll('#reading blockquote:not(.callout)').length")).intValue()));
+        shot(stage, "callouts-2-reading");
+        CompletableFuture<String> printable = new CompletableFuture<>();
+        fx(() -> run(() -> app.editor.printable(app.editor.text(), ed, printable::complete)));
+        assertTrue(printable.get(15, TimeUnit.SECONDS).contains("<blockquote class=\"callout\" data-callout=\"definition\">"), "on paper");
+        assertTrue(fx(() -> app.editor.errors).isEmpty(), () -> "editor.js: " + app.editor.errors);
+        fx(() -> run(stage::close));
+    }
+
+    /**
+     * Notas que enlazan aquí: at the end of a note, while writing and in Vista previa, the notes whose
+     * [[links]] lead to it, from any notebook but one with a note of that title of its own; a click
+     * opens one, and one written elsewhere shows up once the window is back.
+     */
+    @Test
+    void showsTheNotesThatLinkHere(@TempDir Path home) throws Exception {
+        Stage[] window = new Stage[1];
+        NotesApp app = open(home, window);
+        Stage stage = window[0];
+        WebEngine engine = fx(() -> app.editor.view.getEngine());
+        Path ed = fx(() -> app.createNotebook("Estructura de Datos", NotebookType.PROGRAMMING));
+        Path poo = fx(() -> app.createNotebook("Programación Orientada a Objetos", NotebookType.PROGRAMMING));
+        Path other = fx(() -> app.createNotebook("Otra materia", NotebookType.CLASS_NOTES));
+        Path stack = Files.writeString(ed.resolve("Pilas.md"), "## Pilas\n\nLIFO.\n");
+        Files.writeString(ed.resolve("Colas.md"), "Como las [[Pilas]], pero FIFO.\n");
+        Files.writeString(ed.resolve("Recursividad.md"), "Cada llamada va a [[pilas|la pila]].\n");
+        Files.writeString(ed.resolve("Código.md"), "`[[Pilas]]` en código no enlaza.\n");
+        Path inheritance = Files.writeString(poo.resolve("Herencia.md"), "Ver [[Pilas]].\n");
+        Files.writeString(other.resolve("Pilas.md"), "Las de esta materia.\n");
+        Files.writeString(other.resolve("Uso.md"), "[[Pilas]] de aquí.\n");
+        fx(() -> run(() -> {
+            app.openNotebook(ed);
+            app.openNote(stack);
+        }));
+        waitFor("the notes that link here", () -> fx(() -> ((Number) engine.executeScript("document.querySelectorAll('.cm-backlinks .backlink').length")).intValue() == 3));
+        assertEquals("Colas|Recursividad|HerenciaProgramación Orientada a Objetos", fx(() -> engine.executeScript(
+                "[...document.querySelectorAll('.cm-backlinks .backlink')].map(b => b.textContent).join('|')")));
+        shot(stage, "backlinks-1-writing");
+        fx(() -> run(app::toggleMode));
+        waitFor("them in Vista previa", () -> fx(() -> ((Number) engine.executeScript("document.querySelectorAll('#reading .backlinks .backlink').length")).intValue() == 3));
+        shot(stage, "backlinks-2-reading");
+        fx(() -> run(app::toggleMode));
+
+        // One more, written elsewhere, once the window is back
+        Files.writeString(ed.resolve("Árboles.md"), "Un recorrido usa una [[Pilas|pila]].\n");
+        fx(() -> run(app::refreshFromDisk));
+        waitFor("the new one", () -> fx(() -> ((Number) engine.executeScript("document.querySelectorAll('.cm-backlinks .backlink').length")).intValue() == 4));
+
+        // A click opens it, in its notebook
+        fx(() -> engine.executeScript("[...document.querySelectorAll('.cm-backlinks .backlink')].find(b => b.textContent.startsWith('Herencia')).click()"));
+        waitFor("Herencia, open", () -> inheritance.equals(fx(app::openPath)));
+        waitFor("its own (none)", () -> fx(() -> ((Number) engine.executeScript("document.querySelectorAll('.cm-backlinks .backlink').length")).intValue() == 0));
+        fx(() -> run(stage::close));
+    }
+
+    /** [[ in a table's cell offers the titles too: ↑↓ to choose, Enter or Tab to take one, Esc to close them and stay in the cell. */
+    @Test
+    void linksNotesFromTableCells(@TempDir Path home) throws Exception {
+        Stage[] window = new Stage[1];
+        NotesApp app = open(home, window);
+        Stage stage = window[0];
+        WebEngine engine = fx(() -> app.editor.view.getEngine());
+        WebView page = fx(() -> app.editor.view);
+        Path ed = fx(() -> app.createNotebook("Estructura de Datos", NotebookType.PROGRAMMING));
+        Files.writeString(ed.resolve("Pilas.md"), "");
+        Files.writeString(ed.resolve("Pila de llamadas.md"), "");
+        Files.writeString(ed.resolve("Colas.md"), "");
+        Path note = Files.writeString(ed.resolve("Repaso.md"), "| Tema | Nota |\n| --- | --- |\n|  |  |\n");
+        fx(() -> run(() -> {
+            app.openNotebook(ed);
+            app.openNote(note);
+        }));
+        waitFor("the grid", () -> tableCount(engine) == 1);
+        clickCell(page, 1, 0);
+        typeIn(page, "[[pi");
+        waitFor("the titles", () -> fx(() -> ((Number) engine.executeScript("document.querySelectorAll('.cell-links .option').length")).intValue() == 2));
+        assertEquals("Pila de llamadas|Pilas", fx(() -> engine.executeScript("[...document.querySelectorAll('.cell-links .option')].map(o => o.textContent).join('|')")));
+        shot(stage, "cell-links");
+        key(page, KeyCode.DOWN);
+        key(page, KeyCode.ENTER);
+        assertEquals("[[Pilas]]", fx(() -> engine.executeScript("document.querySelector('.cm-table tbody').rows[1].cells[0].textContent")));
+        assertEquals("1,0", focused(engine), "still in the cell");
+        assertFalse(fx(() -> (Boolean) engine.executeScript("!!document.querySelector('.cell-links')")));
+        typeIn(page, " y [[co");
+        waitFor("Colas", () -> fx(() -> ((Number) engine.executeScript("document.querySelectorAll('.cell-links .option').length")).intValue() == 1));
+        key(page, KeyCode.TAB);
+        assertTrue(text(engine).contains("| [[Pilas]] y [[Colas]] |"), text(engine));
+        assertEquals("1,0", focused(engine), "Tab took the title, it did not move on");
+        typeIn(page, " [[pi");
+        waitFor("the titles again", () -> fx(() -> (Boolean) engine.executeScript("!!document.querySelector('.cell-links')")));
+        key(page, KeyCode.ESCAPE);
+        assertFalse(fx(() -> (Boolean) engine.executeScript("!!document.querySelector('.cell-links')")));
+        assertEquals("1,0", focused(engine), "Esc closed them, the cell keeps the caret");
+        assertTrue(fx(() -> app.editor.errors).isEmpty(), () -> "editor.js: " + app.editor.errors);
+        fx(() -> run(stage::close));
     }
 
     /** How many diagrams are drawn in a part of the editor's page. */
