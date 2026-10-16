@@ -14,6 +14,7 @@ import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
 import javafx.geometry.Side;
 import javafx.geometry.VPos;
+import javafx.scene.Cursor;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
@@ -78,6 +79,7 @@ import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
@@ -86,6 +88,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -113,6 +116,7 @@ public final class NotesApp extends Application {
     private static final KeyCombination READ = new KeyCodeCombination(KeyCode.E, KeyCombination.SHORTCUT_DOWN);
     private static final KeyCombination QUICK_OPEN = new KeyCodeCombination(KeyCode.O, KeyCombination.SHORTCUT_DOWN);
     private static final KeyCombination SEARCH = new KeyCodeCombination(KeyCode.F, KeyCombination.SHORTCUT_DOWN, KeyCombination.SHIFT_DOWN);
+    private static final KeyCombination PRINT = new KeyCodeCombination(KeyCode.P, KeyCombination.SHORTCUT_DOWN);
 
     Editor editor;
     NotebookView browser;
@@ -137,6 +141,14 @@ public final class NotesApp extends Application {
     private final Button languageChip = new Button();
     /** Editar or Vista previa: one is always pressed, and Ctrl+E switches. */
     private final ToggleButton editTab = new ToggleButton("Editar"), readTab = new ToggleButton("Vista previa");
+    /** The printer, in the note's header: Exportar a PDF and Imprimir (Ctrl+P). */
+    private final MenuButton paper = new MenuButton(null, Icons.of("printer", 16));
+    /** A note on its way to paper: from asking the page for it until Edge has made the PDF, or opened its print window. */
+    private boolean paperBusy;
+    /** Which way to paper is the one now, so that one given up on does not go on. */
+    private int paperJob;
+    /** How long the page may take to give a note back for paper. */
+    private final PauseTransition paperPatience = new PauseTransition(Duration.seconds(20));
     private final PauseTransition autosave = new PauseTransition(Duration.millis(600));
     private SplitPane notebookView;
 
@@ -248,7 +260,12 @@ public final class NotesApp extends Application {
         HBox modes = segmented(editTab, readTab);
         modes.setMinWidth(Region.USE_PREF_SIZE);
         editTab.setSelected(true);
-        actions.getChildren().setAll(status, tools, modes);
+        paper.getItems().setAll(item("Exportar a PDF…", () -> exportPdf(note)), item("Imprimir…", () -> print(note)));
+        paper.getStyleClass().add("flat");
+        paper.setMinWidth(Region.USE_PREF_SIZE);
+        paper.setAccessibleText("Exportar a PDF o imprimir");
+        paper.setTooltip(new Tooltip("Exportar a PDF o imprimir la nota, como se ve en Vista previa (Ctrl+P imprime)"));
+        actions.getChildren().setAll(status, tools, paper, modes);
         actions.setAlignment(Pos.CENTER_RIGHT);
         noteHeader.getChildren().setAll(noteTitle, kindName, badge, grow(), actions);
         noteHeader.getStyleClass().add("note-header");
@@ -287,6 +304,9 @@ public final class NotesApp extends Application {
                 e.consume();
             } else if (SEARCH.match(e)) {
                 search();
+                e.consume();
+            } else if (PRINT.match(e) && note != null) {
+                print(note);
                 e.consume();
             }
         });
@@ -370,6 +390,7 @@ public final class NotesApp extends Application {
                 {"Ctrl+O", "Abrir cualquier nota por su título"},
                 {"Ctrl+Shift+F", "Buscar en el texto de todas las notas"},
                 {"Ctrl+E", "Pasar entre Editar y Vista previa"},
+                {"Ctrl+P", "Imprimir la nota; el botón de la impresora también la exporta a PDF"},
                 {"Ctrl+F", "Buscar y reemplazar dentro de la nota"},
                 {"Ctrl+B, Ctrl+I", "Negrita y cursiva; la barra sobre la nota tiene lo demás"},
                 {"```java", "Un bloque de código al escribir ``` y su lenguaje, y luego Enter"},
@@ -428,11 +449,7 @@ public final class NotesApp extends Application {
                 error("Aún no hay registro", "No se ha registrado ningún error.");
                 return;
             }
-            try {
-                Desktop.getDesktop().open(file.toFile());   // in the Notepad, say
-            } catch (IOException | RuntimeException e) {
-                showInFolder(file.getParent());   // no program for .log files: its folder
-            }
+            openFile(file);   // in the Notepad, say
         }
     }
 
@@ -1747,7 +1764,8 @@ public final class NotesApp extends Application {
             boolean done = n.get("status").equalsIgnoreCase("Done");
             menu.getItems().add(item(done ? "Marcar como pendiente" : "Marcar como hecha", () -> setProperty(p, "status", done ? "Pending" : "Done")));
         }
-        menu.getItems().addAll(new SeparatorMenuItem(), danger(item("Mover a la papelera…", () -> trashNote(p))));
+        menu.getItems().addAll(new SeparatorMenuItem(), item("Exportar a PDF…", () -> exportPdf(p)), item("Imprimir…", () -> print(p)),
+                new SeparatorMenuItem(), danger(item("Mover a la papelera…", () -> trashNote(p))));
         return menu;
     }
 
@@ -1781,6 +1799,146 @@ public final class NotesApp extends Application {
         readTab.setSelected(on);
         editor.setReading(on);
         showFormatBar();
+    }
+
+    // ------------------------------------------------------------------
+    // Paper: a PDF, a print (Edge makes them; see Pdf)
+    // ------------------------------------------------------------------
+
+    /** Exportar a PDF…: where to save it, then the PDF of the note as Vista previa shows it, opened once made. */
+    void exportPdf(Path p) {
+        if (paperBusy) return;
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Exportar a PDF");
+        chooser.setInitialFileName(Vault.title(p) + ".pdf");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF", "*.pdf"));
+        File chosen = chooser.showSaveDialog(stage);
+        if (chosen == null) return;
+        Path pdf = chosen.toPath();
+        if (!pdf.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".pdf")) pdf = pdf.resolveSibling(pdf.getFileName() + ".pdf");
+        exportPdf(p, pdf, this::openFile);
+    }
+
+    /** The PDF of a note as Vista previa shows it, at {@code pdf}; {@code done} gets it once made. */
+    void exportPdf(Path p, Path pdf, Consumer<Path> done) {
+        toPaper(p, false, "Creando PDF…", (edge, page) -> {
+            Pdf.export(edge, page, pdf);
+            return () -> done.accept(pdf);
+        });
+    }
+
+    /** Imprimir… (Ctrl+P): Edge's print window, with a preview of the note as Vista previa shows it and the printer to choose. */
+    void print(Path p) {
+        toPaper(p, true, "Abriendo impresión…", (edge, page) -> {
+            Pdf.print(edge, page);
+            return () -> { };
+        });
+    }
+
+    /** What Edge does with a note's page for paper, away from the window; and what follows, back on it. */
+    private interface PaperJob {
+        Runnable run(Path edge, String page) throws IOException;
+    }
+
+    /** A note, as it is now (in the editor, if open), as the page for paper that {@code job} gives Edge. */
+    private void toPaper(Path p, boolean print, String doing, PaperJob job) {
+        if (paperBusy || !editor.ready || notebook == null) return;
+        String failed = print ? "No se pudo imprimir" : "No se pudo crear el PDF";
+        Path edge = Pdf.edge(System::getenv);
+        if (edge == null) {
+            error(failed, "La app hace los PDF y las impresiones con Microsoft Edge, que viene con Windows, y aquí no está."
+                    + " Instálalo desde microsoft.com/edge y vuelve a intentarlo.");
+            return;
+        }
+        Note n;
+        String body;
+        if (p.equals(note)) {   // saved or not
+            n = current;
+            body = editor.text();
+        } else {
+            try {
+                n = Note.parse(Vault.read(p));
+            } catch (IOException e) {
+                error(failed, reason(e));
+                return;
+            }
+            body = n.body;
+        }
+        String title = Vault.title(p), about = about(n);
+        int ticket = ++paperJob;
+        busy(doing);
+        paperPatience.setOnFinished(e -> {   // the page never gave the note back (it reloaded, say)
+            paperJob++;
+            editor.cancelPrintable();
+            idle();
+            error(failed, "La nota no terminó de prepararse. Vuelve a intentarlo.");
+        });
+        paperPatience.playFromStart();
+        try {
+            editor.printable(body, p.getParent(), html -> {
+                if (ticket != paperJob) return;
+                paperPatience.stop();
+                Thread worker = new Thread(() -> {
+                    Runnable then;
+                    try {
+                        then = job.run(edge, Pdf.page(title, about, html, print));
+                    } catch (IOException | RuntimeException e) {
+                        String why = e instanceof IOException io ? reason(io) : e.toString();
+                        then = () -> error(failed, why);
+                    }
+                    Runnable after = then;
+                    Platform.runLater(() -> {
+                        idle();
+                        after.run();
+                    });
+                }, "Devava Notes: paper");
+                worker.setDaemon(true);
+                worker.start();
+            });
+        } catch (RuntimeException e) {   // the page could not make it (a JSException)
+            paperPatience.stop();
+            paperJob++;
+            idle();
+            ErrorLog.add("printable: " + e);
+            error(failed, "La nota no terminó de prepararse. Vuelve a intentarlo.");
+        }
+    }
+
+    /** The printer button says what is going on, and waits, while a note goes to paper. */
+    private void busy(String doing) {
+        paperBusy = true;
+        paper.setText(doing);
+        paper.setDisable(true);
+        root.setCursor(Cursor.WAIT);
+        fitHeader();
+    }
+
+    private void idle() {
+        paperBusy = false;
+        paper.setText(null);
+        paper.setDisable(false);
+        root.setCursor(null);
+        fitHeader();
+    }
+
+    /** What a note is, under its title on paper: "Estructura de Datos · Sesión de código · Unidad 3 · 15 de octubre de 2026". */
+    String about(Note n) {
+        List<String> parts = new ArrayList<>(List.of(notebook.getFileName().toString()));
+        if (type.kinds().size() > 1) parts.add(type.kindOf(n).name());
+        String unit = n.get("unit");
+        if (!unit.isEmpty()) parts.add(Character.isDigit(unit.charAt(0)) ? "Unidad " + unit : unit);
+        if (!n.get("date").isEmpty()) parts.add(longDate(n.get("date")));
+        else if (!n.get("due").isEmpty()) parts.add("Entrega: " + longDate(n.get("due")));
+        return String.join(" · ", parts);
+    }
+
+    /** 2026-10-15 as "15 de octubre de 2026"; anything else as it is. */
+    static String longDate(String date) {
+        try {
+            return DateTimeFormatter.ofPattern("d 'de' MMMM 'de' yyyy", Text.SPANISH).format(LocalDate.parse(date));
+        } catch (DateTimeParseException e) {
+            return date;
+        }
     }
 
     // ------------------------------------------------------------------
@@ -1874,6 +2032,15 @@ public final class NotesApp extends Application {
         if (u.startsWith("https://") || u.startsWith("http://") || u.startsWith("mailto:")) getHostServices().showDocument(url);
     }
 
+    /** A file in the program Windows opens its kind with; with none, its folder. */
+    private void openFile(Path file) {
+        try {
+            Desktop.getDesktop().open(file.toFile());
+        } catch (IOException | RuntimeException e) {
+            showInFolder(file.getParent());
+        }
+    }
+
     private void showInFolder(Path dir) {
         try {
             Desktop.getDesktop().open(dir.toFile());
@@ -1888,6 +2055,7 @@ public final class NotesApp extends Application {
         if (e instanceof AccessDeniedException) return "se negó el acceso al archivo";
         if (e instanceof NoSuchFileException) return "el archivo ya no está";
         if (e instanceof CharacterCodingException) return "no es texto UTF-8";
+        if (e instanceof FileSystemException f && f.getReason() != null) return f.getReason();   // Windows' words, without the paths
         return e.getMessage() != null ? e.getMessage() : e.toString();
     }
 

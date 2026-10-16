@@ -826,3 +826,143 @@ html, body {
     margin: 0 0.5em 0 -1.4em;
     accent-color: var(--accent);
 }
+
+/* ---------- Paper: a PDF or a print, which Edge makes from the page Pdf.java writes ---------- */
+
+/* Letter, the size Edge starts with. The empty boxes keep out what Edge's print window would put in
+   the margins (the date, the title, the page's address); the note's title goes in the bottom left */
+@page {
+    margin: 2cm 2.2cm 2.2cm;
+    @top-left { content: ""; }
+    @top-center { content: ""; }
+    @top-right { content: ""; }
+    @bottom-center { content: ""; }
+    @bottom-left {
+        font: 9pt "Segoe UI", system-ui, sans-serif;
+        color: #8A90A2;
+    }
+    @bottom-right {
+        content: counter(page) " / " counter(pages);
+        font: 9pt "Segoe UI", system-ui, sans-serif;
+        color: #8A90A2;
+    }
+}
+
+/* Above the note: its title, and what it is (its subject, its kind, its unit, its date) */
+#reading header.paper {
+    margin: 0 0 1.4em;
+    padding-bottom: 0.8em;
+    border-bottom: 2px solid var(--accent);
+}
+
+#reading header.paper h1 {
+    font-size: 1.9em;
+    margin: 0 0 0.25em;
+}
+
+#reading header.paper p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.92em;
+}
+
+@media print {
+    html, body {
+        height: auto;
+        background: none;
+        font-size: 11pt;
+    }
+
+    /* The backgrounds of code and of table headers too, which a print leaves out unless told */
+    * {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    /* What the screen would scroll sideways, paper cannot: a long link or word breaks at the margin */
+    #reading {
+        height: auto;
+        overflow: visible;
+        padding: 0;
+        overflow-wrap: break-word;
+    }
+
+    /* A title stays with what follows it; a table, a picture or a formula is not cut in two (one longer than a page is) */
+    #reading h1, #reading h2, #reading h3, #reading h4 {
+        break-after: avoid;
+    }
+
+    #reading table, #reading tr, #reading img, #reading .math.display, #reading blockquote {
+        break-inside: avoid;
+    }
+
+    /* A long block of code goes on over the next page in a frame of its own, its long lines folded
+       rather than cut (the folded part after the line's number), never one line alone on a page */
+    #reading .code-card {
+        overflow: visible;
+        box-decoration-break: clone;
+    }
+
+    #reading .code-head {
+        border-radius: 8px 8px 0 0;
+        break-after: avoid;
+    }
+
+    #reading pre {
+        overflow: visible;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        orphans: 3;
+        widows: 3;
+    }
+
+    #reading pre code .line {
+        display: inline-block;
+        width: 100%;
+        box-sizing: border-box;
+        padding-left: 3em;
+        text-indent: -3em;
+    }
+
+    /* A table as wide as the page at most, with its header again on each page it reaches */
+    #reading table {
+        display: table;
+        width: auto;
+        max-width: 100%;
+    }
+
+    #reading th, #reading td {
+        overflow-wrap: anywhere;
+    }
+
+    #reading img {
+        max-height: 22cm;
+        object-fit: contain;
+    }
+
+    #reading .math.display {
+        overflow: visible;
+    }
+
+    /* A link to a note not written yet says nothing on paper: it looks like the others */
+    #reading a.wikilink.missing {
+        color: var(--accent);
+        border-bottom-color: var(--accent);
+        opacity: 1;
+    }
+
+    /* A note's checkboxes cannot be clicked, so they would print gray: these keep their color */
+    #reading li > input[type=checkbox] {
+        appearance: none;
+        width: 0.9em;
+        height: 0.9em;
+        vertical-align: -0.1em;
+        border: 1.5px solid var(--faint);
+        border-radius: 3px;
+    }
+
+    #reading li > input[type=checkbox]:checked {
+        border-color: var(--accent);
+        background: var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='white' stroke-width='2.2'/%3E%3C/svg%3E") center / 100% no-repeat;
+    }
+}

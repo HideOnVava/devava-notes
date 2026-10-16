@@ -46,7 +46,8 @@ final class Icons {
                     + " M7.4 10a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0-3.2 0z M21 16l-5-5-8 8"),
             Map.entry("sigma", "M18 5H6l6 7-6 7h12"),
             Map.entry("draw", "M3 20c3 0 4-3 7-3s3 3 6 3 M14 4l5 5-8 8H6v-5z"),
-            Map.entry("download", "M12 4v11 M7 10l5 5 5-5 M5 20h14"));
+            Map.entry("download", "M12 4v11 M7 10l5 5 5-5 M5 20h14"),
+            Map.entry("printer", "M7 9V3h10v6 M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2 M7 14h10v7H7z"));
 
     private Icons() {
     }

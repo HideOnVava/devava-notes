@@ -47,4 +47,4 @@ Lo que imprimió el programa va en un bloque de **Salida**:
 
 ## Vista previa
 
-**Vista previa** (Ctrl+E) muestra la nota como queda: las fórmulas, el código con colores y las imágenes. Tus notas se guardan solas, como archivos de texto que también abren otros programas; **Opciones → Abrir la carpeta de datos** te lleva a ellas.
+**Vista previa** (Ctrl+E) muestra la nota como queda: las fórmulas, el código con colores y las imágenes. Así sale también en papel: el botón de la impresora, junto a Vista previa, la exporta a PDF o la imprime (Ctrl+P). Tus notas se guardan solas, como archivos de texto que también abren otros programas; **Opciones → Abrir la carpeta de datos** te lleva a ellas.

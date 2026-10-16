@@ -1558,22 +1558,48 @@ window.showEditor = () => {
 };
 window.showReading = html => {
     closeMenu();
-    reading.innerHTML = html;   // commonmark-java already turned any HTML written in the note into text
-    reading.querySelectorAll(".math").forEach(math => katex.render(math.textContent, math,
-        {displayMode: math.classList.contains("display"), throwOnError: false}));
-    reading.querySelectorAll("pre > code").forEach(card);
-    reading.querySelectorAll("img").forEach(img => {
-        if (!/\.excalidraw\.png(\?|$)/i.test(img.getAttribute("src"))) return;
-        img.classList.add("drawing");
-        img.title = words.drawHint;
-        const drawn = () => img.style.width = img.naturalWidth / 2 + "px";   // its PNG is twice as big, to look sharp
-        if (img.complete && img.naturalWidth) drawn();
-        else img.addEventListener("load", drawn);
-    });
+    render(reading, html);
+    reading.querySelectorAll("img.drawing").forEach(img => img.title = words.drawHint);
     editor.hidden = true;
     reading.hidden = false;
     reading.scrollTop = 0;
 };
+
+// The same for paper (a PDF, a print), made apart from the page: Java gets it once its code has its colors and
+// its drawings their size. Nothing on paper is clicked: no Copy buttons, and a [[link]] leads nowhere.
+window.printable = html => {
+    const page = document.createElement("article");
+    Promise.allSettled(render(page, html)).then(() => {
+        page.querySelectorAll(".copy").forEach(copy => copy.remove());
+        page.querySelectorAll(".wikilink").forEach(link => link.removeAttribute("href"));
+        tell("print:" + page.innerHTML);
+    });
+};
+
+// A note's HTML (from Java) into an element: its formulas, its code as cards and its drawings at their size.
+// What is still on its way, as promises: the colors of the code, the drawings loading.
+function render(into, html) {
+    into.innerHTML = html;   // commonmark-java already turned any HTML written in the note into text
+    into.querySelectorAll(".math").forEach(math => katex.render(math.textContent, math,
+        {displayMode: math.classList.contains("display"), throwOnError: false}));
+    const coming = [...into.querySelectorAll("pre > code")].map(card);
+    into.querySelectorAll("img").forEach(img => {
+        if (!/\.excalidraw\.png(\?|$)/i.test(img.getAttribute("src"))) return;
+        img.classList.add("drawing");
+        coming.push(new Promise(done => {
+            const drawn = () => {
+                if (img.naturalWidth) img.style.width = img.naturalWidth / 2 + "px";   // its PNG is twice as big, to look sharp
+                done();
+            };
+            if (img.complete) drawn();
+            else {
+                img.addEventListener("load", drawn);
+                img.addEventListener("error", done);
+            }
+        }));
+    });
+    return coming;
+}
 
 // In the reading view a [[link]] opens its note, a #tag shows its notes, and any other link opens
 // in the system browser, never inside this page.
@@ -1590,7 +1616,8 @@ reading.addEventListener("click", e => {
 tell("ready");
 
 // A code block of the reading view becomes a card as while writing: its language and a Copy button
-// above numbered lines with the same colors. A block of output is plain text.
+// above numbered lines with the same colors (once its language has loaded: the promise). A block of
+// output is plain text.
 function card(code) {
     const info = code.className.startsWith("language-") ? code.className.slice("language-".length) : "";
     const kind = describe(info), text = code.textContent.replace(/\n$/, "");
@@ -1606,7 +1633,7 @@ function card(code) {
     box.append(element("div", "code-head", label, copy), pre);
     if (kind.output) return;
     lines(code, text, null);
-    language(info)?.load().then(support => lines(code, text, support.language.parser.parse(text)));
+    return language(info)?.load().then(support => lines(code, text, support.language.parser.parse(text)));
 }
 
 function lines(code, text, tree) {

@@ -38,7 +38,7 @@ import java.util.regex.Pattern;
  * The open note, in one WebView page (editor.html): CodeMirror 6 to write it, or the note
  * rendered to read it. The page reports to Java only as alert() text ("ready", "changed",
  * "link:url", "open:title", "tag:name", "copy:text", "table:markdown", "language:id", "draw:src",
- * "error:message"), so no Java object is ever within reach of JavaScript.
+ * "print:html", "error:message"), so no Java object is ever within reach of JavaScript.
  */
 final class Editor {
 
@@ -68,6 +68,8 @@ final class Editor {
     private Set<String> known = Set.of();
     /** The language of new code blocks ("java"); "" lets each block ask for one. */
     private String language = "";
+    /** What waits for a note's HTML for paper (printable), until the page sends it. */
+    private Consumer<String> onPrintable;
 
     /**
      * {@code onChange}: the text was edited. {@code onLink}: a link was followed (the page itself
@@ -101,6 +103,10 @@ final class Editor {
             } else if (message.startsWith("table:")) {   // Copiar of a table: cells for Word, Excel or Docs, Markdown for the rest
                 String markdown = message.substring(6);
                 Clipboard.getSystemClipboard().setContent(Map.of(DataFormat.HTML, tableHtml(markdown), DataFormat.PLAIN_TEXT, markdown));
+            } else if (message.startsWith("print:")) {
+                Consumer<String> then = onPrintable;
+                onPrintable = null;
+                if (then != null) Platform.runLater(() -> then.accept(message.substring(6)));
             } else if (message.startsWith("error:")) {
                 report(message.substring(6));
             }
@@ -260,6 +266,22 @@ final class Editor {
         return Collections.unmodifiableMap(map);
     }
 
+    /**
+     * A note as Vista previa shows it, for paper (main.js printable()): {@code then} gets its HTML once
+     * its code has its colors and its drawings their size, without Copy buttons and with [[links]]
+     * that lead nowhere. Only while the page is ready; a later call replaces what waits.
+     */
+    void printable(String markdown, Path folder, Consumer<String> then) {
+        onPrintable = then;
+        Set<String> names = known;
+        call("printable", html(markdown, folder, title -> names.contains(title.toLowerCase(Locale.ROOT))));
+    }
+
+    /** Nothing waits for printable() anymore: what the page sends now is let go. */
+    void cancelPrintable() {
+        onPrintable = null;
+    }
+
     /** Selects the first place with the text (accents and case aside), as Search found it. */
     void selectMatch(String found) {
         if (ready && !reading) call("selectMatch", found);
@@ -402,7 +424,7 @@ final class Editor {
         return -1;
     }
 
-    private static String escape(String s) {
+    static String escape(String s) {
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
     }
 

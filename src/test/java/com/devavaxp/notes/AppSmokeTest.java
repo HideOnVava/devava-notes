@@ -39,8 +39,10 @@ import org.junit.jupiter.api.io.TempDir;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.FileTime;
 import java.time.Duration;
 import java.time.Instant;
@@ -49,6 +51,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -62,6 +65,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * Opens the real window, CodeMirror included, and uses it as a student of the ITL would, mostly
@@ -1571,6 +1575,101 @@ class AppSmokeTest {
         dialogShot(stage, "h1-help", app::showHelp, "");
         dialogShot(stage, "h2-report", app::reportProblem, "");
         assertEquals(List.of(), fx(() -> List.copyOf(app.editor.errors)));
+        fx(() -> run(stage::close));
+    }
+
+    /**
+     * Exportar a PDF: the note as Vista previa shows it (its code in color, its formula, its table, its
+     * drawing at its size), without what is only clicked; the PDF opens once made, and a note of the
+     * list goes to paper as well as the open one.
+     */
+    @Test
+    void exportsANoteToPdf(@TempDir Path home, @TempDir Path out) throws Exception {
+        Stage[] window = new Stage[1];
+        NotesApp app = open(home, window);
+        Stage stage = window[0];
+        Path ed = fx(() -> app.createNotebook("Estructura de Datos", NotebookType.PROGRAMMING));
+        // A drawing as the app saves it: a PNG twice the size it shows at
+        Path drawing = Files.createDirectories(ed.resolve("attachments")).resolve("Dibujo 2026-10-15 10.00.00.excalidraw.png");
+        ImageIO.write(new BufferedImage(400, 200, BufferedImage.TYPE_INT_RGB), "png", drawing.toFile());
+        StringBuilder longCode = new StringBuilder();
+        for (int i = 1; i <= 60; i++) longCode.append("        System.out.println(\"Paso ").append(i).append(" de la prueba de escritorio\");\n");
+        Path note = Files.writeString(ed.resolve("Sesión 5 · Pilas.md"), STACK.formatted("2026-10-15").replace("## Notas", """
+                ## Complejidad
+
+                | Operación | Pila | Cola |
+                | --- | :---: | :---: |
+                | Insertar | O(1) | O(1) |
+                | Buscar | O(n) | O(n) |
+
+                Para derivar respecto a $x$:
+
+                $$
+                \\frac{\\partial f}{\\partial x} = \\lim_{h \\to 0} \\frac{f(x + h, y) - f(x, y)}{h}
+                $$
+
+                - [x] Entender `push` y `pop`
+                - [ ] Practicar con [[Colas]] y #pilas, y leer [la documentación](https://docs.oracle.com/en/java/)
+
+                ![](<attachments/Dibujo 2026-10-15 10.00.00.excalidraw.png>)
+
+                ## Un bloque largo
+
+                ```java
+                public class Larga {
+                    public static void main(String[] args) {
+                """ + longCode + """
+                    }
+                }
+                ```
+
+                ## Notas"""));
+        fx(() -> run(() -> app.openNotebook(ed)));
+        Path homework = fx(() -> app.createNote(kind(NotebookType.PROGRAMMING, "assignment"), "Práctica 3", ""));
+        fx(() -> run(() -> app.setProperty(homework, "due", "2026-10-20")));
+        fx(() -> run(() -> app.openNote(note)));   // Práctica 3 saves itself as it is left
+        assertEquals("Estructura de Datos · Sesión de código · Unidad 3. Estructuras lineales · 15 de octubre de 2026",
+                fx(() -> app.about(Note.parse(Files.readString(note)))));
+        assertEquals("Estructura de Datos · Tarea · Entrega: 20 de octubre de 2026", fx(() -> app.about(Note.parse(Files.readString(homework)))));
+        assertTrue(fx(() -> app.noteMenu(homework).getItems().stream().map(MenuItem::getText).toList())
+                .containsAll(List.of("Exportar a PDF…", "Imprimir…")));
+
+        // What goes on paper: Vista previa's page, with nothing to click
+        CompletableFuture<String> printable = new CompletableFuture<>();
+        fx(() -> run(() -> app.editor.printable(app.editor.text(), ed, printable::complete)));
+        String html = printable.get(15, TimeUnit.SECONDS);
+        assertTrue(html.contains("class=\"katex-display\"") && html.contains("class=\"katex\""), "the formulas");
+        assertTrue(html.contains("class=\"tok-keyword\""), "the code's colors");
+        assertTrue(html.contains("class=\"code-card output\""), "the output's card");
+        assertFalse(html.contains("class=\"copy\""), "a Copy button");
+        assertTrue(html.contains("<a class=\"wikilink missing\" data-note=\"Colas\">Colas</a>"), "a [[link]] that leads nowhere: " + html);
+        assertTrue(html.contains(" href=\"https://docs.oracle.com/en/java/\">la documentación</a>"), "a link to the web, kept");
+        assertTrue(html.contains("<span class=\"tag\" data-tag=\"pilas\">#pilas</span>"), "the tag");
+        assertTrue(html.contains("class=\"drawing\" style=\"width: 200px;\""), "the drawing at half its PNG: " + html);
+        assertFalse(html.contains("title="), "a hint to click the drawing");
+
+        assumeTrue(Pdf.edge(System::getenv) != null, "Microsoft Edge is not installed");
+        MenuButton printer = fx(() -> (MenuButton) stage.getScene().getRoot().lookupAll(".menu-button").stream()
+                .filter(m -> "Exportar a PDF o imprimir".equals(m.getAccessibleText())).findFirst().orElseThrow());
+        Path pdf = out.resolve("Sesión 5 · Pilas.pdf");
+        CompletableFuture<Path> opened = new CompletableFuture<>();
+        fx(() -> run(() -> app.exportPdf(note, pdf, opened::complete)));
+        assertEquals("Creando PDF…", fx(printer::getText));
+        assertTrue(fx(printer::isDisabled));
+        shot(stage, "pdf-creating");
+        assertEquals(pdf, opened.get(60, TimeUnit.SECONDS));
+        assertTrue(Files.readString(pdf, StandardCharsets.ISO_8859_1).startsWith("%PDF-"));
+        waitFor("the printer button back", () -> fx(() -> printer.getText() == null && !printer.isDisabled()));
+        Files.copy(pdf, Files.createDirectories(Path.of("target", "smoke")).resolve("pdf-nota.pdf"), StandardCopyOption.REPLACE_EXISTING);
+
+        // A note of the list, not the open one
+        Path other = out.resolve("Práctica 3.pdf");
+        CompletableFuture<Path> made = new CompletableFuture<>();
+        fx(() -> run(() -> app.exportPdf(homework, other, made::complete)));
+        assertEquals(other, made.get(60, TimeUnit.SECONDS));
+        String practice = Files.readString(other, StandardCharsets.ISO_8859_1);
+        assertTrue(practice.contains("/Title <FEFF" + HexFormat.of().withUpperCase().formatHex("Práctica 3".getBytes(StandardCharsets.UTF_16BE)) + ">"));
+        assertEquals(note, fx(app::openPath), "the open note stays open");
         fx(() -> run(stage::close));
     }
 
