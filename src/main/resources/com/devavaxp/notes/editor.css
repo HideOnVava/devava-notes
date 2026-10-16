@@ -343,6 +343,45 @@ html, body {
     background: var(--code-bg);
 }
 
+/* A diagram's card while writing: below its code, the diagram as Mermaid draws it */
+#editor .cm-card-foot.cm-diagram {
+    height: auto;
+    min-height: 40px;
+    padding: 14px 16px;
+    border-top: 1px dashed var(--border);
+    background: var(--bg);
+    text-align: center;
+    user-select: none;
+}
+
+/* A diagram (```mermaid), drawn: centered, as wide as it is, up to the width there is */
+.diagram svg {
+    max-width: 100%;
+    height: auto;
+}
+
+/* While its code has an error: its last drawing, faded, and what is wrong */
+.diagram.broken .diagram-drawing {
+    opacity: 0.35;
+}
+
+.diagram-error, .diagram-hint {
+    margin: 6px 0 0;
+    font: 12.5px/1.5 var(--mono);
+    white-space: pre-wrap;
+    text-align: left;
+}
+
+.diagram-error {
+    color: var(--danger);
+}
+
+.diagram-hint {
+    color: var(--faint);
+    font-family: var(--font);
+    text-align: center;
+}
+
 .chip, .act, .cm-add-block {
     display: inline-flex;
     align-items: center;
@@ -818,6 +857,11 @@ html, body {
     text-align: center;
 }
 
+#reading .diagram {
+    margin: 0 0 0.9em;
+    text-align: center;
+}
+
 #reading li:has(> input[type=checkbox]) {
     list-style: none;
 }
@@ -892,7 +936,7 @@ html, body {
         break-after: avoid;
     }
 
-    #reading table, #reading tr, #reading img, #reading .math.display, #reading blockquote {
+    #reading table, #reading tr, #reading img, #reading .math.display, #reading .diagram, #reading blockquote {
         break-inside: avoid;
     }
 
@@ -938,6 +982,10 @@ html, body {
     #reading img {
         max-height: 22cm;
         object-fit: contain;
+    }
+
+    #reading .diagram svg {
+        max-height: 22cm;
     }
 
     #reading .math.display {

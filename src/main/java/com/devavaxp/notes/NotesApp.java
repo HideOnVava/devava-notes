@@ -394,6 +394,7 @@ public final class NotesApp extends Application {
                 {"Ctrl+F", "Buscar y reemplazar dentro de la nota"},
                 {"Ctrl+B, Ctrl+I", "Negrita y cursiva; la barra sobre la nota tiene lo demás"},
                 {"```java", "Un bloque de código al escribir ``` y su lenguaje, y luego Enter"},
+                {"```mermaid", "Un diagrama escrito como texto, que se dibuja solo; el botón Diagrama trae ejemplos"},
                 {"Ctrl+V", "Pegar texto, una imagen como una captura de pantalla, o celdas de Excel como tabla"},
                 {"Tab, Enter", "En una tabla: la celda siguiente y la de abajo, que agrega filas al final"},
                 {"[[", "Enlazar otra nota: escribe [[ y elige su título"},
@@ -1154,6 +1155,7 @@ public final class NotesApp extends Application {
                 formatButton("Enlace", Icons.of("link", 15), "Enlace a otra nota: elige su título", () -> editor.format("link")),
                 formatButton("Imagen", Icons.of("image", 15), "Agrega una imagen desde un archivo", this::chooseImages),
                 formatButton("Dibujo", Icons.of("draw", 15), "Dibuja un diagrama o un esquema, y ponlo en la nota", this::newDrawing),
+                diagramButton(),
                 formatButton("Fórmula", Icons.of("sigma", 15), "Fórmula matemática, como en LaTeX", () -> editor.format("math")),
                 formatSeparator(),
                 block);
@@ -1194,6 +1196,75 @@ public final class NotesApp extends Application {
         }
         table.setOnAction(e -> menu.show(table, Side.BOTTOM, 0, 4));
         return table;
+    }
+
+    /** A diagram the Diagrama button starts: what it is, what it shows, and its Mermaid code to change. */
+    record DiagramStart(String name, String about, String code) {
+    }
+
+    /** The diagrams a student of ISC draws most, from Fundamentos de Programación to Bases de Datos. */
+    static final List<DiagramStart> DIAGRAMS = List.of(
+            new DiagramStart("Diagrama de flujo", "Un algoritmo: inicio, datos, decisiones y fin", """
+                    flowchart TD
+                        inicio([Inicio]) --> leer[/Leer n/]
+                        leer --> decision{¿n > 0?}
+                        decision -- Sí --> imprimir[Imprimir n]
+                        imprimir --> fin([Fin])
+                        decision -- No --> fin"""),
+            new DiagramStart("Diagrama de clases", "Clases de UML: atributos, métodos y herencia", """
+                    classDiagram
+                        class Animal {
+                            #String nombre
+                            +Animal(String nombre)
+                            +sonido() String
+                        }
+                        class Perro {
+                            +sonido() String
+                        }
+                        Animal <|-- Perro"""),
+            new DiagramStart("Entidad-relación", "Las tablas de una base de datos y cómo se relacionan", """
+                    erDiagram
+                        DEPARTAMENTO ||--o{ EMPLEADO : tiene
+                        DEPARTAMENTO {
+                            int id PK
+                            string nombre
+                        }
+                        EMPLEADO {
+                            int id PK
+                            string nombre
+                            int departamento_id FK
+                        }"""),
+            new DiagramStart("Diagrama de secuencia", "Los mensajes entre quienes participan, en orden", """
+                    sequenceDiagram
+                        actor Alumno
+                        participant App
+                        Alumno->>App: Abre una nota
+                        App-->>Alumno: Muestra la nota"""),
+            new DiagramStart("Diagrama de estados", "Los estados de algo y lo que lo hace cambiar", """
+                    stateDiagram-v2
+                        [*] --> Pendiente
+                        Pendiente --> EnProceso : empieza
+                        EnProceso --> Hecha : termina
+                        Hecha --> [*]"""));
+
+    /** Diagrama: one to start from, written as text (Mermaid), which the note shows drawn below it as it changes. */
+    private Button diagramButton() {
+        Button diagram = formatButton("Diagrama", Icons.of("diagram", 15),
+                "Un diagrama de flujo, de clases, entidad-relación… escrito como texto, que se dibuja solo (Mermaid)", () -> { });
+        ContextMenu menu = new ContextMenu();
+        for (DiagramStart d : DIAGRAMS) {
+            Label name = new Label(d.name()), about = new Label(d.about());
+            name.getStyleClass().add("menu-title");
+            about.getStyleClass().add("menu-about");
+            MenuItem item = new MenuItem(null, new VBox(1, name, about));
+            item.setOnAction(e -> {
+                editor.insertDiagram(d.code());
+                editor.focus();
+            });
+            menu.getItems().add(item);
+        }
+        diagram.setOnAction(e -> menu.show(diagram, Side.BOTTOM, 0, 4));
+        return diagram;
     }
 
     private Button formatButton(String text, Node graphic, String tip, Runnable action) {

@@ -26,6 +26,9 @@ const words = {
     code: "Código", choose: "Elegir lenguaje", change: "Cambiar el lenguaje del bloque", output: "Salida",
     outputLong: "Salida de consola", more: "Más lenguajes…", find: "Buscar un lenguaje", use: "Usar", current: "actual",
     block: "Bloque de código", drawEdit: "Editar dibujo", drawHint: "Clic para dibujar en él",
+    diagram: "Diagrama", diagramLong: "Diagrama (Mermaid)", diagramEmpty: "Escribe arriba el diagrama: su primera línea dice cuál es (flowchart, classDiagram, erDiagram…)",
+    diagramType: "No se reconoce el diagrama: su primera línea dice cuál es (flowchart, classDiagram, erDiagram, sequenceDiagram, stateDiagram-v2…)",
+    diagramLine: "Error en la línea", diagramMissing: "No se pudo cargar Mermaid para dibujar el diagrama",
     table: "Tabla", row: "Fila", column: "Columna", tableMore: "Más: filas, columnas y alineación",
     rowAbove: "Insertar fila arriba", columnLeft: "Insertar columna a la izquierda", removeHeader: "Quitar el encabezado",
     left: "Alinear a la izquierda", center: "Centrar", right: "Alinear a la derecha",
@@ -71,6 +74,8 @@ const FIRST = [
     {id: "plsql", name: "PL/SQL", color: "#C74634", hint: "Oracle"},
 ].map(l => ({...l, data: LanguageDescription.matchLanguageName(languages, l.id, false)}));
 const OUTPUT = "output";
+// A block of `mermaid` is a diagram written as text (flowchart, classDiagram, erDiagram…), which Mermaid draws.
+const DIAGRAM = "mermaid";
 const ALSO = {tsql: "MS SQL", mssql: "MS SQL", mariadb: "MariaDB SQL", asm: "Gas", masm: "Gas", nasm: "Gas"};
 // language-data's names the app shows otherwise, as Java does (Editor.languageName).
 const NAMES = {"Gas": "Ensamblador", "Shell": "Bash", "MS SQL": "T-SQL"};
@@ -81,14 +86,15 @@ const idIn = info => info.trim().split(/\s/)[0];
 /** What CodeMirror colors a block with: its language ("java", "c++", "tsql"…), if it knows it. */
 function language(info) {
     const id = idIn(info).toLowerCase();
-    return !id || id === OUTPUT ? null : LanguageDescription.matchLanguageName(languages, ALSO[id] ?? id, true);
+    return !id || id === OUTPUT || id === DIAGRAM ? null : LanguageDescription.matchLanguageName(languages, ALSO[id] ?? id, true);
 }
 
-/** How a block shows: its language's name and color, Salida, or an invitation to choose a language. */
+/** How a block shows: its language's name and color, Salida, Diagrama, or an invitation to choose a language. */
 function describe(info) {
     const id = idIn(info);
     if (!id) return {id, name: words.choose, unset: true};
     if (id.toLowerCase() === OUTPUT) return {id: OUTPUT, name: words.output, output: true};
+    if (id.toLowerCase() === DIAGRAM) return {id: DIAGRAM, name: words.diagram, diagram: true};
     const data = language(info);
     return FIRST.find(l => data && l.data === data) ?? {id, name: NAMES[data?.name] ?? data?.name ?? id};
 }
@@ -115,6 +121,7 @@ const ICONS = {
     pen: "M4 20h4L19 9l-4-4L4 16v4z",
     table: "M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z M3 10h18 M9 10v10",
     dots: "M5 12h.01 M12 12h.01 M19 12h.01",
+    diagram: "M4 4h7v5H4z M13 15h7v5h-7z M7.5 9v3h9v3",
 };
 
 function icon(name) {
@@ -139,6 +146,11 @@ function dot(color) {
     const d = element("span", "dot");
     if (color) d.style.background = color;
     return d;
+}
+
+/** What goes before a block's name: a console for Salida, a diagram for Diagrama, else its language's dot. */
+function mark(kind) {
+    return kind.output ? icon("terminal") : kind.diagram ? icon("diagram") : dot(kind.color);
 }
 
 /** A button of the page; its words go in a .label, and pressing it leaves the focus where it was. */
@@ -180,7 +192,7 @@ class Head extends WidgetType {
 
     toDOM(view) {
         const kind = describe(this.info), head = element("div", "cm-card-head");
-        const chip = button("chip" + (kind.unset ? " unset" : ""), kind.output ? icon("terminal") : dot(kind.color), kind.name, icon("down"));
+        const chip = button("chip" + (kind.unset ? " unset" : ""), mark(kind), kind.name, icon("down"));
         chip.title = words.change;
         chip.addEventListener("click", () => menu?.anchor === chip ? closeMenu() : openMenu(view, chip, cardOf(view, head)));
         const copy = button("act", icon("copy"), words.copy), remove = button("act", icon("trash"), words.remove);
@@ -242,6 +254,48 @@ class Foot extends WidgetType {
     }
 }
 
+/**
+ * The bottom of a diagram's card: the diagram as Mermaid draws its code, below it, drawn again
+ * once typing pauses; a line below it when the cursor is right after it.
+ */
+class DiagramFoot extends WidgetType {
+    constructor(code, here) {
+        super();
+        this.code = code;
+        this.here = here;
+    }
+
+    eq(other) {
+        return other.code === this.code && other.here === this.here;
+    }
+
+    toDOM(view) {
+        const box = element("div", "diagram");
+        const dom = element("div", "cm-card-bottom", element("div", "cm-card-foot cm-diagram", box));
+        this.updateDOM(dom, view, null);
+        return dom;
+    }
+
+    // The same box takes the new code: its drawing stays until the new one is ready, so typing does not make it jump.
+    updateDOM(dom, view, old) {
+        dom.className = "cm-card-bottom" + (this.here ? " here" : "");
+        const box = dom.querySelector(".diagram");
+        if (old && old.code === this.code) return true;
+        box.dataset.code = this.code;
+        clearTimeout(box.timer);
+        box.timer = setTimeout(() => drawDiagram(box, dark()).then(() => view.requestMeasure()), box.firstChild ? 400 : 0);
+        return true;
+    }
+
+    get estimatedHeight() {
+        return 240;
+    }
+
+    ignoreEvent() {
+        return false;
+    }
+}
+
 /** "+ Bloque de código" at the end of a note that has code blocks. */
 class AddBlock extends WidgetType {
     eq() {
@@ -282,14 +336,15 @@ function scan(state) {
                 for (let n = open.number; n <= close.number; n++) decorations.add(doc.line(n).from, doc.line(n).from, codeLine);
                 return false;
             }
-            const card = {open, close, info: info ? doc.sliceString(info.from, info.to) : ""}, output = describe(card.info).output;
+            const card = {open, close, info: info ? doc.sliceString(info.from, info.to) : ""}, kind = describe(card.info);
             list.push(card);
             decorations.add(open.from, open.to, Decoration.replace({widget: new Head(card.info, cursor === open.from), block: true}));
             for (let n = open.number + 1; n < close.number; n++) {
-                decorations.add(doc.line(n).from, doc.line(n).from, output ? outputLine
+                decorations.add(doc.line(n).from, doc.line(n).from, kind.output ? outputLine
                     : Decoration.line({class: "cm-code cm-card-line", attributes: {"data-n": String(n - open.number)}}));
             }
-            decorations.add(close.from, close.to, Decoration.replace({widget: new Foot(cursor === close.to), block: true}));
+            const foot = kind.diagram ? new DiagramFoot(codeOf(state, card), cursor === close.to) : new Foot(cursor === close.to);
+            decorations.add(close.from, close.to, Decoration.replace({widget: foot, block: true}));
             atomic.add(open.from, open.to + 1, fence);   // a fence and the line break between it and the code
             atomic.add(close.from - 1, close.to, fence);
             return false;
@@ -312,6 +367,103 @@ const cards = StateField.define({
         }),
     ],
 });
+
+// ---------- Diagrams (```mermaid) ----------
+
+const dark = () => document.documentElement.dataset.theme === "dark";
+
+// Mermaid is big: its bundle (diagrams.js, next to this page's) loads the first time a note shows a diagram.
+let mermaidLoad = null;
+
+function mermaidReady() {
+    return mermaidLoad ??= new Promise((resolve, reject) => {
+        const script = element("script", "");
+        script.src = "diagrams.js";
+        script.onload = () => resolve(window.mermaid);
+        script.onerror = () => {
+            mermaidLoad = null;
+            reject(new Error("diagrams.js did not load"));
+        };
+        document.head.append(script);
+    });
+}
+
+// The app's colors (editor.css) for Mermaid's base theme, and its font. strict: no HTML or links that run anything.
+const font = '"Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif';
+const DIAGRAM_THEMES = {
+    light: {
+        background: "#FFFFFF", primaryColor: "#E7ECFF", primaryBorderColor: "#2B4FD8", primaryTextColor: "#161A27",
+        secondaryColor: "#E3F4EF", tertiaryColor: "#F6F7FB", lineColor: "#596074", edgeLabelBackground: "#FFFFFF",
+        noteBkgColor: "#FFF6D8", noteBorderColor: "#D9B44A", noteTextColor: "#161A27", fontFamily: font, fontSize: "14px",
+        pie1: "#9DB0F5", pie2: "#8FD3C1", pie3: "#F5C38E", pie4: "#C9A6F0", pie5: "#F2A3A3", pie6: "#A8D98F",
+        pieStrokeColor: "#FFFFFF", pieOuterStrokeColor: "#596074",
+    },
+    dark: {
+        darkMode: true, background: "#171A23", primaryColor: "#232B52", primaryBorderColor: "#7F95FF", primaryTextColor: "#E8EAF2",
+        secondaryColor: "#173A33", tertiaryColor: "#1C2030", lineColor: "#A1A8BB", edgeLabelBackground: "#171A23",
+        noteBkgColor: "#3A3320", noteBorderColor: "#8A7A3A", noteTextColor: "#E8EAF2", fontFamily: font, fontSize: "14px",
+        pie1: "#4A5BC4", pie2: "#2E8C76", pie3: "#B57A2E", pie4: "#7B52B8", pie5: "#B54848", pie6: "#5E9A3E",
+        pieStrokeColor: "#171A23", pieOuterStrokeColor: "#A1A8BB",
+    },
+};
+
+// One diagram at a time: Mermaid's settings (the theme) are its own, for whatever it draws next.
+let diagramQueue = Promise.resolve(), diagramIds = 0;
+
+/** A diagram's SVG ({svg}), or what is wrong with its code ({error}), in the dark theme or the light one. */
+function mermaidDraw(code, inDark) {
+    const job = diagramQueue.then(async () => {
+        const mermaid = await mermaidReady();
+        mermaid.initialize({startOnLoad: false, securityLevel: "strict", suppressErrorRendering: true, fontFamily: font,
+            theme: "base", themeVariables: inDark ? DIAGRAM_THEMES.dark : DIAGRAM_THEMES.light});
+        try {
+            return {svg: (await mermaid.render("diagram-" + ++diagramIds, code)).svg};
+        } catch (e) {
+            return {error: explain(e)};
+        }
+    });
+    diagramQueue = job.catch(() => {});
+    return job;
+}
+
+/**
+ * Mermaid's complaint, in the app's words where it can: "Parse error on line 3:" is "Error en la línea 3:",
+ * followed by where in that line (a piece of it and a ^), without the list of what Mermaid expected there.
+ */
+function explain(e) {
+    const text = String(e?.message ?? e ?? "").trim();
+    if (/No diagram type detected/i.test(text)) return words.diagramType;
+    const lines = text.split("\n"), where = /^(?:Parse|Lexical) error on line (\d+)/i.exec(lines[0]);
+    return (where ? [`${words.diagramLine} ${where[1]}:`, ...lines.slice(1, 3)] : lines.slice(0, 3)).join("\n");
+}
+
+/**
+ * A diagram's box drawn from its code (its data-code): its SVG, or what is wrong with its code below
+ * its last drawing, faded. Settles once drawn, whatever the code.
+ */
+function drawDiagram(box, inDark) {
+    const code = box.dataset.code;
+    if (!code.trim()) {
+        box.replaceChildren(element("p", "diagram-hint", words.diagramEmpty));
+        return Promise.resolve();
+    }
+    return mermaidDraw(code, inDark).then(({svg, error}) => {
+        if (box.dataset.code !== code) return;   // newer code is on its way
+        const drawn = box.querySelector(".diagram-drawing") ?? element("div", "diagram-drawing");
+        if (svg) {
+            drawn.innerHTML = svg;
+            box.replaceChildren(drawn);
+        } else {
+            box.replaceChildren(...(drawn.firstChild ? [drawn] : []), element("p", "diagram-error", error));
+        }
+        box.classList.toggle("broken", !svg);
+    }, () => box.replaceChildren(element("p", "diagram-error", words.diagramMissing)));
+}
+
+/** The diagrams on the page drawn again, in the theme it has now. */
+function redrawDiagrams() {
+    document.querySelectorAll(".diagram[data-code]").forEach(box => drawDiagram(box, dark()).then(() => view.requestMeasure()));
+}
 
 // ---------- Drawings ----------
 
@@ -1233,6 +1385,7 @@ function openMenu(view, chip, card) {
     menu.anchor = chip;
     for (const l of FIRST) menu.append(option(dot(l.color), l.name, l === now ? words.current : l.hint, () => pick(l.id), l === now));
     menu.append(element("hr", ""), option(icon("terminal"), words.outputLong, now.output ? words.current : "", () => pick(OUTPUT), now.output),
+        option(icon("diagram"), words.diagramLong, now.diagram ? words.current : "", () => pick(DIAGRAM), now.diagram),
         option(null, words.more, "", () => more(view, chip, pick)));
     document.body.append(menu);
     place(chip);
@@ -1287,7 +1440,7 @@ function setLanguage(view, from, id) {
     if (!card) return;
     const [, marks, rest] = /^(\s*(?:`{3,}|~{3,}))\s*\S*(.*)$/.exec(card.open.text);
     view.dispatch({changes: {from: card.open.from, to: card.open.to, insert: marks + id + rest}, userEvent: "card.language"});
-    if (id !== OUTPUT) tell("language:" + id);
+    if (id !== OUTPUT && id !== DIAGRAM) tell("language:" + id);   // the language of the notebook's next blocks
     view.focus();
 }
 
@@ -1512,7 +1665,10 @@ window.setText = text => {
 };
 window.getText = () => view.state.doc.toString();
 window.setTitles = lines => titles = lines ? lines.split("\n") : [];
-window.setTheme = theme => document.documentElement.dataset.theme = theme;
+window.setTheme = theme => {
+    document.documentElement.dataset.theme = theme;
+    redrawDiagrams();   // their colors are in their drawings
+};
 window.setCodeLanguage = id => codeLanguage = id ?? "";
 // Java's text, buttons and blocks go in the cell being written in, or after its table.
 window.insertText = text => {
@@ -1530,10 +1686,11 @@ window.insertCode = (code, lang) => {   // as it is inside a code block; in a ne
     else newBlock(view, head, code, lang);
     view.focus();
 };
-window.newBlock = () => {   // after the card with the cursor, or where the cursor is
+window.newBlock = (code = "", lang = codeLanguage) => {   // after the card with the cursor, or where the cursor is
     const head = cursorAt(), card = view.state.field(cards).list.find(c => c.open.from <= head && head <= c.close.to);
-    newBlock(view, card ? card.close.to : head);
+    newBlock(view, card ? card.close.to : head, code, lang);
 };
+window.insertDiagram = code => window.newBlock(code, DIAGRAM);
 window.format = kind => {
     const cell = cellNow();
     if (cell) formatCell(view, cell, kind);
@@ -1558,31 +1715,35 @@ window.showEditor = () => {
 };
 window.showReading = html => {
     closeMenu();
-    render(reading, html);
+    render(reading, html, dark());
     reading.querySelectorAll("img.drawing").forEach(img => img.title = words.drawHint);
     editor.hidden = true;
     reading.hidden = false;
     reading.scrollTop = 0;
 };
 
-// The same for paper (a PDF, a print), made apart from the page: Java gets it once its code has its colors and
-// its drawings their size. Nothing on paper is clicked: no Copy buttons, and a [[link]] leads nowhere.
+// The same for paper (a PDF, a print), made apart from the page: Java gets it once its code has its colors, its
+// drawings their size and its diagrams their drawings, in the light theme. Nothing on paper is clicked: no Copy
+// buttons, and a [[link]] leads nowhere.
 window.printable = html => {
     const page = document.createElement("article");
-    Promise.allSettled(render(page, html)).then(() => {
+    Promise.allSettled(render(page, html, false)).then(() => {
         page.querySelectorAll(".copy").forEach(copy => copy.remove());
         page.querySelectorAll(".wikilink").forEach(link => link.removeAttribute("href"));
+        page.querySelectorAll("[data-code]").forEach(box => box.removeAttribute("data-code"));
         tell("print:" + page.innerHTML);
     });
 };
 
-// A note's HTML (from Java) into an element: its formulas, its code as cards and its drawings at their size.
-// What is still on its way, as promises: the colors of the code, the drawings loading.
-function render(into, html) {
+// A note's HTML (from Java) into an element: its formulas, its code as cards, its diagrams drawn (in the dark
+// theme or the light one) and its drawings at their size. What is still on its way, as promises: the colors of
+// the code, the diagrams, the drawings loading.
+function render(into, html, inDark) {
     into.innerHTML = html;   // commonmark-java already turned any HTML written in the note into text
     into.querySelectorAll(".math").forEach(math => katex.render(math.textContent, math,
         {displayMode: math.classList.contains("display"), throwOnError: false}));
-    const coming = [...into.querySelectorAll("pre > code")].map(card);
+    const coming = [...into.querySelectorAll("pre > code")].map(code =>
+        code.className.toLowerCase() === "language-" + DIAGRAM ? diagram(code, inDark) : card(code));
     into.querySelectorAll("img").forEach(img => {
         if (!/\.excalidraw\.png(\?|$)/i.test(img.getAttribute("src"))) return;
         img.classList.add("drawing");
@@ -1615,6 +1776,24 @@ reading.addEventListener("click", e => {
 
 tell("ready");
 
+// A diagram of the reading view: drawn; or, when its code has an error, what is wrong above its code.
+function diagram(code, inDark) {
+    const pre = code.parentElement, text = code.textContent.replace(/\n$/, "");
+    if (!text.trim()) {
+        pre.remove();
+        return;
+    }
+    const box = element("div", "diagram");
+    box.dataset.code = text;
+    pre.replaceWith(box);
+    return drawDiagram(box, inDark).then(() => {
+        if (!box.classList.contains("broken")) return;
+        box.removeAttribute("data-code");   // stays as it is when the theme changes: its code is a card
+        box.append(pre);
+        return card(code);
+    });
+}
+
 // A code block of the reading view becomes a card as while writing: its language and a Copy button
 // above numbered lines with the same colors (once its language has loaded: the promise). A block of
 // output is plain text.
@@ -1627,7 +1806,7 @@ function card(code) {
         say(copy, words.copied, words.copy);
     });
     const label = kind.unset ? element("span", "lang", words.code)
-        : element("span", "lang", kind.output ? icon("terminal") : dot(kind.color), kind.name);
+        : element("span", "lang", mark(kind), kind.name);
     const box = element("div", "code-card" + (kind.output ? " output" : "")), pre = code.parentElement;
     pre.replaceWith(box);
     box.append(element("div", "code-head", label, copy), pre);

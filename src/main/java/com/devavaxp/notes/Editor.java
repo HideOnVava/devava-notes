@@ -237,6 +237,11 @@ final class Editor {
         if (ready && !reading) call("insertTable", columns, rows);
     }
 
+    /** A new diagram (a ```mermaid block with this code), after the block with the cursor or where the cursor is. */
+    void insertDiagram(String code) {
+        if (ready && !reading) call("insertDiagram", code);
+    }
+
     /** A table of a note as Word, Excel and Docs paste it: with its borders. */
     static String tableHtml(String markdown) {
         return html(markdown).replace("<table>", "<table border=\"1\" cellpadding=\"6\" style=\"border-collapse: collapse\">");

@@ -115,6 +115,8 @@ try {
         New-Item -ItemType Directory -Force -Path $editor | Out-Null
         Copy-Item "$resources\editor.html", "$resources\editor.css", "$resources\editor.js" $editor
         Copy-Item -Recurse "$resources\katex" $editor
+        # Mermaid, which the editor's page loads once a note shows a diagram.
+        Copy-Item "$resources\diagrams.js" $editor
         # The drawing window's page (Excalidraw), with its fonts.
         Copy-Item "$resources\draw.html", "$resources\draw.css", "$resources\draw.js" $editor
         Copy-Item -Recurse "$resources\fonts" $editor

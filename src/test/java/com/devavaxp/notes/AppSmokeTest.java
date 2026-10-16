@@ -123,6 +123,21 @@ class AppSmokeTest {
 
             """;
 
+    private static final String INHERITANCE = """
+            classDiagram
+                class Animal {
+                    #String nombre
+                    +sonido() String
+                }
+                class Perro {
+                    +sonido() String
+                }
+                class Gato {
+                    +sonido() String
+                }
+                Animal <|-- Perro
+                Animal <|-- Gato""";
+
     private static final String QUERY = """
             SELECT d.department_name, COUNT(e.employee_id) AS empleados
             FROM departments d
@@ -767,7 +782,7 @@ class AppSmokeTest {
         Path calculus = subject(app, "Cálculo Vectorial", NotebookType.CLASS_NOTES, "", now);
         Path physics = subject(app, "Física General", NotebookType.CLASS_NOTES, "", now);
         Path cp = subject(app, "Algoritmos", NotebookType.COMPETITIVE_PROGRAMMING, "", null);
-        subject(app, "Programación Orientada a Objetos", NotebookType.PROGRAMMING, "java", before);
+        Path poo = subject(app, "Programación Orientada a Objetos", NotebookType.PROGRAMMING, "java", before);
         subject(app, "Cálculo Integral", NotebookType.CLASS_NOTES, "", before);
         Path stack = ed.resolve("Sesión 5 · Pilas.md");
         Files.writeString(stack, STACK.formatted(today.minusDays(2)));
@@ -786,6 +801,10 @@ class AppSmokeTest {
         Files.writeString(partial, PARTIAL.formatted(today.minusDays(1)));
         Files.writeString(calculus.resolve("Tarea 3.md"), "---\nkind: assignment\ndue: " + today.plusDays(1) + "\nstatus: Pending\n---\n");
         Files.writeString(physics.resolve("Leyes de Newton.md"), "---\ndate: " + today.minusDays(3) + "\nunit: 2. Dinámica\n---\n");
+        Path inheritance = poo.resolve("Herencia.md");
+        Files.writeString(inheritance, "---\ndate: " + today.minusDays(150) + "\nunit: 2. Herencia y polimorfismo\ntopic: Herencia\n---\n"
+                + "## Ideas clave\n\nUna clase hija hereda los atributos y métodos de su clase padre con `extends`, y redefine los que"
+                + " necesita.\n\n```mermaid\n" + INHERITANCE + "\n```\n");
         Files.writeString(cp.resolve("CF 4A - Watermelon.md"), WATERMELON);
         Files.writeString(cp.resolve("DSU.md"), DSU);
         age(home, Map.of(ed.resolve("Sesión 6 · Colas.md"), 25L, partial, 190L, stack, 1560L, exercise, 2900L,
@@ -823,6 +842,13 @@ class AppSmokeTest {
         }));
         waitFor("the table's grid", () -> fx(() -> ((Number) engine.executeScript("document.querySelectorAll('.cm-table tbody tr').length")).intValue() == 5));
         shot(stage, "readme-tabla");
+        fx(() -> run(() -> {
+            app.openNotebook(poo);
+            app.openNote(inheritance);
+        }));
+        waitFor("the class diagram", () -> drawn(engine, ".cm-diagram") == 1);
+        fx(() -> engine.executeScript("document.querySelector('.cm-diagram').scrollIntoView({block: 'end'})"));
+        shot(stage, "readme-diagrama");
         fx(() -> run(() -> {
             app.setDark(true);
             app.openNotebook(db);
@@ -1613,6 +1639,11 @@ class AppSmokeTest {
 
                 ![](<attachments/Dibujo 2026-10-15 10.00.00.excalidraw.png>)
 
+                ```mermaid
+                flowchart LR
+                    push --> pila[(Pila)] --> pop
+                ```
+
                 ## Un bloque largo
 
                 ```java
@@ -1646,6 +1677,7 @@ class AppSmokeTest {
         assertTrue(html.contains(" href=\"https://docs.oracle.com/en/java/\">la documentación</a>"), "a link to the web, kept");
         assertTrue(html.contains("<span class=\"tag\" data-tag=\"pilas\">#pilas</span>"), "the tag");
         assertTrue(html.contains("class=\"drawing\" style=\"width: 200px;\""), "the drawing at half its PNG: " + html);
+        assertTrue(html.contains("<div class=\"diagram\"><div class=\"diagram-drawing\"><svg"), "the diagram, drawn");
         assertFalse(html.contains("title="), "a hint to click the drawing");
 
         assumeTrue(Pdf.edge(System::getenv) != null, "Microsoft Edge is not installed");
@@ -1671,6 +1703,117 @@ class AppSmokeTest {
         assertTrue(practice.contains("/Title <FEFF" + HexFormat.of().withUpperCase().formatHex("Práctica 3".getBytes(StandardCharsets.UTF_16BE)) + ">"));
         assertEquals(note, fx(app::openPath), "the open note stays open");
         fx(() -> run(stage::close));
+    }
+
+    /**
+     * A diagram (```mermaid): drawn below its code while it is written, and again as it changes; while
+     * its code has an error, its last drawing faded and what is wrong. Diagrama starts one; Vista previa
+     * shows them alone, in the window's theme, and paper in the light one. Mermaid loads only once a
+     * note has a diagram.
+     */
+    @Test
+    void drawsDiagrams(@TempDir Path home) throws Exception {
+        Stage[] window = new Stage[1];
+        NotesApp app = open(home, window);
+        Stage stage = window[0];
+        WebEngine engine = fx(() -> app.editor.view.getEngine());
+        Path poo = fx(() -> app.createNotebook("Programación Orientada a Objetos", NotebookType.PROGRAMMING));
+        Path note = Files.writeString(poo.resolve("Herencia.md"), """
+                ## Clases
+
+                ```mermaid
+                classDiagram
+                    Animal <|-- Perro
+                ```
+
+                ## El algoritmo
+
+                ```mermaid
+                flowchart TD
+                    A[Inicio] --> B{¿n > 0?}
+                ```
+                """);
+        fx(() -> run(() -> app.openNotebook(poo)));
+        assertEquals("undefined", fx(() -> engine.executeScript("typeof window.mermaid")), "Mermaid, before a note has a diagram");
+        fx(() -> run(() -> app.openNote(note)));
+        waitFor("the diagrams below their code", () -> drawn(engine, ".cm-diagram") == 2);
+        assertEquals(List.of("Diagrama", "Diagrama"), fx(() -> List.of(((String) engine.executeScript(
+                "[...document.querySelectorAll('.cm-card-head .chip')].map(c => c.textContent).join('\\n')")).split("\n"))));
+        shot(stage, "diagram-1-writing");
+
+        // An error as it is typed: the last drawing stays, faded, and says what is wrong; fixed, it is drawn again
+        String end = "B{¿n > 0?}";
+        fx(() -> engine.executeScript("(v => v.dispatch({changes: {from: v.state.doc.toString().indexOf('" + end + "') + " + end.length()
+                + ", insert: '\\n    B -- Sí -->'}, userEvent: 'input.type'}))(window.editorView)"));
+        waitFor("what is wrong with it", () -> fx(() -> (Boolean) engine.executeScript(
+                "!!document.querySelector('.cm-diagram .diagram.broken .diagram-error')")));
+        String wrong = fx(() -> (String) engine.executeScript("document.querySelector('.diagram.broken .diagram-error').textContent"));
+        assertTrue(wrong.startsWith("Error en la línea 4:\n...0?}    B -- Sí -->\n") && !wrong.contains("Expecting"), wrong);   // at the end of the code
+        assertTrue(fx(() -> (Boolean) engine.executeScript("!!document.querySelector('.diagram.broken .diagram-drawing svg')")), "the last drawing");
+        shot(stage, "diagram-2-error");
+        fx(() -> engine.executeScript("(v => v.dispatch({changes: {from: v.state.doc.toString().indexOf('B -- Sí -->') + 11, insert: ' C[Fin]'},"
+                + " userEvent: 'input.type'}))(window.editorView)"));
+        waitFor("the diagram drawn again", () -> fx(() -> (Boolean) engine.executeScript(
+                "!document.querySelector('.diagram.broken') && [...document.querySelectorAll('.cm-diagram svg')].some(s => s.textContent.includes('Fin'))")));
+
+        // Diagrama: a flowchart to start from, after the block with the cursor
+        fx(() -> run(() -> app.editor.insertDiagram(NotesApp.DIAGRAMS.get(0).code())));
+        waitFor("the new diagram drawn", () -> drawn(engine, ".cm-diagram") == 3);
+        waitFor("the note to save itself", () -> Files.readString(note).contains("```mermaid\nflowchart TD\n    inicio([Inicio]) --> leer[/Leer n/]"));
+
+        // Vista previa: the diagrams alone, in the window's theme
+        fx(() -> run(app::toggleMode));
+        waitFor("the diagrams of Vista previa", () -> drawn(engine, "#reading") == 3);
+        assertTrue(fx(() -> (Boolean) engine.executeScript("!document.querySelector('#reading pre, #reading .code-card')")), "code in Vista previa");
+        String first = "document.querySelector('#reading .diagram svg').innerHTML";
+        assertTrue(fx(() -> (String) engine.executeScript(first)).contains("#E7ECFF"), "the light colors");
+        shot(stage, "diagram-3-reading");
+        fx(() -> run(() -> app.setDark(true)));
+        waitFor("the diagrams drawn dark", () -> fx(() -> (String) engine.executeScript(first)).contains("#232B52"));
+        shot(stage, "diagram-4-dark");
+
+        // On paper, light whatever the window's theme
+        CompletableFuture<String> printable = new CompletableFuture<>();
+        fx(() -> run(() -> app.editor.printable(app.editor.text(), poo, printable::complete)));
+        String paper = printable.get(15, TimeUnit.SECONDS);
+        assertEquals(3, paper.split("<div class=\"diagram-drawing\"><svg", -1).length - 1, paper);
+        assertTrue(paper.contains("#E7ECFF") && !paper.contains("#232B52"), "light on paper");
+        assertFalse(paper.contains("data-code"), "the code of the diagrams, twice");
+        fx(() -> run(() -> app.setDark(false)));
+
+        // A diagram whose code has an error shows it in Vista previa, above its code
+        fx(() -> run(app::toggleMode));
+        fx(() -> engine.executeScript("(v => { const at = v.state.doc.toString().indexOf(' Perro');"
+                + " v.dispatch({changes: {from: at, to: at + 6}, userEvent: 'delete'}); })(window.editorView)"));   // Animal <|-- (to nothing)
+        fx(() -> run(app::toggleMode));
+        waitFor("the broken diagram in Vista previa", () -> fx(() -> (Boolean) engine.executeScript(
+                "!!document.querySelector('#reading .diagram.broken .diagram-error + .code-card')")), () -> fx(() -> (String) engine.executeScript(
+                "document.getElementById('reading').innerHTML.replace(/<svg[\\s\\S]*?<\\/svg>/g, '<svg/>')")));
+        assertEquals(2, drawn(engine, "#reading"));
+        assertTrue(fx(() -> app.editor.errors).isEmpty(), () -> "editor.js: " + app.editor.errors);
+        fx(() -> run(stage::close));
+    }
+
+    /** A note of the list goes to paper with its diagram drawn to its size, even with no note open (no editor on screen). */
+    @Test
+    void diagramsOnPaperWithNoNoteOpen(@TempDir Path home) throws Exception {
+        Stage[] window = new Stage[1];
+        NotesApp app = open(home, window);
+        Path fp = fx(() -> app.createNotebook("Fundamentos de Programación", NotebookType.PROGRAMMING));
+        fx(() -> run(() -> app.openNotebook(fp)));
+        assertEquals(null, fx(app::openPath));
+        CompletableFuture<String> printable = new CompletableFuture<>();
+        fx(() -> run(() -> app.editor.printable("```mermaid\n" + NotesApp.DIAGRAMS.get(0).code() + "\n```\n", fp, printable::complete)));
+        String paper = printable.get(15, TimeUnit.SECONDS);
+        var width = Pattern.compile("max-width: ([\\d.]+)px").matcher(paper);
+        assertTrue(width.find() && Double.parseDouble(width.group(1)) > 100, paper.substring(0, Math.min(paper.length(), 400)));
+        assertTrue(paper.contains(">Leer n<") && paper.contains(">Fin<"), "the texts of the diagram");
+        fx(() -> run(window[0]::close));
+    }
+
+    /** How many diagrams are drawn in a part of the editor's page. */
+    private static int drawn(WebEngine engine, String where) throws Exception {
+        return fx(() -> ((Number) engine.executeScript("document.querySelectorAll('" + where + " .diagram .diagram-drawing svg').length")).intValue());
     }
 
     private static int tableCount(WebEngine engine) throws Exception {
@@ -1982,9 +2125,14 @@ class AppSmokeTest {
     }
 
     private static void waitFor(String what, Callable<Boolean> condition) throws Exception {
+        waitFor(what, condition, () -> "");
+    }
+
+    /** As waitFor, saying what there was instead when it times out. */
+    private static void waitFor(String what, Callable<Boolean> condition, Callable<String> instead) throws Exception {
         long deadline = System.currentTimeMillis() + 15_000;
         while (!condition.call()) {
-            if (System.currentTimeMillis() > deadline) fail("Timed out waiting for " + what);
+            if (System.currentTimeMillis() > deadline) fail("Timed out waiting for " + what + " " + instead.call());
             Thread.sleep(100);
         }
     }
