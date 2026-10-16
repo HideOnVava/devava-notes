@@ -10,24 +10,29 @@ includes the following third-party software, each under its own license.
 | [Gson](https://github.com/google/gson) | 2.10.1 | [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0.txt) | Google Inc. |
 | [commonmark-java](https://github.com/commonmark/commonmark-java), with its GFM tables, strikethrough and task list extensions | 0.30.0 | BSD-2-Clause (below) | Atlassian Pty Ltd |
 | [CodeMirror 6](https://codemirror.net) (`@codemirror/*`) and its libraries `@lezer/*`, `style-mod`, `w3c-keyname`, `crelt`, `@marijn/find-cluster-break` | 6 | MIT (below) | Marijn Haverbeke and others |
-| [KaTeX](https://katex.org), with its fonts | 0.18.9 | MIT (below) | Khan Academy and other contributors |
+| [KaTeX](https://katex.org), with its fonts | 0.18.9; 0.16.47 inside Mermaid | MIT (below) | Khan Academy and other contributors |
 | [Excalidraw](https://github.com/excalidraw/excalidraw) (`@excalidraw/excalidraw`), with `@excalidraw/laser-pointer`, `@excalidraw/mermaid-to-excalidraw` and `@excalidraw/markdown-to-text` | 0.18.1 | MIT (below) | Excalidraw; Daniel Esteves |
 | [React](https://react.dev) and React DOM, with `scheduler` and `use-sync-external-store` | 18.3.1 | MIT (below) | Meta Platforms, Inc. and affiliates |
 | [Mermaid](https://mermaid.js.org), with Cytoscape.js and its layouts, dagre-d3-es, marked, khroma, stylis, Day.js and the other libraries listed with the MIT License below | 11.17.2 | MIT (below); marked also under the Markdown license (below) | Knut Sveidqvist, and the authors named below |
-| [D3](https://d3js.org) (`d3`, its `d3-*` modules and `internmap`) | 7.9.0 | ISC (below); `d3-ease` and `d3-sankey` BSD-3-Clause (below); the ColorBrewer schemes of `d3-scale-chromatic` [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0.txt) | Mike Bostock and others (below) |
+| [Chevrotain](https://chevrotain.io) (`chevrotain` and its `@chevrotain/*` modules), inside Mermaid's parser (`@mermaid-js/parser`) | 11.1.2 | [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0.txt) | Shahar Soel and SAP SE |
+| [Langium](https://langium.org) and `chevrotain-allstar`, inside Mermaid's parser | 4.2.1; 0.3.1 | MIT (below) | TypeFox GmbH |
+| `vscode-jsonrpc`, `vscode-languageserver-protocol`, `vscode-languageserver-types`, `vscode-languageserver-textdocument` and `vscode-uri`, inside Mermaid's parser | 8.2.0; 3.17.5; 3.17.5; 1.0.12; 3.1.0 | MIT (below) | Microsoft Corporation |
+| [D3](https://d3js.org) (`d3`, its `d3-*` modules, `internmap` and `delaunator`) | 7.9.0 | ISC (below); `d3-ease`, `d3-sankey` and the `d3-array` 2, `d3-path` 1 and `d3-shape` 1 that d3-sankey uses BSD-3-Clause (below); the ColorBrewer schemes of `d3-scale-chromatic` [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0.txt) | Mike Bostock and others (below) |
 | [DOMPurify](https://github.com/cure53/DOMPurify) | 3.4.17 | [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0.txt) (it is also offered under MPL-2.0) | Dr.-Ing. Mario Heiderich, Cure53 |
 | [browser-fs-access](https://github.com/GoogleChromeLabs/browser-fs-access) | 0.29.1 | [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0.txt) | Google LLC |
 | [crc-32](https://github.com/SheetJS/js-crc32) | 0.3.0 | [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0.txt) | SheetJS |
 | [pako](https://github.com/nodeca/pako) | 2.0.3 | MIT and Zlib (below) | Vitaly Puzrin and Andrei Tuputcyn; Jean-loup Gailly and Mark Adler |
 | [fractional-indexing](https://github.com/rocicorp/fractional-indexing) | 3.2.0 | CC0-1.0 (no conditions) | Rocicorp |
+| [robust-predicates](https://github.com/mourner/robust-predicates), which D3's delaunator uses | 3.0.3 | Unlicense (no conditions) | Volodymyr Agafonkin |
 | [tslib](https://github.com/microsoft/tslib) | 2.8.1 | 0BSD (below) | Microsoft Corporation |
 | Excalidraw's fonts Excalifont, Virgil, Nunito, Lilita One, Assistant and Cascadia Code | | SIL Open Font License 1.1 (below) | named below |
 | Comic Shanns, one of Excalidraw's fonts | 1.3.0 | MIT (below) | Shannon Miwa and others (below) |
 
 CodeMirror and KaTeX are bundled into `editor.js` and the `katex` folder inside the
-application's jar; Excalidraw, React, Mermaid and the other libraries into `draw.js`, and
-Excalidraw's fonts are in its `fonts` folder (converted from WOFF2 to WOFF, with no other
-change). Excalidraw's Xiaolai and Liberation Sans fonts are not included.
+application's jar; Mermaid and its libraries into `diagrams.js`, for the diagrams of the
+notes; Excalidraw, React, Mermaid and the other libraries into `draw.js`, and Excalidraw's
+fonts are in its `fonts` folder (converted from WOFF2 to WOFF, with no other change).
+Excalidraw's Xiaolai and Liberation Sans fonts are not included.
 
 ## MIT License (CodeMirror, Lezer and their libraries; KaTeX; Excalidraw, React, Mermaid and their libraries; Comic Shanns)
 
@@ -44,6 +49,11 @@ Copyright (c) Facebook, Inc. and its affiliates; Copyright (c) Meta Platforms, I
 affiliates (React, React DOM, scheduler, use-sync-external-store)
 
 Copyright (c) 2014 - 2022 Knut Sveidqvist (Mermaid)
+
+Copyright 2021 TypeFox GmbH (Langium); Copyright 2022 TypeFox GmbH (chevrotain-allstar)
+
+Copyright (c) Microsoft Corporation (vscode-jsonrpc, vscode-languageserver-protocol,
+vscode-languageserver-types, vscode-languageserver-textdocument, vscode-uri)
 
 Copyright (c) 2016-2026, The Cytoscape Consortium (Cytoscape.js, cytoscape-cose-bilkent);
 Copyright (c) 2018 - present, iVis-at-Bilkent (cytoscape-fcose, cose-base, layout-base)
@@ -139,7 +149,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 Copyright 2010-2026 Mike Bostock (D3 and its modules, internmap); Copyright 2018-2021
 Observable, Inc. and Copyright 2021 Mapbox (d3-delaunay); Copyright 2008-2012 Charles
-Karney (d3-geo)
+Karney (d3-geo); Copyright (c) 2026, Mapbox (delaunator)
 
 Permission to use, copy, modify, and/or distribute this software for any purpose
 with or without fee is hereby granted, provided that the above copyright notice
@@ -157,11 +167,12 @@ The ColorBrewer color schemes in d3-scale-chromatic are Copyright 2002 Cynthia B
 Mark Harrower, and The Pennsylvania State University, licensed under the Apache License,
 Version 2.0.
 
-## BSD 3-Clause License (d3-ease, d3-sankey)
+## BSD 3-Clause License (d3-ease, d3-sankey, and the d3-array 2, d3-path 1 and d3-shape 1 it uses)
 
 Copyright 2010-2021 Mike Bostock; Copyright 2001 Robert Penner (d3-ease)
 
-Copyright 2015, Mike Bostock (d3-sankey)
+Copyright 2015, Mike Bostock (d3-sankey); Copyright 2010-2020 Mike Bostock (d3-array 2);
+Copyright 2015-2016 Mike Bostock (d3-path 1); Copyright 2010-2015 Mike Bostock (d3-shape 1)
 
 All rights reserved.
 

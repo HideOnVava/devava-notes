@@ -12,9 +12,10 @@ Cada materia del semestre tiene su cuaderno, que sabe lo que lleva: tus **apunte
 las **tareas y prácticas** con su fecha de entrega, los **exámenes**, y en las materias de
 programación, **sesiones de código** con el código y lo que imprimió. Las materias salen de la
 retícula de ISC: escribes «estruc» y la app propone *Estructura de Datos*, de Programación y en
-Java. Tus notas llevan **tablas** que se escriben como en Excel y **dibujos** hechos sin salir
-de la app. Toda la app está en español, y tus notas son archivos de texto en tu computadora:
-sin cuentas, sin nube y sin instalar Java.
+Java. Tus notas llevan **tablas** que se escriben como en Excel, **dibujos** hechos sin salir de
+la app y **diagramas** que se dibujan solos a partir de su texto, y salen en **PDF** o en papel
+tal como se ven. Toda la app está en español, y tus notas son archivos de texto en tu
+computadora: sin cuentas, sin nube y sin instalar Java.
 
 | Inicio | Una sesión de código |
 | --- | --- |
@@ -31,6 +32,10 @@ sin cuentas, sin nube y sin instalar Java.
 | Una tabla, escrita en sus celdas | Un dibujo |
 | --- | --- |
 | ![Las columnas de la tabla EMPLOYEES de Taller de Bases de Datos, como cuadrícula](docs/screenshots/tabla.png) | ![Una pila y una cola dibujadas en Excalidraw, dentro de la app](docs/screenshots/dibujo.png) |
+
+| Un diagrama, que se dibuja mientras lo escribes | Imprimir, o guardar como PDF |
+| --- | --- |
+| ![Un diagrama de clases de POO escrito con Mermaid, dibujado debajo de su texto](docs/screenshots/diagrama.png) | ![La ventana para imprimir una sesión de código, con su vista previa en hoja carta](docs/screenshots/imprimir.png) |
 
 ## Descarga
 
@@ -51,7 +56,7 @@ Las versiones para macOS y Linux vienen después.
    agrega más con **Nueva materia**.
 2. **Escribe.** **Nueva nota** (`Ctrl+N`) ofrece lo que lleva cada materia: un apunte, una
    sesión de código, una tarea o un examen. La barra sobre la nota pone negritas, listas,
-   tablas, fórmulas, imágenes, dibujos y bloques de código con un clic.
+   tablas, fórmulas, imágenes, dibujos, diagramas y bloques de código con un clic.
 3. **Llena sus datos** arriba del texto (la entrega de una tarea, los temas de un examen):
    Inicio te dice lo que se acerca, y lo atrasado sale en rojo.
 
@@ -128,6 +133,11 @@ Las notas son Markdown, pero no hace falta saberlo: la barra sobre la nota lo es
 - **Dibujos** con Excalidraw, sin salir de la app: **Dibujo** en la barra abre una ventana para
   dibujar diagramas y esquemas, con imágenes y capturas para dibujar encima, Mermaid y una
   biblioteca de figuras. Un clic en el dibujo lo vuelve a abrir.
+- **Diagramas** escritos como texto, con [Mermaid](https://mermaid.js.org): **Diagrama** en la
+  barra agrega uno de flujo, de clases, entidad-relación, de secuencia o de estados para
+  cambiarlo, y quien sabe Mermaid escribe ```` ```mermaid ````. Se dibuja debajo de su texto
+  mientras lo escribes y, si algo está mal, dice en qué línea; la vista previa lo muestra
+  dibujado.
 - **Fórmulas**: `$e^{i\pi} + 1 = 0$` en el texto, o en su propia línea entre `$$`, dibujadas
   por KaTeX.
 - **Enlaces** entre notas: escribe `[[` y elige su título. `Ctrl+clic` sigue un enlace al
@@ -141,6 +151,16 @@ Las notas son Markdown, pero no hace falta saberlo: la barra sobre la nota lo es
   materia (herencia y polimorfismo en POO, pilas y colas en Estructura de Datos…).
 - Listas de pendientes (`- [ ]`) y tachado, como en GitHub.
 
+## PDF e impresión
+
+El botón de la impresora, junto a *Vista previa*, **exporta la nota a PDF**, que se abre al
+terminar, o la **imprime** (`Ctrl+P`), tal como la muestra la vista previa: fórmulas, código
+con colores, tablas, imágenes, dibujos y diagramas. Sale en hoja carta, con el título y lo que
+es la nota arriba (su materia, su tipo, su unidad y su fecha) y el número de página abajo; el
+clic derecho en una nota de la lista hace lo mismo sin abrirla. Lo hace Microsoft Edge, que
+viene con Windows, sin abrir otra ventana ni usar tu cuenta: tus notas no salen de tu
+computadora.
+
 ## Atajos de teclado
 
 | Tecla | Qué hace |
@@ -149,6 +169,7 @@ Las notas son Markdown, pero no hace falta saberlo: la barra sobre la nota lo es
 | `Ctrl+O` | Abrir cualquier nota por su título |
 | `Ctrl+Shift+F` | Buscar en el texto de todas las notas (sin importar acentos ni mayúsculas) |
 | `Ctrl+E` | Pasar entre Editar y Vista previa |
+| `Ctrl+P` | Imprimir la nota (el botón de la impresora también la exporta a PDF) |
 | `Ctrl+F` | Buscar y reemplazar en la nota |
 | `Ctrl+B`, `Ctrl+I` | Negrita, cursiva |
 | `Ctrl+V` | Pegar texto, una imagen, o celdas de Excel como tabla |
@@ -216,9 +237,12 @@ Deque<Character> pila = new ArrayDeque<>();
 
 Java 21, JavaFX 21 (con WebView), Maven (con su wrapper), Gson y commonmark-java. El editor es
 CodeMirror 6, con KaTeX para las fórmulas, empaquetado por esbuild en un solo script que carga
-el WebView; la ventana de dibujo es Excalidraw (con React), empaquetado aparte en `draw.js`. Las pruebas usan JUnit 5; el compilador corre con `-Xlint:all` y la compilación
-debe quedar sin advertencias. El código y sus comentarios están en inglés; lo que ve el
-estudiante, en español.
+el WebView; Mermaid, para los diagramas, va aparte en `diagrams.js`, que se carga cuando una
+nota tiene uno, y la ventana de dibujo es Excalidraw (con React), en `draw.js`. Los PDF y la
+impresión los hace Microsoft Edge a partir de la vista previa
+([`Pdf.java`](src/main/java/com/devavaxp/notes/Pdf.java)). Las pruebas usan JUnit 5; el
+compilador corre con `-Xlint:all` y la compilación debe quedar sin advertencias. El código y
+sus comentarios están en inglés; lo que ve el estudiante, en español.
 
 ```bash
 ./mvnw javafx:run                  # correr desde el código (requiere el JDK 21)
@@ -228,8 +252,8 @@ estudiante, en español.
 
 El código del editor está en [`editor/main.js`](editor/main.js), y el de la ventana de dibujo en
 [`editor/draw.js`](editor/draw.js). Después de cambiarlos, vuelve a empaquetarlos (con Node.js
-20 o más nuevo) y sube el resultado, `editor.js`, `draw.js`, `draw.css` y las fuentes de
-`src/main/resources/com/devavaxp/notes/`:
+20 o más nuevo) y sube el resultado, `editor.js`, `diagrams.js`, `draw.js`, `draw.css` y las
+fuentes de `src/main/resources/com/devavaxp/notes/`:
 
 ```bash
 cd editor
@@ -264,16 +288,16 @@ español, que necesita el [WiX Toolset 3.x](https://github.com/wixtoolset/wix3/r
 
 GitHub Actions compila, prueba y publica cada versión
 ([`.github/workflows/release.yml`](.github/workflows/release.yml)), así que cada descarga sale
-de una compilación limpia de un commit etiquetado. Para publicar, por ejemplo, la versión 2.3.0:
+de una compilación limpia de un commit etiquetado. Para publicar, por ejemplo, la versión 2.4.0:
 
-1. Pon `<version>2.3.0</version>` en `pom.xml`.
-2. Agrega una sección `## [2.3.0] - <fecha>` a [`CHANGELOG.md`](CHANGELOG.md) (es el «Qué hay
+1. Pon `<version>2.4.0</version>` en `pom.xml`.
+2. Agrega una sección `## [2.4.0] - <fecha>` a [`CHANGELOG.md`](CHANGELOG.md) (es el «Qué hay
    de nuevo» de la versión) y su enlace al final del archivo.
 3. Sube los cambios, y luego la etiqueta:
 
    ```bash
-   git tag v2.3.0
-   git push origin v2.3.0
+   git tag v2.4.0
+   git push origin v2.4.0
    ```
 
 Correr el workflow a mano desde la pestaña *Actions* es un ensayo: compila y prueba todo y

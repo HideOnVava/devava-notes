@@ -5,6 +5,28 @@ Aquí están los cambios importantes de cada versión de Devava Notes. El format
 [versionado semántico](https://semver.org/lang/es/). Cada versión en GitHub toma su «Qué hay de
 nuevo» de la sección que le toca en este archivo.
 
+## [2.3.0] - 2026-10-15
+
+Tus notas salen en PDF y en papel tal como se ven, y llevan diagramas que se dibujan solos a
+partir de su texto.
+
+### Agregado
+- **Exportar a PDF e imprimir**: el botón de la impresora, junto a *Vista previa*, guarda la
+  nota como PDF, que se abre al terminar, o abre la ventana para imprimirla (`Ctrl+P`), con su
+  vista previa, la impresora, las copias y las páginas. Sale como la muestra la vista previa
+  (fórmulas, código con colores, tablas, imágenes, dibujos y diagramas), en hoja carta, con el
+  título y lo que es la nota arriba (su materia, su tipo, su unidad y su fecha) y el número de
+  página abajo. También desde el clic derecho de una nota en la lista. Lo hace Microsoft Edge,
+  que viene con Windows, sin abrir otra ventana ni usar tu cuenta de Microsoft: tus notas no
+  salen de tu computadora.
+- **Diagramas**: **Diagrama**, en la barra de formato, agrega uno de flujo, de clases,
+  entidad-relación, de secuencia o de estados, escrito como texto
+  ([Mermaid](https://mermaid.js.org)) para cambiarlo como quieras; también se escribe
+  ```` ```mermaid ````. Se dibuja debajo de su texto mientras lo escribes y, si algo está mal,
+  dice en qué línea. La vista previa, el PDF y la impresión lo muestran dibujado, con los
+  colores de la app (y en tema oscuro, con los suyos).
+- *Ayuda* incluye `Ctrl+P` y los diagramas.
+
 ## [2.2.0] - 2026-10-15
 
 Tus enlaces siguen a una nota cuando le cambias el nombre, la app se abre una sola vez y avisa
@@ -203,6 +225,7 @@ La primera versión de Devava Notes, para Windows.
 - Un instalador para Windows (por usuario, sin permisos de administrador) y un ZIP portable; no
   hay que instalar Java.
 
+[2.3.0]: https://github.com/HideOnVava/devava-notes/releases/tag/v2.3.0
 [2.2.0]: https://github.com/HideOnVava/devava-notes/releases/tag/v2.2.0
 [2.1.0]: https://github.com/HideOnVava/devava-notes/releases/tag/v2.1.0
 [2.0.0]: https://github.com/HideOnVava/devava-notes/releases/tag/v2.0.0
