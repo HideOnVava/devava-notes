@@ -5,6 +5,31 @@ Aquí están los cambios importantes de cada versión de Devava Notes. El format
 [versionado semántico](https://semver.org/lang/es/). Cada versión en GitHub toma su «Qué hay de
 nuevo» de la sección que le toca en este archivo.
 
+## [2.2.0] - 2026-10-15
+
+Tus enlaces siguen a una nota cuando le cambias el nombre, la app se abre una sola vez y avisa
+cuando hay una versión nueva.
+
+### Agregado
+- **Aviso de versión nueva**: al abrir, la app pregunta a GitHub cuál es la última versión, y si
+  hay una más nueva la barra muestra **Nueva versión** con su número; un clic abre su página para
+  descargarla e instalarla sobre esta. Sin internet no pasa nada, y solo se envía el número de tu
+  versión, nada de tus notas.
+- **Reportar un problema**, en *Ayuda* y en *Opciones*: abre GitHub con una plantilla, la versión
+  de la app y las últimas líneas de su registro de errores, sin tu nombre de usuario de Windows,
+  para que lo revises antes de publicarlo. El registro completo queda en
+  `%LOCALAPPDATA%\devava XP Studios\Devava Notes`, fuera de tus notas.
+- *Ayuda* dice qué versión tienes.
+
+### Cambiado
+- **Cambiar el nombre de una nota actualiza sus `[[enlaces]]`** en todas tus materias y
+  cuadernos, con el texto que muestran (`[[Pilas|la pila]]`). Si en algún lugar el nombre nuevo
+  llevaría a otra nota que se llama igual, o no cabe entre corchetes, ese enlace se queda como
+  estaba y la app te dice dónde.
+- **La app se abre una sola vez**: abrirla de nuevo trae al frente la ventana que ya está, para
+  que dos ventanas no guarden una encima de lo que escribe la otra.
+- La app se conecta a internet por el proxy que tenga Windows, como los navegadores.
+
 ## [2.1.0] - 2026-10-15
 
 Tablas que se escriben en sus celdas, dibujos dentro de la app, y los cuadernos libres aparte de
@@ -178,6 +203,7 @@ La primera versión de Devava Notes, para Windows.
 - Un instalador para Windows (por usuario, sin permisos de administrador) y un ZIP portable; no
   hay que instalar Java.
 
+[2.2.0]: https://github.com/HideOnVava/devava-notes/releases/tag/v2.2.0
 [2.1.0]: https://github.com/HideOnVava/devava-notes/releases/tag/v2.1.0
 [2.0.0]: https://github.com/HideOnVava/devava-notes/releases/tag/v2.0.0
 [1.2.0]: https://github.com/HideOnVava/devava-notes/releases/tag/v1.2.0

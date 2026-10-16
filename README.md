@@ -60,6 +60,10 @@ no la necesites.
 
 ### Actualizar y desinstalar
 
+Cuando hay una versión nueva, la barra de la app lo dice (**Nueva versión**, con su número), y
+un clic abre su página. Para saberlo, al abrir pregunta a GitHub cuál es la última versión: solo
+envía el número de la tuya, nada de tus notas.
+
 Una versión nueva se instala igual: el instalador reemplaza la anterior. Para desinstalarla:
 *Configuración → Aplicaciones → Aplicaciones instaladas → Devava Notes → Desinstalar* (la
 portable: borra su carpeta). En los dos casos tus notas se quedan en tu carpeta Documentos.
@@ -127,7 +131,8 @@ Las notas son Markdown, pero no hace falta saberlo: la barra sobre la nota lo es
 - **Fórmulas**: `$e^{i\pi} + 1 = 0$` en el texto, o en su propia línea entre `$$`, dibujadas
   por KaTeX.
 - **Enlaces** entre notas: escribe `[[` y elige su título. `Ctrl+clic` sigue un enlace al
-  escribir, un clic en la vista previa; un enlace a una nota que aún no existe la crea.
+  escribir, un clic en la vista previa; un enlace a una nota que aún no existe la crea. Al
+  cambiar el nombre de una nota, sus enlaces cambian con ella.
 - **Etiquetas**: `#tema` en cualquier parte del texto (también `#tema/subtema`); un clic en una
   muestra las notas que la tienen.
 - **Imágenes**: pega una con `Ctrl+V` (una captura de pantalla, por ejemplo) o arrastra el
@@ -199,7 +204,11 @@ Deque<Character> pila = new ArrayDeque<>();
   (ZIP)…* en Inicio, y se abre tal como estaba, con su tipo, sus imágenes y sus dibujos.
 - Para guardar las notas en otro lugar, abre la app con `-Dnotes.home=<carpeta>` (desde el
   código) o define la variable de entorno `JAVA_TOOL_OPTIONS=-Dnotes.home=<carpeta>` (la app
-  instalada).
+  instalada). La app se abre una vez por carpeta de notas: abrirla de nuevo trae su ventana al
+  frente.
+- **Si algo falla**, *Ayuda → Reportar un problema…* abre GitHub con la versión y las últimas
+  líneas del registro de errores, que la app guarda en
+  `%LOCALAPPDATA%\devava XP Studios\Devava Notes`.
 
 ---
 
@@ -255,16 +264,16 @@ español, que necesita el [WiX Toolset 3.x](https://github.com/wixtoolset/wix3/r
 
 GitHub Actions compila, prueba y publica cada versión
 ([`.github/workflows/release.yml`](.github/workflows/release.yml)), así que cada descarga sale
-de una compilación limpia de un commit etiquetado. Para publicar, por ejemplo, la versión 2.2.0:
+de una compilación limpia de un commit etiquetado. Para publicar, por ejemplo, la versión 2.3.0:
 
-1. Pon `<version>2.2.0</version>` en `pom.xml`.
-2. Agrega una sección `## [2.2.0] - <fecha>` a [`CHANGELOG.md`](CHANGELOG.md) (es el «Qué hay
+1. Pon `<version>2.3.0</version>` en `pom.xml`.
+2. Agrega una sección `## [2.3.0] - <fecha>` a [`CHANGELOG.md`](CHANGELOG.md) (es el «Qué hay
    de nuevo» de la versión) y su enlace al final del archivo.
 3. Sube los cambios, y luego la etiqueta:
 
    ```bash
-   git tag v2.2.0
-   git push origin v2.2.0
+   git tag v2.3.0
+   git push origin v2.3.0
    ```
 
 Correr el workflow a mano desde la pestaña *Actions* es un ensayo: compila y prueba todo y
