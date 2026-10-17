@@ -5,6 +5,36 @@ Aquí están los cambios importantes de cada versión de Devava Notes. El format
 [versionado semántico](https://semver.org/lang/es/). Cada versión en GitHub toma su «Qué hay de
 nuevo» de la sección que le toca en este archivo.
 
+## [2.4.0] - 2026-10-16
+
+Fórmulas sin saber LaTeX, imágenes del tamaño que quieras, recuadros de colores, y las notas que
+enlazan a la que lees.
+
+### Agregado
+- **Los símbolos de las fórmulas, a un clic**: **Fórmula**, en la barra de formato, abre sus
+  símbolos en cinco grupos (básicos, de cálculo, letras griegas, de lógica y conjuntos, y de
+  matrices y vectores), y cada uno dice qué es al pasar el ratón. Uno escribe en la fórmula
+  donde está el cursor, o en una nueva, y deja el cursor en su primer hueco (en el numerador de
+  una fracción, por ejemplo). Arriba está **Fórmula en su propia línea**.
+- **La fórmula que escribes, dibujada debajo** mientras la escribes. Si algo está mal (una llave
+  sin cerrar, un comando que no existe), dice qué, en español.
+- **Imágenes mientras escribes**, debajo de su línea: arrastra su esquina, o elige **Chica**,
+  **Mediana**, **Grande** u **Original** sobre ella, para cambiar su tamaño, que la vista
+  previa, el PDF y la impresión respetan. Se guarda como en Obsidian (`![|400](…)`). Los
+  dibujos también se ven, y un clic los abre.
+- **Recuadros**: **Recuadro**, en la barra, pone una definición, un ejemplo, algo importante o
+  una advertencia en un recuadro de su color, con su ícono y su título, alrededor de las líneas
+  que elijas o en uno nuevo. Se escriben como en Obsidian (`> [!definition] Pila`), así que los
+  suyos también se ven, igual que con sus palabras en español (`[!ejemplo]`). Se ven igual al
+  escribir, en la vista previa y en papel.
+- **Las notas que enlazan aquí**: al final de cada nota, al escribir y en la vista previa, las
+  notas que la enlazan con `[[…]]`, de cualquier materia o cuaderno; un clic abre una.
+- **Enlaces en las tablas**: `[[` en una celda también sugiere los títulos: ↑ y ↓ para elegir,
+  Enter o Tab para tomar uno, Esc para cerrarlos.
+- **El tamaño del texto**: `Ctrl++` y `Ctrl+-` (o `Ctrl` y la rueda del ratón) agrandan o
+  achican el texto de la nota, `Ctrl+0` lo deja como era, y la app lo recuerda.
+- *Ayuda* incluye el tamaño del texto y los recuadros.
+
 ## [2.3.0] - 2026-10-15
 
 Tus notas salen en PDF y en papel tal como se ven, y llevan diagramas que se dibujan solos a
@@ -225,6 +255,7 @@ La primera versión de Devava Notes, para Windows.
 - Un instalador para Windows (por usuario, sin permisos de administrador) y un ZIP portable; no
   hay que instalar Java.
 
+[2.4.0]: https://github.com/HideOnVava/devava-notes/releases/tag/v2.4.0
 [2.3.0]: https://github.com/HideOnVava/devava-notes/releases/tag/v2.3.0
 [2.2.0]: https://github.com/HideOnVava/devava-notes/releases/tag/v2.2.0
 [2.1.0]: https://github.com/HideOnVava/devava-notes/releases/tag/v2.1.0

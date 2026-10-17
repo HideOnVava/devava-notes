@@ -4,6 +4,7 @@ import com.devavaxp.notes.NotebookType.Kind;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.event.EventType;
+import javafx.geometry.Bounds;
 import javafx.geometry.Point2D;
 import javafx.scene.Node;
 import javafx.scene.Parent;
@@ -30,6 +31,7 @@ import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.GridPane;
 import javafx.scene.web.WebEngine;
 import javafx.scene.web.WebView;
+import javafx.stage.PopupWindow;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 import netscape.javascript.JSObject;
@@ -39,7 +41,9 @@ import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
 
 import javax.imageio.ImageIO;
+import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -741,6 +745,26 @@ class AppSmokeTest {
             `push` mete arriba y `pop` saca de arriba, los dos en O(1).
             """;
 
+    private static final String LIFO = """
+            ---
+            date: %s
+            unit: 3. Estructuras lineales
+            topic: Pilas
+            ---
+            > [!definition] Pila
+            > Una estructura lineal donde el último elemento en entrar es el primero en salir (LIFO): se mete y se saca solo por arriba.
+
+            > [!example] Deshacer, en un editor de texto
+            > Cada cambio entra a la pila, y *Deshacer* saca el último.
+
+            > [!warning] Una pila vacía
+            > `pop()` en una pila vacía lanza una excepción: pregunta antes con `isEmpty()`.
+
+            ## Sus operaciones
+
+            `push(x)` mete `x` arriba, `pop()` lo saca y `peek()` lo mira sin sacarlo, los tres en O(1).
+            """;
+
     private static final String PARTIAL = """
             ---
             date: %s
@@ -786,11 +810,12 @@ class AppSmokeTest {
         Path poo = subject(app, "Programación Orientada a Objetos", NotebookType.PROGRAMMING, "java", before);
         subject(app, "Cálculo Integral", NotebookType.CLASS_NOTES, "", before);
         Path stack = ed.resolve("Sesión 5 · Pilas.md");
-        Files.writeString(stack, STACK.formatted(today.minusDays(2)));
+        Files.writeString(stack, STACK.formatted(today.minusDays(2)).replace("Usar una pila", "Usar una [[Pilas|pila]]"));
+        Path lifo = Files.writeString(ed.resolve("Pilas.md"), LIFO.formatted(today.minusDays(4)));
         Files.writeString(ed.resolve("Sesión 6 · Colas.md"), "---\nkind: session\ndate: " + today + "\nunit: 3. Estructuras lineales\ntopics: [colas]\n---\n");
         Files.writeString(ed.resolve("Recursividad.md"), "---\ndate: " + today.minusDays(9) + "\nunit: 2. Recursividad\n---\n");
         Files.writeString(ed.resolve("Práctica 3 · Listas enlazadas.md"), "---\nkind: assignment\ndue: " + today.plusDays(2) + "\nstatus: Pending\n---\n");
-        Files.writeString(ed.resolve("Primer parcial.md"), "---\nkind: exam\ndate: " + today.plusDays(6) + "\ntopics: [pilas, colas]\n---\n");
+        Files.writeString(ed.resolve("Primer parcial.md"), "---\nkind: exam\ndate: " + today.plusDays(6) + "\ntopics: [pilas, colas]\n---\nRepasar [[Pilas]] y colas.\n");
         Path exercise = db.resolve("Empleados por departamento.md");
         Files.writeString(exercise, "---\nkind: exercise\ntopics: [consultas/joins, consultas/group by]\nlevel: Medium\nstatus: Solved\ndate: "
                 + today + "\n---\n## Enunciado\n\n¿Cuántos empleados trabajan en cada departamento, incluidos los que no tienen ninguno?\n\n"
@@ -822,6 +847,15 @@ class AppSmokeTest {
         waitFor("the session's cards", () -> fx(() -> ((Number) engine.executeScript("document.querySelectorAll('.cm-card-head').length")).intValue() == 2));
         shot(stage, "readme-sesion-de-codigo");
         fx(() -> run(() -> {
+            app.browser.choose("Apuntes", null);
+            app.openNote(lifo);
+            app.toggleMode();
+        }));
+        waitFor("the callouts", () -> fx(() -> ((Number) engine.executeScript("document.querySelectorAll('#reading blockquote.callout').length")).intValue() == 3));
+        waitFor("the notes that link here", () -> fx(() -> ((Number) engine.executeScript("document.querySelectorAll('#reading .backlinks .backlink').length")).intValue() == 2));
+        shot(stage, "readme-recuadros");
+        fx(() -> run(() -> {
+            app.toggleMode();
             app.openNotebook(calculus);
             app.openNote(partial);
             app.toggleMode();
@@ -831,6 +865,14 @@ class AppSmokeTest {
                 "[...document.fonts].some(f => f.family.replace(/\"/g, '') === 'KaTeX_Main' && f.status === 'loaded')"))));
         shot(stage, "readme-materia");
         fx(() -> run(app::toggleMode));
+        // The gradient, written: the palette's symbols a click away, and the formula drawn below it
+        fx(() -> engine.executeScript("editorView.dispatch({selection: {anchor: editorView.state.doc.toString().indexOf('\\\\nabla f') + 8}})"));
+        Button formula = fx(() -> button(stage, "Fórmula"));
+        fx(() -> run(formula::fire));
+        PopupWindow palette = fx(() -> Window.getWindows().stream().filter(w -> w instanceof ContextMenu && w.isShowing()).map(PopupWindow.class::cast).findFirst().orElseThrow());
+        waitFor("the gradient drawn below it", () -> fx(() -> (Boolean) engine.executeScript("!!document.querySelector('.cm-formula .katex')")));
+        shot(stage, "readme-formulas", formula, palette);
+        fx(() -> run(palette::hide));
 
         // The dialogs of a notebook, in light, then everything new in dark.
         dialogShot(stage, "r1-change-type", () -> menuItem(stage, "Cambiar tipo…").fire(), "");
@@ -2514,12 +2556,35 @@ class AppSmokeTest {
 
     private static void shot(Window window, String name) throws Exception {
         Thread.sleep(500);   // let the WebView paint
-        WritableImage image = fx(() -> window.getScene().snapshot(null));
+        save(image(fx(() -> window.getScene().snapshot(null))), name);
+    }
+
+    /**
+     * The window with a menu open below its button, as a screen as wide as the window shows them: a scene's
+     * snapshot leaves out its popups, and the menu of a window kept off the screen is moved onto it, so it goes
+     * where its button puts it, moved left as far as it needs to fit.
+     */
+    private static void shot(Window window, String name, Node button, PopupWindow menu) throws Exception {
+        Thread.sleep(500);
+        BufferedImage png = image(fx(() -> window.getScene().snapshot(null))), over = image(fx(() -> menu.getScene().snapshot(null)));
+        Bounds below = fx(() -> button.localToScene(button.getLayoutBounds()));
+        double x = below.getMinX() - fx(() -> menu.getAnchorX() - menu.getX()), y = below.getMaxY() + 4 - fx(() -> menu.getAnchorY() - menu.getY());
+        Graphics2D g = png.createGraphics();
+        g.drawImage(over, (int) Math.round(Math.min(x, png.getWidth() - over.getWidth())), (int) Math.round(y), null);
+        g.dispose();
+        save(png, name);
+    }
+
+    private static BufferedImage image(WritableImage image) {
         int w = (int) image.getWidth(), h = (int) image.getHeight();
         int[] argb = new int[w * h];
         image.getPixelReader().getPixels(0, 0, w, h, PixelFormat.getIntArgbInstance(), argb, 0, w);
         BufferedImage png = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
         png.setRGB(0, 0, w, h, argb, 0, w);
+        return png;
+    }
+
+    private static void save(BufferedImage png, String name) throws IOException {
         ImageIO.write(png, "png", Files.createDirectories(Path.of("target", "smoke")).resolve(name + ".png").toFile());
     }
 }

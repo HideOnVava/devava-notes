@@ -12,10 +12,10 @@ Cada materia del semestre tiene su cuaderno, que sabe lo que lleva: tus **apunte
 las **tareas y prácticas** con su fecha de entrega, los **exámenes**, y en las materias de
 programación, **sesiones de código** con el código y lo que imprimió. Las materias salen de la
 retícula de ISC: escribes «estruc» y la app propone *Estructura de Datos*, de Programación y en
-Java. Tus notas llevan **tablas** que se escriben como en Excel, **dibujos** hechos sin salir de
-la app y **diagramas** que se dibujan solos a partir de su texto, y salen en **PDF** o en papel
-tal como se ven. Toda la app está en español, y tus notas son archivos de texto en tu
-computadora: sin cuentas, sin nube y sin instalar Java.
+Java. Tus notas llevan **fórmulas** con sus símbolos a un clic, **tablas** que se escriben como
+en Excel, **dibujos** hechos sin salir de la app y **diagramas** que se dibujan solos a partir de
+su texto, y salen en **PDF** o en papel tal como se ven. Toda la app está en español, y tus
+notas son archivos de texto en tu computadora: sin cuentas, sin nube y sin instalar Java.
 
 | Inicio | Una sesión de código |
 | --- | --- |
@@ -37,6 +37,10 @@ computadora: sin cuentas, sin nube y sin instalar Java.
 | --- | --- |
 | ![Un diagrama de clases de POO escrito con Mermaid, dibujado debajo de su texto](docs/screenshots/diagrama.png) | ![La ventana para imprimir una sesión de código, con su vista previa en hoja carta](docs/screenshots/imprimir.png) |
 
+| Una fórmula, con sus símbolos a un clic | Recuadros, y las notas que enlazan aquí |
+| --- | --- |
+| ![Los símbolos de Fórmula sobre un apunte de Cálculo Vectorial, y el gradiente dibujado debajo de su texto mientras se escribe](docs/screenshots/formulas.png) | ![Un apunte de Estructura de Datos con una definición, un ejemplo y una advertencia en recuadros de colores, y al final las notas que lo enlazan](docs/screenshots/recuadros.png) |
+
 ## Descarga
 
 **[⬇ Descarga la última versión](https://github.com/HideOnVava/devava-notes/releases/latest)**
@@ -56,7 +60,7 @@ Las versiones para macOS y Linux vienen después.
    agrega más con **Nueva materia**.
 2. **Escribe.** **Nueva nota** (`Ctrl+N`) ofrece lo que lleva cada materia: un apunte, una
    sesión de código, una tarea o un examen. La barra sobre la nota pone negritas, listas,
-   tablas, fórmulas, imágenes, dibujos, diagramas y bloques de código con un clic.
+   tablas, recuadros, fórmulas, imágenes, dibujos, diagramas y bloques de código con un clic.
 3. **Llena sus datos** arriba del texto (la entrega de una tarea, los temas de un examen):
    Inicio te dice lo que se acerca, y lo atrasado sale en rojo.
 
@@ -117,7 +121,8 @@ de todas tus materias.
 ## Escribir
 
 Las notas son Markdown, pero no hace falta saberlo: la barra sobre la nota lo escribe por ti, y
-**Vista previa** (`Ctrl+E`) muestra la nota terminada.
+**Vista previa** (`Ctrl+E`) muestra la nota terminada. `Ctrl++` y `Ctrl+-` agrandan o achican
+su texto, y la app recuerda el tamaño.
 
 - **Bloques de código** como tarjetas: arriba de cada uno eliges su lenguaje (Java, C++, C,
   Python, C#, JavaScript, SQL, PL/SQL o cualquier otro), lo copias o lo quitas; el código sale
@@ -138,15 +143,23 @@ Las notas son Markdown, pero no hace falta saberlo: la barra sobre la nota lo es
   cambiarlo, y quien sabe Mermaid escribe ```` ```mermaid ````. Se dibuja debajo de su texto
   mientras lo escribes y, si algo está mal, dice en qué línea; la vista previa lo muestra
   dibujado.
-- **Fórmulas**: `$e^{i\pi} + 1 = 0$` en el texto, o en su propia línea entre `$$`, dibujadas
-  por KaTeX.
-- **Enlaces** entre notas: escribe `[[` y elige su título. `Ctrl+clic` sigue un enlace al
-  escribir, un clic en la vista previa; un enlace a una nota que aún no existe la crea. Al
-  cambiar el nombre de una nota, sus enlaces cambian con ella.
+- **Fórmulas**, dibujadas por KaTeX: `$e^{i\pi} + 1 = 0$` en el texto, o en su propia línea
+  entre `$$`. No hace falta saber LaTeX: **Fórmula**, en la barra, tiene sus símbolos a un clic
+  (básicos, de cálculo, letras griegas, de lógica y conjuntos, y de matrices y vectores), y la
+  fórmula que escribes se ve dibujada debajo; si algo está mal, dice qué.
+- **Recuadros** de colores para una definición, un ejemplo, algo importante o una advertencia:
+  **Recuadro** en la barra, o como en Obsidian, `> [!definition] Pila` (también con sus
+  palabras en español, como `[!ejemplo]`).
+- **Enlaces** entre notas: escribe `[[` y elige su título, también en las celdas de una tabla.
+  `Ctrl+clic` sigue un enlace al escribir, un clic en la vista previa; un enlace a una nota que
+  aún no existe la crea. Al cambiar el nombre de una nota, sus enlaces cambian con ella, y al
+  final de cada nota están las que la enlazan, de cualquier materia.
 - **Etiquetas**: `#tema` en cualquier parte del texto (también `#tema/subtema`); un clic en una
   muestra las notas que la tienen.
 - **Imágenes**: pega una con `Ctrl+V` (una captura de pantalla, por ejemplo) o arrastra el
-  archivo a la nota; se guarda en la carpeta `attachments` de la materia.
+  archivo a la nota; se guarda en la carpeta `attachments` de la materia. Se ve mientras
+  escribes: arrastra su esquina, o elige **Chica**, **Mediana** o **Grande** sobre ella, y la
+  vista previa y el PDF la muestran de ese tamaño (se guarda como en Obsidian, `![|400](…)`).
 - **Temas sugeridos**: en las materias de la retícula, el menú ▾ de *Temas* propone los de la
   materia (herencia y polimorfismo en POO, pilas y colas en Estructura de Datos…).
 - Listas de pendientes (`- [ ]`) y tachado, como en GitHub.
@@ -170,6 +183,7 @@ computadora.
 | `Ctrl+Shift+F` | Buscar en el texto de todas las notas (sin importar acentos ni mayúsculas) |
 | `Ctrl+E` | Pasar entre Editar y Vista previa |
 | `Ctrl+P` | Imprimir la nota (el botón de la impresora también la exporta a PDF) |
+| `Ctrl++`, `Ctrl+-` | Agrandar o achicar el texto de la nota (también `Ctrl` y la rueda del ratón); `Ctrl+0` lo deja como era |
 | `Ctrl+F` | Buscar y reemplazar en la nota |
 | `Ctrl+B`, `Ctrl+I` | Negrita, cursiva |
 | `Ctrl+V` | Pegar texto, una imagen, o celdas de Excel como tabla |
@@ -186,7 +200,7 @@ título:
 
 ```
 Documentos\Devava Notes\
-├── settings.json                        el tema
+├── settings.json                        el tema y el tamaño del texto
 ├── Biblioteca de dibujos.excalidrawlib  las figuras que guardas para tus dibujos
 └── Estructura de Datos\
     ├── .notebook.json                   su tipo, su lenguaje, su periodo y su materia en la retícula
@@ -288,16 +302,16 @@ español, que necesita el [WiX Toolset 3.x](https://github.com/wixtoolset/wix3/r
 
 GitHub Actions compila, prueba y publica cada versión
 ([`.github/workflows/release.yml`](.github/workflows/release.yml)), así que cada descarga sale
-de una compilación limpia de un commit etiquetado. Para publicar, por ejemplo, la versión 2.4.0:
+de una compilación limpia de un commit etiquetado. Para publicar, por ejemplo, la versión 2.5.0:
 
-1. Pon `<version>2.4.0</version>` en `pom.xml`.
-2. Agrega una sección `## [2.4.0] - <fecha>` a [`CHANGELOG.md`](CHANGELOG.md) (es el «Qué hay
+1. Pon `<version>2.5.0</version>` en `pom.xml`.
+2. Agrega una sección `## [2.5.0] - <fecha>` a [`CHANGELOG.md`](CHANGELOG.md) (es el «Qué hay
    de nuevo» de la versión) y su enlace al final del archivo.
 3. Sube los cambios, y luego la etiqueta:
 
    ```bash
-   git tag v2.4.0
-   git push origin v2.4.0
+   git tag v2.5.0
+   git push origin v2.5.0
    ```
 
 Correr el workflow a mano desde la pestaña *Actions* es un ensayo: compila y prueba todo y
