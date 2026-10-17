@@ -177,7 +177,7 @@ final class Editor {
         this.text = text;
         this.base = folder;
         if (!ready) return;
-        call("setText", text);
+        call("setText", text, folder == null ? "" : folder.toUri().toString());
         if (reading) call("showReading", html());
     }
 
@@ -258,6 +258,16 @@ final class Editor {
     /** A callout of a kind ("definition"): around the selected lines, else a new one to write in. */
     void insertCallout(String type) {
         if (ready && !reading) call("insertCallout", type);
+    }
+
+    /** A piece of a formula (\frac{‸}{}, ‸ where the cursor goes): in the formula with the cursor, else in a new one. */
+    void insertMath(String latex) {
+        if (ready && !reading) call("insertMath", latex);
+    }
+
+    /** The note's pictures shown anew while writing: one of its drawings was drawn on again. */
+    void refreshPictures() {
+        if (ready) call("refreshPictures");
     }
 
     /** A table of a note as Word, Excel and Docs paste it: with its borders. */

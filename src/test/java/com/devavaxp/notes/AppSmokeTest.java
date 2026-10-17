@@ -1026,6 +1026,7 @@ class AppSmokeTest {
 
     /** A click of the mouse on a page, at a point of the page: the mouse moves there, and clicks. */
     private static void click(WebView page, double x, double y) throws Exception {
+        onScreen(page);
         fx(() -> run(() -> {
             Point2D scene = page.localToScene(x, y), screen = page.localToScreen(x, y);   // a MouseEvent is made in the scene's coordinates
             for (EventType<MouseEvent> type : List.of(MouseEvent.MOUSE_MOVED, MouseEvent.MOUSE_PRESSED, MouseEvent.MOUSE_RELEASED, MouseEvent.MOUSE_CLICKED)) {
@@ -2018,6 +2019,141 @@ class AppSmokeTest {
         fx(() -> run(stage::close));
     }
 
+    /**
+     * Fórmula: every key of its palette draws (KaTeX reads all they write), and one writes in the formula
+     * with the cursor or in a new one, the cursor in its first blank; the formula shows drawn below it
+     * while it is written, or what is wrong with it.
+     */
+    @Test
+    void writesFormulasFromThePalette(@TempDir Path home) throws Exception {
+        Stage[] window = new Stage[1];
+        NotesApp app = open(home, window);
+        Stage stage = window[0];
+        WebEngine engine = fx(() -> app.editor.view.getEngine());
+        Path calculus = fx(() -> app.createNotebook("Cálculo Vectorial", NotebookType.CLASS_NOTES));
+        StringBuilder keys = new StringBuilder();
+        int count = 0;
+        for (List<NotesApp.MathKey> section : NotesApp.MATH.values()) {
+            for (NotesApp.MathKey k : section) {
+                keys.append("$").append(k.latex().replace("‸", "x")).append("{}$ ");
+                count++;
+            }
+        }
+        Path all = Files.writeString(calculus.resolve("Teclas.md"), keys + "\n");
+        Path note = Files.writeString(calculus.resolve("Derivadas.md"), "La derivada de $x^2$ es $2x$.\n\nTexto: \n");
+        fx(() -> run(() -> {
+            app.openNotebook(calculus);
+            app.openNote(all);
+            app.toggleMode();
+        }));
+        int keyCount = count;
+        waitFor("every key drawn", () -> fx(() -> ((Number) engine.executeScript("document.querySelectorAll('#reading .katex').length")).intValue() == keyCount));
+        assertEquals("", fx(() -> engine.executeScript("[...document.querySelectorAll('#reading .katex-error')].map(e => e.textContent).join(' | ')")),
+                "keys KaTeX cannot read");
+        fx(() -> run(() -> {
+            app.toggleMode();
+            app.openNote(note);
+        }));
+
+        // In a new formula, the cursor in its first blank
+        fx(() -> engine.executeScript("editorView.dispatch({selection: {anchor: editorView.state.doc.toString().indexOf('Texto: ') + 7}})"));
+        fx(() -> run(() -> app.editor.insertMath("\\frac{‸}{}")));
+        fx(() -> run(() -> app.editor.insert("1")));
+        assertTrue(text(engine).contains("Texto: $\\frac{1}{}$"), text(engine));
+        // In the formula with the cursor: a letter after it does not join the command's name
+        fx(() -> engine.executeScript("editorView.dispatch({selection: {anchor: editorView.state.doc.toString().indexOf('x^2') + 3}})"));
+        fx(() -> run(() -> app.editor.insertMath("\\cdot")));
+        fx(() -> run(() -> app.editor.insert("y")));
+        assertTrue(text(engine).contains("$x^2\\cdot{}y$"), text(engine));
+        fx(() -> engine.executeScript("editorView.dispatch({selection: {anchor: editorView.state.doc.toString().indexOf('2x') + 1}})"));
+        fx(() -> run(() -> app.editor.insertMath("\\alpha")));
+        assertTrue(text(engine).contains("$2\\alpha x$"), text(engine));
+
+        // The palette's own key, through its button
+        Button formula = fx(() -> button(stage, "Fórmula"));
+        fx(() -> run(formula::fire));
+        Window palette = fx(() -> Window.getWindows().stream().filter(w -> w instanceof ContextMenu && w.isShowing()).findFirst().orElseThrow());
+        shot(palette, "formula-palette");
+        fx(() -> run(() -> palette.getScene().getRoot().lookupAll(".math-key").stream().map(Button.class::cast)
+                .filter(b -> b.getText().equals("√x")).findFirst().orElseThrow().fire()));
+        assertTrue(text(engine).contains("$2\\alpha \\sqrt{}x$"), text(engine));
+        fx(() -> run(palette::hide));
+
+        // Drawn while written; what is wrong, when it is
+        waitFor("the formula drawn below it", () -> fx(() -> (Boolean) engine.executeScript("!!document.querySelector('.cm-formula .katex')")));
+        shot(stage, "formula-preview");
+        fx(() -> engine.executeScript("(v => { const at = v.state.doc.toString().indexOf('\\\\frac{1}{}') + 6; v.dispatch({changes: {from: at, to: at + 1, insert: '{'}, selection: {anchor: at + 1}}); })(editorView)"));
+        waitFor("what is wrong", () -> fx(() -> (Boolean) engine.executeScript("!!document.querySelector('.cm-formula.wrong')")));
+        assertEquals("Falta cerrar una llave }", fx(() -> engine.executeScript("document.querySelector('.cm-formula.wrong .said').textContent")));
+        shot(stage, "formula-wrong");
+        fx(() -> engine.executeScript("editorView.dispatch({selection: {anchor: 0}})"));
+        waitFor("no formula, no drawing", () -> fx(() -> (Boolean) engine.executeScript("!document.querySelector('.cm-formula')")));
+        assertTrue(fx(() -> app.editor.errors).isEmpty(), () -> "editor.js: " + app.editor.errors);
+        fx(() -> run(stage::close));
+    }
+
+    /**
+     * A note's pictures while writing: below their line, at their size; a size of their menu or their
+     * corner dragged writes Obsidian's |width after their words, which Vista previa and paper follow.
+     */
+    @Test
+    void resizesPicturesWhileWriting(@TempDir Path home) throws Exception {
+        Stage[] window = new Stage[1];
+        NotesApp app = open(home, window);
+        Stage stage = window[0];
+        WebEngine engine = fx(() -> app.editor.view.getEngine());
+        Path physics = fx(() -> app.createNotebook("Física General", NotebookType.CLASS_NOTES));
+        Path attachments = Files.createDirectories(physics.resolve("attachments"));
+        BufferedImage board = new BufferedImage(300, 150, BufferedImage.TYPE_INT_RGB);
+        for (int x = 0; x < 300; x++) for (int y = 0; y < 150; y++) board.setRGB(x, y, x < 150 ? 0x2B4FD8 : 0x0F8A80);
+        ImageIO.write(board, "png", attachments.resolve("pizarrón 1.png").toFile());
+        ImageIO.write(new BufferedImage(400, 200, BufferedImage.TYPE_INT_RGB), "png", attachments.resolve("Dibujo 2026-10-16 10.00.00.excalidraw.png").toFile());
+        Path note = Files.writeString(physics.resolve("Cinemática.md"), """
+                ## El pizarrón
+
+                ![](<attachments/pizarrón 1.png>)
+
+                ![](<attachments/Dibujo 2026-10-16 10.00.00.excalidraw.png>)
+
+                `![](<attachments/pizarrón 1.png>)` en código no se muestra.
+                """);
+        fx(() -> run(() -> {
+            app.openNotebook(physics);
+            app.openNote(note);
+        }));
+        waitFor("the pictures, loaded", () -> fx(() -> (Boolean) engine.executeScript(
+                "(p => p.length === 2 && [...p].every(i => i.complete && i.naturalWidth > 0))(document.querySelectorAll('.cm-picture img'))")));
+        waitFor("the drawing at half its PNG", () -> "200px".equals(fx(() -> engine.executeScript("document.querySelectorAll('.cm-picture-box')[1].style.width"))));
+        shot(stage, "pictures-1-writing");
+
+        // A size from its menu, then its corner dragged, then the original
+        fx(() -> engine.executeScript("[...document.querySelector('.cm-picture-sizes').children].find(b => b.textContent === 'Mediana').click()"));
+        waitFor("|400", () -> text(engine).contains("![|400](<attachments/pizarrón 1.png>)"));
+        waitFor("it at 400", () -> "400px".equals(fx(() -> engine.executeScript("document.querySelector('.cm-picture-box').style.width"))));
+        fx(() -> engine.executeScript("""
+                (h => {
+                  const r = h.getBoundingClientRect(), x = r.left + 6, y = r.top + 6;
+                  h.dispatchEvent(new MouseEvent('mousedown', {clientX: x, clientY: y, bubbles: true, cancelable: true}));
+                  document.dispatchEvent(new MouseEvent('mousemove', {clientX: x + 50, clientY: y, bubbles: true}));
+                  document.dispatchEvent(new MouseEvent('mouseup', {clientX: x + 50, clientY: y, bubbles: true}));
+                })(document.querySelector('.cm-picture-handle'))"""));
+        waitFor("|450", () -> text(engine).contains("![|450](<attachments/pizarrón 1.png>)"));
+        fx(() -> engine.executeScript("[...document.querySelector('.cm-picture-sizes').children].find(b => b.textContent === 'Original').click()"));
+        waitFor("the original", () -> text(engine).contains("\n![](<attachments/pizarrón 1.png>)\n"));
+        fx(() -> engine.executeScript("[...document.querySelector('.cm-picture-sizes').children].find(b => b.textContent === 'Chica').click()"));
+        waitFor("|200", () -> text(engine).contains("![|200](<attachments/pizarrón 1.png>)"));
+
+        // Vista previa and paper follow it
+        fx(() -> run(app::toggleMode));
+        waitFor("Vista previa", () -> "200px".equals(fx(() -> engine.executeScript("(i => i && i.style.width)(document.querySelector('#reading img'))"))));
+        assertEquals("", fx(() -> engine.executeScript("document.querySelector('#reading img').alt")), "the size is not words");
+        CompletableFuture<String> printable = new CompletableFuture<>();
+        fx(() -> run(() -> app.editor.printable(app.editor.text(), physics, printable::complete)));
+        assertTrue(printable.get(15, TimeUnit.SECONDS).contains("style=\"width: 200px;\""), "on paper");
+        assertTrue(fx(() -> app.editor.errors).isEmpty(), () -> "editor.js: " + app.editor.errors);
+        fx(() -> run(stage::close));
+    }
+
     /** How many diagrams are drawn in a part of the editor's page. */
     private static int drawn(WebEngine engine, String where) throws Exception {
         return fx(() -> ((Number) engine.executeScript("document.querySelectorAll('" + where + " .diagram .diagram-drawing svg').length")).intValue());
@@ -2195,6 +2331,7 @@ class AppSmokeTest {
 
     /** A click near the end of a cell of the first table, where its text ends. */
     private static void clickCell(WebView page, int row, int col) throws Exception {
+        onScreen(page);   // where the cell is drawn once the page has its size
         String[] xy = fx(() -> (String) page.getEngine().executeScript(("(() => { const c = document.querySelector('.cm-table tbody').rows[%d].cells[%d]; "
                 + "c.scrollIntoView({block: 'nearest'}); const r = c.getBoundingClientRect(); return (r.right - 6) + ',' + (r.top + r.height / 2); })()")
                 .formatted(row, col))).split(",");
@@ -2219,6 +2356,7 @@ class AppSmokeTest {
 
     /** Text typed on the keyboard, a key at a time. */
     private static void typeIn(WebView page, String text) throws Exception {
+        onScreen(page);
         fx(() -> run(() -> {
             for (char ch : text.toCharArray()) {
                 String s = String.valueOf(ch);
@@ -2268,6 +2406,7 @@ class AppSmokeTest {
 
     /** A key, alone, as the keyboard sends it to a page. */
     private static void key(WebView page, KeyCode key) throws Exception {
+        onScreen(page);
         fx(() -> run(() -> {
             page.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED, "", "", key, false, false, false, false));
             page.fireEvent(new KeyEvent(KeyEvent.KEY_RELEASED, "", "", key, false, false, false, false));
@@ -2287,6 +2426,7 @@ class AppSmokeTest {
 
     /** Ctrl + the key, as the keyboard sends it to a page. */
     private static void press(WebView page, KeyCode key) throws Exception {
+        onScreen(page);
         fx(() -> run(() -> {
             page.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED, "", "", key, false, true, false, false));
             page.fireEvent(new KeyEvent(KeyEvent.KEY_RELEASED, "", "", key, false, true, false, false));
@@ -2333,6 +2473,14 @@ class AppSmokeTest {
 
     private static void waitFor(String what, Callable<Boolean> condition) throws Exception {
         waitFor(what, condition, () -> "");
+    }
+
+    /**
+     * Until the page is in a window: a pane the app has just shown gets there only on the next pulse, and keys
+     * or clicks sent before then miss the scene's filters.
+     */
+    private static void onScreen(WebView page) throws Exception {
+        waitFor("the page in the window", () -> fx(() -> page.getScene() != null && page.localToScreen(0, 0) != null));
     }
 
     /** As waitFor, saying what there was instead when it times out. */

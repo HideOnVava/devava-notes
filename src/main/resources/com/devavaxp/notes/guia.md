@@ -16,7 +16,9 @@ La barra sobre la nota pone **negritas**, *cursivas*, títulos, listas y casilla
 - [x] Leer esta nota
 - [ ] Crear mi primera sesión de código
 
-Una fórmula, como en LaTeX: $\int_0^1 x^2\,dx = \frac{1}{3}$
+Una fórmula, como en LaTeX: $\int_0^1 x^2\,dx = \frac{1}{3}$. No hace falta saberlo: **Fórmula**, en la barra, tiene sus símbolos a un clic, y mientras la escribes se ve dibujada debajo.
+
+Las imágenes se ven mientras escribes: arrastra su esquina, o elige **Chica**, **Mediana** o **Grande** sobre ella, para cambiar su tamaño.
 
 Una tabla, con **Tabla** en la barra o pegando celdas de Excel. Se escribe en sus celdas; Tab pasa a la siguiente y Enter a la de abajo:
 

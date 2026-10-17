@@ -1156,6 +1156,21 @@
     -fx-font-weight: bold;
 }
 
+/* The formula palette: its keys show what they write, in a font made for formulas */
+.math-palette {
+    -fx-max-width: 440;
+}
+
+.button.math-key {
+    -fx-font-family: "Cambria Math", "Segoe UI Symbol", "Segoe UI";
+    -fx-font-size: 15px;
+    -fx-padding: 2 7;
+    -fx-min-width: 38;
+    -fx-min-height: 30;
+    -fx-background-radius: 7;
+    -fx-border-radius: 7;
+}
+
 .size-square {
     -fx-min-width: 18;
     -fx-min-height: 18;

@@ -984,6 +984,86 @@ html, body {
     margin-top: 16px;
 }
 
+/* A picture while writing: below its line, at its size; over it, on hover, its sizes, and at its corner a handle to drag */
+#editor .cm-picture {
+    padding: 6px 0 10px;
+}
+
+#editor .cm-picture-box {
+    position: relative;
+    display: inline-block;
+    max-width: 100%;
+    line-height: 0;
+}
+
+#editor .cm-picture-box img {
+    max-width: 100%;
+    border-radius: 6px;
+}
+
+#editor .cm-picture-box[style*="width"] img {
+    width: 100%;
+}
+
+#editor .cm-picture-box img[title] {
+    cursor: pointer;
+}
+
+#editor .cm-picture-sizes {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: none;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14);
+    line-height: 1.4;
+}
+
+#editor .cm-picture-handle {
+    position: absolute;
+    right: -6px;
+    bottom: -6px;
+    display: none;
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--bg);
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: nwse-resize;
+}
+
+#editor .cm-picture-box:hover .cm-picture-sizes {
+    display: flex;
+}
+
+#editor .cm-picture-box:hover .cm-picture-handle {
+    display: block;
+}
+
+/* A formula being written, drawn below it; or what is wrong with it */
+#editor .cm-formula {
+    max-width: 600px;
+    padding: 8px 12px;
+    overflow-x: auto;
+    font-size: 15px;
+}
+
+#editor .cm-formula.wrong .said {
+    color: var(--danger);
+    font: 600 13px/1.4 var(--font);
+}
+
+#editor .cm-formula.wrong .detail {
+    margin-top: 3px;
+    color: var(--faint);
+    font: 11.5px/1.4 var(--mono);
+    white-space: pre-wrap;
+}
+
 /* The titles [[ offers in a table's cell */
 .cell-links .option.current {
     background: var(--accent-soft);

@@ -1195,7 +1195,7 @@ public final class NotesApp extends Application {
                 formatButton("Imagen", Icons.of("image", 15), "Agrega una imagen desde un archivo", this::chooseImages),
                 formatButton("Dibujo", Icons.of("draw", 15), "Dibuja un diagrama o un esquema, y ponlo en la nota", this::newDrawing),
                 diagramButton(),
-                formatButton("Fórmula", Icons.of("sigma", 15), "Fórmula matemática, como en LaTeX", () -> editor.format("math")),
+                mathButton(),
                 formatSeparator(),
                 block);
         formatBar.getStyleClass().add("format-bar");
@@ -1285,6 +1285,94 @@ public final class NotesApp extends Application {
                         Pendiente --> EnProceso : empieza
                         EnProceso --> Hecha : termina
                         Hecha --> [*]"""));
+
+    /** A key of the formula palette: how it looks, its name, and the LaTeX it writes (‸ where the cursor goes). */
+    record MathKey(String shown, String name, String latex) {
+    }
+
+    /** The formula palette's keys, by section: what the courses of ISC write, from Cálculo to Matemáticas Discretas. */
+    static final Map<String, List<MathKey>> MATH = new LinkedHashMap<>();
+
+    static {
+        MATH.put("Básicos", List.of(new MathKey("a⁄b", "Fracción", "\\frac{‸}{}"), new MathKey("xⁿ", "Potencia", "^{‸}"),
+                new MathKey("xᵢ", "Subíndice", "_{‸}"), new MathKey("√x", "Raíz cuadrada", "\\sqrt{‸}"),
+                new MathKey("ⁿ√x", "Raíz n-ésima", "\\sqrt[‸]{}"), new MathKey("|x|", "Valor absoluto", "\\left|‸\\right|"),
+                new MathKey("( )", "Paréntesis que crecen con lo que llevan", "\\left(‸\\right)"), new MathKey("±", "Más o menos", "\\pm"),
+                new MathKey("×", "Por", "\\times"), new MathKey("÷", "Entre", "\\div"), new MathKey("·", "Punto (producto)", "\\cdot"),
+                new MathKey("≠", "Distinto de", "\\neq"), new MathKey("≈", "Aproximadamente", "\\approx"),
+                new MathKey("≤", "Menor o igual que", "\\leq"), new MathKey("≥", "Mayor o igual que", "\\geq"),
+                new MathKey("∞", "Infinito", "\\infty"), new MathKey("°", "Grados", "^{\\circ}")));
+        MATH.put("Cálculo", List.of(new MathKey("lim", "Límite", "\\lim_{x \\to ‸}"), new MathKey("d⁄dx", "Derivada", "\\frac{d}{dx}"),
+                new MathKey("∂⁄∂x", "Derivada parcial", "\\frac{\\partial ‸}{\\partial x}"), new MathKey("∫", "Integral", "\\int ‸ \\, dx"),
+                new MathKey("∫ₐᵇ", "Integral definida", "\\int_{‸}^{} \\, dx"), new MathKey("∬", "Integral doble", "\\iint ‸ \\, dA"),
+                new MathKey("∮", "Integral de línea cerrada", "\\oint"), new MathKey("∑", "Sumatoria", "\\sum_{i=1}^{‸}"),
+                new MathKey("∏", "Productoria", "\\prod_{i=1}^{‸}"), new MathKey("∇", "Nabla (gradiente)", "\\nabla"),
+                new MathKey("→", "Tiende a", "\\to"), new MathKey("eˣ", "Exponencial", "e^{‸}"), new MathKey("ln", "Logaritmo natural", "\\ln"),
+                new MathKey("logₐ", "Logaritmo en una base", "\\log_{‸}"), new MathKey("sen", "Seno", "\\sin"),
+                new MathKey("cos", "Coseno", "\\cos"), new MathKey("tan", "Tangente", "\\tan")));
+        MATH.put("Letras griegas", List.of(new MathKey("α", "Alfa", "\\alpha"), new MathKey("β", "Beta", "\\beta"),
+                new MathKey("γ", "Gamma", "\\gamma"), new MathKey("δ", "Delta", "\\delta"), new MathKey("ε", "Épsilon", "\\varepsilon"),
+                new MathKey("θ", "Theta", "\\theta"), new MathKey("λ", "Lambda", "\\lambda"), new MathKey("μ", "Mu", "\\mu"),
+                new MathKey("π", "Pi", "\\pi"), new MathKey("ρ", "Ro", "\\rho"), new MathKey("σ", "Sigma", "\\sigma"),
+                new MathKey("τ", "Tau", "\\tau"), new MathKey("φ", "Fi", "\\varphi"), new MathKey("ω", "Omega", "\\omega"),
+                new MathKey("Γ", "Gamma mayúscula", "\\Gamma"), new MathKey("Δ", "Delta mayúscula", "\\Delta"),
+                new MathKey("Θ", "Theta mayúscula", "\\Theta"), new MathKey("Λ", "Lambda mayúscula", "\\Lambda"),
+                new MathKey("Π", "Pi mayúscula", "\\Pi"), new MathKey("Σ", "Sigma mayúscula", "\\Sigma"),
+                new MathKey("Φ", "Fi mayúscula", "\\Phi"), new MathKey("Ω", "Omega mayúscula", "\\Omega")));
+        MATH.put("Lógica y conjuntos", List.of(new MathKey("¬", "No (negación)", "\\neg"), new MathKey("∧", "Y (conjunción)", "\\land"),
+                new MathKey("∨", "O (disyunción)", "\\lor"), new MathKey("⊕", "O exclusivo", "\\oplus"),
+                new MathKey("→", "Entonces (condicional)", "\\rightarrow"), new MathKey("↔", "Si y solo si (bicondicional)", "\\leftrightarrow"),
+                new MathKey("⇒", "Implica", "\\Rightarrow"), new MathKey("⇔", "Equivale a", "\\Leftrightarrow"),
+                new MathKey("≡", "Equivalente", "\\equiv"), new MathKey("∀", "Para todo", "\\forall"), new MathKey("∃", "Existe", "\\exists"),
+                new MathKey("∈", "Pertenece a", "\\in"), new MathKey("∉", "No pertenece a", "\\notin"),
+                new MathKey("⊂", "Subconjunto propio de", "\\subset"), new MathKey("⊆", "Subconjunto de", "\\subseteq"),
+                new MathKey("∪", "Unión", "\\cup"), new MathKey("∩", "Intersección", "\\cap"), new MathKey("∖", "Diferencia", "\\setminus"),
+                new MathKey("∅", "Conjunto vacío", "\\emptyset"), new MathKey("{ }", "Conjunto", "\\{‸\\}"),
+                new MathKey("ℕ", "Naturales", "\\mathbb{N}"), new MathKey("ℤ", "Enteros", "\\mathbb{Z}"),
+                new MathKey("ℚ", "Racionales", "\\mathbb{Q}"), new MathKey("ℝ", "Reales", "\\mathbb{R}"),
+                new MathKey("ℂ", "Complejos", "\\mathbb{C}")));
+        MATH.put("Matrices y vectores", List.of(new MathKey("[2×2]", "Matriz de 2 × 2", "\\begin{bmatrix} ‸ & \\\\ & \\end{bmatrix}"),
+                new MathKey("[3×3]", "Matriz de 3 × 3", "\\begin{bmatrix} ‸ & & \\\\ & & \\\\ & & \\end{bmatrix}"),
+                new MathKey("(2×2)", "Matriz entre paréntesis", "\\begin{pmatrix} ‸ & \\\\ & \\end{pmatrix}"),
+                new MathKey("|2×2|", "Determinante", "\\begin{vmatrix} ‸ & \\\\ & \\end{vmatrix}"),
+                new MathKey("v⃗", "Vector", "\\vec{‸}"), new MathKey("x̂", "Vector unitario", "\\hat{‸}"),
+                new MathKey("‖v‖", "Norma", "\\|‸\\|"), new MathKey("Aᵀ", "Transpuesta", "^{T}"), new MathKey("A⁻¹", "Inversa", "^{-1}")));
+    }
+
+    /**
+     * Fórmula: a palette of what formulas have, a click away and without knowing LaTeX, written in the
+     * formula with the cursor (else in a new one); the formula shows drawn below it while it is written.
+     */
+    private Button mathButton() {
+        Button math = formatButton("Fórmula", Icons.of("sigma", 15), "Fórmula matemática: sus símbolos con un clic, sin saber LaTeX", () -> { });
+        VBox palette = new VBox(6);
+        palette.getStyleClass().add("math-palette");
+        ContextMenu menu = new ContextMenu(new CustomMenuItem(palette, false));
+        menu.getStyleClass().add("table-sizes");
+        Button own = button("Fórmula en su propia línea", "plus", "flat", e -> {
+            menu.hide();
+            editor.format("math");
+            editor.focus();
+        });
+        palette.getChildren().add(own);
+        MATH.forEach((section, keys) -> {
+            Label title = new Label(section);
+            title.getStyleClass().add("sizes-title");
+            FlowPane row = new FlowPane(4, 4);
+            row.setPrefWrapLength(420);
+            for (MathKey k : keys) {
+                Button key = new Button(k.shown());
+                key.getStyleClass().add("math-key");
+                key.setTooltip(new Tooltip(k.name()));
+                key.setFocusTraversable(false);
+                key.setOnAction(e -> editor.insertMath(k.latex()));
+                row.getChildren().add(key);
+            }
+            palette.getChildren().addAll(title, row);
+        });
+        math.setOnAction(e -> menu.show(math, Side.BOTTOM, 0, 4));
+        return math;
+    }
 
     /** A callout the Recuadro button makes: what it is, what it is for, and the word the note keeps (Obsidian's). */
     record CalloutStart(String name, String about, String type) {
@@ -1421,6 +1509,7 @@ public final class NotesApp extends Application {
             try {
                 Vault.write(file, edited);
                 if (reading) editor.setReading(true);   // the view, with the drawing as it is now
+                else editor.refreshPictures();
             } catch (IOException e) {
                 error("No se pudo guardar el dibujo", reason(e));
             }

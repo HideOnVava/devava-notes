@@ -4,7 +4,8 @@
 import "./keys.js";
 import {ChangeSet, EditorSelection, EditorState, Prec, RangeSetBuilder, StateEffect, StateField, Transaction} from "@codemirror/state";
 import {
-    Decoration, EditorView, MatchDecorator, ViewPlugin, WidgetType, drawSelection, dropCursor, highlightSpecialChars, keymap, placeholder
+    Decoration, EditorView, MatchDecorator, ViewPlugin, WidgetType, drawSelection, dropCursor, highlightSpecialChars, keymap, placeholder,
+    showTooltip
 } from "@codemirror/view";
 import {defaultKeymap, history, historyKeymap, indentWithTab, isolateHistory, redo, undo} from "@codemirror/commands";
 import {highlightSelectionMatches, searchKeymap} from "@codemirror/search";
@@ -30,6 +31,10 @@ const words = {
     diagramType: "No se reconoce el diagrama: su primera línea dice cuál es (flowchart, classDiagram, erDiagram, sequenceDiagram, stateDiagram-v2…)",
     diagramLine: "Error en la línea", diagramMissing: "No se pudo cargar Mermaid para dibujar el diagrama",
     backlinks: "Notas que enlazan aquí",
+    small: "Chica", medium: "Mediana", large: "Grande", original: "Original", resize: "Arrastra para cambiar su tamaño",
+    mathBrace: "Falta cerrar una llave }", mathUnknown: "No existe el comando", mathPower: "Falta lo que va de exponente",
+    mathIndex: "Falta lo que va de subíndice", mathTwoPowers: "Dos exponentes seguidos: júntalos entre { }",
+    mathTwoIndexes: "Dos subíndices seguidos: júntalos entre { }", mathWrong: "Así no se puede dibujar todavía",
     table: "Tabla", row: "Fila", column: "Columna", tableMore: "Más: filas, columnas y alineación",
     rowAbove: "Insertar fila arriba", columnLeft: "Insertar columna a la izquierda", removeHeader: "Quitar el encabezado",
     left: "Alinear a la izquierda", center: "Centrar", right: "Alinear a la derecha",
@@ -595,6 +600,200 @@ function callout(quote) {
     quote.prepend(element("div", "callout-title", icon(kind.icon), title));
 }
 
+// ---------- Formulas ----------
+
+/** The formula ($…$, or $$…$$ on lines of its own, as Java reads them) the position is in: where its text starts and ends. */
+function formulaAt(state, pos) {
+    const text = state.doc.toString();
+    for (let i = 0; i < text.length; i++) {
+        if (text[i] === "\\") {
+            i++;
+        } else if (text[i] === "$" && !inCode(state, i)) {
+            const end = mathEnd(text, i), marks = text[i + 1] === "$" ? 2 : 1;
+            if (end < 0) continue;
+            if (i + marks <= pos && pos <= end - marks) return {from: i + marks, to: end - marks, display: marks === 2};
+            i = end - 1;
+        }
+    }
+    return null;
+}
+
+/**
+ * A command (\alpha) ends before what comes next: before a letter, which would join its name, a space; at the end
+ * of a $formula$, where a space before the $ would undo it, {}; on lines of its own, a space.
+ */
+function ended(piece, next, display) {
+    if (!/\\[a-zA-Z]+$/.test(piece)) return piece;
+    return piece + (/[a-zA-Z]/.test(next) || display ? " " : next === "$" ? "{}" : "");
+}
+
+// A piece of a formula from the palette (\frac{‸}{}, with ‸ where the cursor goes): in the formula with the cursor,
+// else in a new one; what is selected goes where the cursor would.
+window.insertMath = latex => {
+    const at = latex.indexOf("‸"), cell = cellNow();
+    if (cell) {   // $…$ in a table's cell: in the one with the caret, else a new one
+        const {start, end} = caret(cell), text = cell.textContent, picked = text.slice(start, end);
+        const wrap = (text.slice(0, start).match(/(?<!\\)\$/g) ?? []).length % 2 ? "" : "$";
+        const piece = ended(latex.replace("‸", picked), wrap || text.charAt(end), false);
+        writeCell(view, cell, text.slice(0, start) + wrap + piece + wrap + text.slice(end), start + wrap.length + (at < 0 ? piece.length : at + picked.length));
+        return;
+    }
+    const {state} = view, {from, to} = state.selection.main;
+    if (inCode(state, from)) return;
+    const inside = formulaAt(state, from), picked = state.sliceDoc(from, to), wrap = inside && to <= inside.to ? "" : "$";
+    const piece = ended(latex.replace("‸", picked), wrap || state.sliceDoc(to, to + 1), !wrap && inside.display);
+    view.dispatch({changes: {from, to, insert: wrap + piece + wrap}, selection: {anchor: from + wrap.length + (at < 0 ? piece.length : at + picked.length)},
+        scrollIntoView: true, userEvent: "input.math"});
+    view.focus();
+};
+
+// While writing a formula, it shows drawn below it, as Vista previa draws it, or what is wrong with it.
+function formulaTooltip(state) {
+    const {main} = state.selection, formula = main.empty ? formulaAt(state, main.head) : null, tex = formula && state.sliceDoc(formula.from, formula.to);
+    if (!tex?.trim()) return null;
+    return {
+        pos: formula.to, above: false, arrow: false,
+        create: () => {
+            const dom = element("div", "cm-formula");
+            try {
+                katex.render(tex, dom, {displayMode: formula.display, throwOnError: true});
+            } catch (e) {
+                const detail = String(e?.message ?? e).replace(/^KaTeX parse error: /, "");
+                dom.classList.add("wrong");
+                dom.replaceChildren(element("div", "said", formulaError(detail)), element("div", "detail", detail));
+            }
+            return {dom};
+        },
+    };
+}
+
+/** What KaTeX found wrong with a formula, said for someone who does not know LaTeX. */
+function formulaError(detail) {
+    const unknown = /Undefined control sequence: (\\\S+)/.exec(detail);
+    if (/expected '}'/i.test(detail)) return words.mathBrace;
+    if (unknown) return `${words.mathUnknown} ${unknown[1]}`;
+    if (/Expected group after '\^'/.test(detail)) return words.mathPower;
+    if (/Expected group after '_'/.test(detail)) return words.mathIndex;
+    if (/Double superscript/.test(detail)) return words.mathTwoPowers;
+    if (/Double subscript/.test(detail)) return words.mathTwoIndexes;
+    return words.mathWrong;
+}
+
+const formulaPreview = StateField.define({
+    create: formulaTooltip,
+    update: (tooltip, tr) => tr.docChanged || tr.selection ? formulaTooltip(tr.state) : tooltip,
+    provide: field => showTooltip.from(field),
+});
+
+// ---------- Pictures while writing ----------
+
+// A picture of the note (![…](…)), while writing: below its line, at its size, which is Obsidian's (![|400](…), in
+// pixels after its words). Its corner drags it bigger or smaller, and over it three sizes and the original's.
+const IMAGE = /!\[([^\]\n]*)\]\((<[^>\n]+>|[^)\s]+)(?:\s+"[^"\n]*")?\)/g;
+const SIZED = /\|(\d+)(?:x(\d+))?\s*$/;
+const SIZES = [[words.small, 200], [words.medium, 400], [words.large, 600], [words.original, 0]];
+
+/** The open note's folder, where its pictures are (Java says, with the note); a stamp that makes them load again once one changes. */
+let noteBase = "", pictureStamp = Date.now();
+const refreshPictures = StateEffect.define();
+
+/** Where a picture is, as this page loads it: next to the note (attachments/…), or as written when it has a scheme. */
+function pictureUrl(target) {
+    const src = target.replace(/^<|>$/g, "");
+    if (/^[a-z][a-z0-9+.-]*:/i.test(src)) return src;
+    try {
+        return new URL(src, noteBase).href + "?t=" + pictureStamp;
+    } catch {
+        return "";
+    }
+}
+
+/** A picture's link with its size (px; 0, none: the original's), written after its words. */
+function resizePicture(view, dom, target, px) {
+    const line = view.state.doc.lineAt(view.posAtDOM(dom));
+    for (const m of line.text.matchAll(IMAGE)) {
+        if (m[2] !== target) continue;
+        const from = line.from + m.index + 2, alt = m[1].replace(SIZED, "");
+        view.dispatch({changes: {from, to: from + m[1].length, insert: px ? `${alt}|${Math.round(px)}` : alt}, userEvent: "input.picture"});
+        return;
+    }
+}
+
+class Picture extends WidgetType {
+    constructor(target, alt) {
+        super();
+        this.target = target;
+        this.alt = alt;
+        this.stamp = pictureStamp;
+    }
+
+    eq(other) {
+        return other.target === this.target && other.alt === this.alt && other.stamp === this.stamp;
+    }
+
+    toDOM(view) {
+        const img = element("img", ""), sizes = element("div", "cm-picture-sizes"), handle = element("div", "cm-picture-handle");
+        const box = element("div", "cm-picture-box", img, sizes, handle), dom = element("div", "cm-picture", box);
+        const width = +(SIZED.exec(this.alt)?.[1] ?? 0), drawing = /\.excalidraw\.png>?$/i.test(this.target);
+        img.src = pictureUrl(this.target);
+        img.alt = this.alt.replace(SIZED, "");
+        if (width) box.style.width = width + "px";
+        img.addEventListener("load", () => {
+            if (!width && drawing) box.style.width = img.naturalWidth / 2 + "px";   // its PNG is twice as big, to look sharp
+            view.requestMeasure();
+        });
+        if (drawing) {
+            img.title = words.drawHint;
+            img.addEventListener("click", () => tell("draw:" + this.target.replace(/^<|>$/g, "")));
+        }
+        for (const [name, px] of SIZES) {
+            const size = button("act", name);
+            size.addEventListener("click", () => resizePicture(view, dom, this.target, px));
+            sizes.append(size);
+        }
+        handle.title = words.resize;
+        handle.addEventListener("mousedown", e => {   // as wide as the pointer, written once let go
+            e.preventDefault();
+            const start = e.clientX, from = box.getBoundingClientRect().width, most = dom.getBoundingClientRect().width;
+            const move = m => box.style.width = Math.round(Math.max(40, Math.min(most, from + m.clientX - start))) + "px";
+            const up = () => {
+                document.removeEventListener("mousemove", move, true);
+                document.removeEventListener("mouseup", up, true);
+                resizePicture(view, dom, this.target, parseFloat(box.style.width));
+            };
+            document.addEventListener("mousemove", move, true);
+            document.addEventListener("mouseup", up, true);
+        });
+        return dom;
+    }
+
+    get estimatedHeight() {
+        return 220;
+    }
+
+    ignoreEvent() {
+        return true;
+    }
+}
+
+/** The note's pictures, each below its line; none in code, nor in a table, whose cells show its link. */
+function pictureDecorations(state) {
+    const builder = new RangeSetBuilder(), text = state.doc.toString();
+    for (const m of text.matchAll(IMAGE)) {
+        const line = state.doc.lineAt(m.index);
+        if (inCode(state, m.index) || line.text.trimStart().startsWith("|")) continue;
+        builder.add(line.to, line.to, Decoration.widget({widget: new Picture(m[2], m[1]), block: true, side: 1}));
+    }
+    return builder.finish();
+}
+
+const pictures = StateField.define({
+    create: pictureDecorations,
+    update: (value, tr) => tr.docChanged || tr.effects.some(e => e.is(refreshPictures)) || syntaxTree(tr.state) !== syntaxTree(tr.startState)
+        ? pictureDecorations(tr.state) : value,
+    provide: field => EditorView.decorations.from(field),
+});
+
 // ---------- The notes that link here ----------
 
 // The notes whose [[links]] lead to this one (Java finds them once the note is open): at its end, while writing
@@ -763,14 +962,14 @@ const lineUp = ViewPlugin.fromClass(class {
 // written in, under a bar like a card's. The note keeps the Markdown: a cell that changes rewrites
 // that cell, and a change of the grid (a row, a column, an alignment) rewrites the table.
 
-/** Where $math$ that opens at i ends, as Java finds it (Editor.inlineMathEnd); -1: it is no math. */
+/** Where $math$ that opens at i ends, as Java finds it (Editor.inlineMathEnd: $…$ on one line); -1: it is no math. */
 function mathEnd(text, i) {
     if (text[i + 1] === "$") {
         const close = text.indexOf("$$", i + 2);
         return close > i + 2 ? close + 2 : -1;
     }
     if (i + 1 >= text.length || /\s/.test(text[i + 1])) return -1;
-    for (let j = i + 1; j < text.length; j++) {
+    for (let j = i + 1; j < text.length && text[j] !== "\n"; j++) {
         if (text[j] === "\\") j++;
         else if (text[j] === "$") return /\s/.test(text[j - 1]) || /\d/.test(text[j + 1] ?? "") ? -1 : j + 1;
     }
@@ -1879,7 +2078,7 @@ const extensions = () => [
     closeBrackets(), highlightSelectionMatches(), placeholder(words.placeholder), EditorState.phrases.of(phrases),
     markdown({base: markdownLanguage, codeLanguages: language}),
     highlighters.map(h => syntaxHighlighting(h)),
-    cards, tables, intoCell, guard, lineUp, drawingLinks, callouts, backlinkField,
+    cards, tables, intoCell, guard, lineUp, drawingLinks, callouts, backlinkField, formulaPreview, pictures,
     Prec.high(keymap.of([
         {key: "Enter", run: view => closeFence(view) || startTable(view)},
         {key: "Mod-b", run: view => format(view, "bold")},
@@ -1921,11 +2120,17 @@ function fold(text) {
 }
 
 // Called by Java. What Java types goes in as typing does ("input.api"), beside cards too.
-window.setText = text => {
+window.setText = (text, base) => {   // the note, and its folder's URL (its pictures are there)
     closeMenu();
     closeCellLinks();
     backlinks = [];   // until Java finds this note's
+    noteBase = base ?? "";
+    pictureStamp = Date.now();
     view.setState(EditorState.create({doc: text, extensions: extensions()}));
+};
+window.refreshPictures = () => {   // a drawing of the note was drawn on again: its pictures load anew
+    pictureStamp = Date.now();
+    view.dispatch({effects: refreshPictures.of(null)});
 };
 window.setBacklinks = lines => {
     backlinks = lines ? lines.split("\n").map(line => ({title: line.split("\t")[0], where: line.split("\t")[1] ?? ""})) : [];
@@ -2034,9 +2239,9 @@ window.printable = html => {
     });
 };
 
-// A note's HTML (from Java) into an element: its formulas, its code as cards, its diagrams drawn (in the dark
-// theme or the light one) and its drawings at their size. What is still on its way, as promises: the colors of
-// the code, the diagrams, the drawings loading.
+// A note's HTML (from Java) into an element: its formulas, its callouts, its code as cards, its diagrams drawn (in
+// the dark theme or the light one), and its pictures and drawings at their size. What is still on its way, as
+// promises: the colors of the code, the diagrams, the drawings loading.
 function render(into, html, inDark) {
     into.innerHTML = html;   // commonmark-java already turned any HTML written in the note into text
     into.querySelectorAll(".math").forEach(math => katex.render(math.textContent, math,
@@ -2045,8 +2250,15 @@ function render(into, html, inDark) {
     const coming = [...into.querySelectorAll("pre > code")].map(code =>
         code.className.toLowerCase() === "language-" + DIAGRAM ? diagram(code, inDark) : card(code));
     into.querySelectorAll("img").forEach(img => {
+        const sized = SIZED.exec(img.getAttribute("alt") ?? "");   // ![|400](…): its own width, in pixels (and height)
+        if (sized) {
+            img.alt = img.alt.replace(SIZED, "");
+            img.style.width = sized[1] + "px";
+            if (sized[2]) img.style.height = sized[2] + "px";
+        }
         if (!/\.excalidraw\.png(\?|$)/i.test(img.getAttribute("src"))) return;
         img.classList.add("drawing");
+        if (sized) return;
         coming.push(new Promise(done => {
             const drawn = () => {
                 if (img.naturalWidth) img.style.width = img.naturalWidth / 2 + "px";   // its PNG is twice as big, to look sharp
